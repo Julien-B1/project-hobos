@@ -1,12 +1,23 @@
 /**
  * Hover highlight: a translucent patch laid on the targeted surface cell.
  *
+ * Used for block tops; the faceted terrain is tinted by its own shader
+ * instead (`terrainMaterial.ts` `applyHover`), exact on the drawn ground.
+ *
  * Layer: render. The patch is a small grid (GRID x GRID quads) whose vertex
  * heights come from a sampling function, so it can follow a blocky top
  * (corner heights) or the smooth terrain mesh (downward raycasts). The
  * engine decides how to sample; this class only owns the geometry.
  */
-import { BufferAttribute, BufferGeometry, DoubleSide, Mesh, MeshBasicMaterial } from 'three/webgpu'
+import { positionWorld } from 'three/tsl'
+import {
+  BufferAttribute,
+  BufferGeometry,
+  DoubleSide,
+  Mesh,
+  MeshBasicNodeMaterial,
+  type UniformNode,
+} from 'three/webgpu'
 
 /** Subdivisions per side of the patch. */
 export const HIGHLIGHT_GRID = 3
@@ -26,17 +37,22 @@ export class SurfaceHighlight {
   readonly mesh: Mesh
   private readonly positions = new Float32Array((HIGHLIGHT_GRID + 1) ** 2 * 3)
 
-  constructor(color = 0xffe066) {
+  /**
+   * @param cutHeight Cut height uniform (world units): the patch is cut like
+   *   the scene, nothing of it shows above the cut.
+   */
+  constructor(cutHeight: UniformNode<'float'>, color = 0xffe066) {
     const geometry = new BufferGeometry()
     geometry.setAttribute('position', new BufferAttribute(this.positions, 3))
     geometry.setIndex(gridIndices(HIGHLIGHT_GRID))
-    const material = new MeshBasicMaterial({
+    const material = new MeshBasicNodeMaterial({
       color,
       transparent: true,
-      opacity: 0.5,
+      opacity: 0.2,
       depthWrite: false,
       side: DoubleSide,
     })
+    material.maskNode = positionWorld.y.lessThan(cutHeight)
     this.mesh = new Mesh(geometry, material)
     this.mesh.name = 'surface-highlight'
     this.mesh.visible = false

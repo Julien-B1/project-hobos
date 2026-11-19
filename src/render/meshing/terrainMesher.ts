@@ -13,8 +13,9 @@
  * - **walls**: vertical faces along cell edges, only where the neighbour
  *   column does not cover the run (cliff bases that do not join, tunnel
  *   walls, map borders);
- * - **bottoms**: flat faces under overhangs (tunnel roofs), never under the
- *   map floor (level 0);
+ * - **bottoms**: vaulted faces under overhangs (cave and arch roofs), and a
+ *   flat floor under the lowest run, facing down: never seen from above,
+ *   it closes the ground for the cut section;
  * - **water**: a flat quad at the water surface over every cell whose top
  *   dips below it (water cells and the banks next to them). Beds blend with
  *   banks, so the shoreline is the exact line where facets cross the plane,
@@ -24,6 +25,9 @@
  *   negative where the bank rises above the surface); the quad is split
  *   along the bed's facet diagonal so the interpolated depth matches the
  *   bed. The water shader fades the shore and darkens deep water with it.
+ * - **crags**: where the relief is marked (cliffs, cave mouths, arches),
+ *   faces are cut along the half-cell grid, displaced by a 3D noise and
+ *   flat-shaded, giving irregular faceted rock (see `Crag`).
  * Steep triangles take the colour of the layer under the top voxel (dirt
  * under grass, rock under rock), so slopes and cliffs read as bare ground.
  */
@@ -31,6 +35,7 @@ import type { Chunk } from '@/core/chunk'
 import { CHUNK_SIZE, VOXEL_HEIGHT } from '@/core/coords'
 import { Material } from '@/core/materials'
 import {
+  TERRAIN_CHANNELS,
   TerrainField,
   oneHotWeights,
   facetDiagonal,
@@ -39,7 +44,9 @@ import {
 } from '@/core/terrainSurface'
 import { isAir, materialOf, type Voxel } from '@/core/voxel'
 import type { VoxelMap } from '@/core/voxelMap'
-import { MeshBuilder, cellJitter, cross, sub, type Vec3 } from './meshBuilder'
+import { smoothstep, valueNoise3 } from '@/core/noise'
+import { MeshBuilder, cellJitter, cross, dot, normalize, sub, type Vec3 } from './meshBuilder'
+import { freudenthalInterpolate, splitOnGrid } from './polygonSplit'
 import type { ColorLookup, MeshData } from './mesher'
 
 /** Options for {@link TerrainMesher}. */
@@ -48,6 +55,11 @@ export interface TerrainMesherOptions {
   readonly isTerrain: (voxel: Voxel) => boolean
   /** Linear RGB colour of a material id. */
   readonly colorOf: ColorLookup
+  /**
+   * Rock relief on marked terrain (default true), see `Crag`. Turn it off to
+   * get the exact base surface (tests of the base geometry).
+   */
+  readonly crags?: boolean
 }
 
 /**
@@ -61,6 +73,17 @@ const WATER_DROP = 0.02
 
 /** Deepest water column scanned, in voxels. */
 const MAX_WATER_DEPTH = 32
+
+/**
+ * Weight channel after the terrain materials: texture projection plane of
+ * the undisplaced face, 0 = XZ, 1 = ZY, 2 = XY (see `TerrainMesher.emit`).
+ */
+export const PROJECTION_CHANNEL = TERRAIN_CHANNELS.length
+/** Weight channel: how much the undisplaced surface faces up, 0..1 (see `TerrainMesher.emit`). */
+export const UP_CHANNEL = TERRAIN_CHANNELS.length + 1
+
+/** Faces whose normal's |y| exceeds this are textured from above (XZ plane). */
+const PROJECT_ON_XZ = 0.6
 
 /** Triangles whose normal's y is below this count as steep (bare ground colour). */
 const STEEP_NORMAL_Y = 0.72
@@ -91,6 +114,9 @@ const EDGES: readonly {
 
 /** Mesher for terrain voxels; see the module comment. */
 export class TerrainMesher {
+  /** Rock relief of the chunk being meshed (set by `mesh`). */
+  private crag: Crag | null = null
+
   constructor(private readonly options: TerrainMesherOptions) {}
 
   /** Mesh the terrain and the water surface of one chunk (two separate meshes). */
@@ -108,6 +134,7 @@ export class TerrainMesher {
     )
     const out = new MeshBuilder()
     const waterOut = new MeshBuilder()
+    this.crag = this.options.crags === false ? null : new Crag(field)
 
     for (let z = oz; z < oz + CHUNK_SIZE; z++) {
       for (let x = ox; x < ox + CHUNK_SIZE; x++) {
@@ -120,6 +147,9 @@ export class TerrainMesher {
             this.top(out, map, x, z, run, corners, weights, normals)
             this.walls(out, map, field, x, z, run, corners, weights)
             this.water(waterOut, map, x, z, run, corners)
+            if (!Number.isFinite(run.bottom) || run.bottom <= FLOOR_LEVEL) {
+              this.floor(out, x, z, run)
+            }
           }
           const b = run.bottom
           const ownsBottom = Number.isFinite(b) && b > FLOOR_LEVEL && b >= oy && b < oy + CHUNK_SIZE
@@ -263,6 +293,32 @@ export class TerrainMesher {
     }
   }
 
+  /**
+   * Flat face under the lowest run, at the level its walls go down to:
+   * never seen from above (back face), but it closes the ground's shell, as
+   * the cut section's stencil count needs (`sectionCap.ts`).
+   */
+  private floor(out: MeshBuilder, x: number, z: number, run: TerrainRun): void {
+    const level = Number.isFinite(run.bottom)
+      ? run.bottom
+      : Math.min(FLOOR_LEVEL, run.topY - CHUNK_SIZE)
+    const y = level * VOXEL_HEIGHT
+    const w = oneHotWeights(run.material)
+    // Through `emit`, like the walls it meets: cut and displaced the same way.
+    this.emit(
+      out,
+      [
+        [x, y, z],
+        [x + 1, y, z],
+        [x + 1, y, z + 1],
+        [x, y, z + 1],
+      ],
+      [w, w, w, w],
+      [0, -1, 0],
+      this.shade(run.material, 1),
+    )
+  }
+
   /** Vaulted underside of an overhanging run (cave or arch roof, ledge). */
   private bottom(
     out: MeshBuilder,
@@ -331,7 +387,21 @@ export class TerrainMesher {
     out.polygon(vertices, [0, 1, 0], this.shade(Material.WATER, 1), depths)
   }
 
-  /** Emit a terrain face: smooth-shaded when `smooth` normals are given, flat otherwise. */
+  /**
+   * Emit a terrain face.
+   *
+   * Every vertex gets two extra weight channels describing the undisplaced
+   * face: {@link PROJECTION_CHANNEL} (texture projection plane: 0 = XZ,
+   * 1 = ZY, 2 = XY) and {@link UP_CHANNEL} (how much the base surface faces
+   * up, from the smooth normals on tops). The shader projects textures and
+   * applies the slope rule from them, not from the displaced facets, so the
+   * crags' small facets keep one coherent texture instead of a patchwork.
+   *
+   * On even ground the face goes out as it is (smooth-shaded when `smooth`
+   * normals are given). Where the relief is marked (see {@link Crag}), it is
+   * first cut along the half-cell grid, its vertices are displaced, and the
+   * pieces go out as flat-shaded triangles: craggy, faceted rock.
+   */
   private emit(
     out: MeshBuilder,
     vertices: Vec3[],
@@ -340,8 +410,50 @@ export class TerrainMesher {
     color: Vec3,
     smooth?: Vec3[],
   ): void {
-    if (smooth) out.smoothPolygon(vertices, smooth, outward, color, weights)
-    else out.polygon(vertices, outward, color, weights)
+    const [a, b, c] = vertices as [Vec3, Vec3, Vec3]
+    const n = normalize(cross(sub(b, a), sub(c, a)))
+    const ax = Math.abs(n[0])
+    const ay = Math.abs(n[1])
+    const projection = ay > PROJECT_ON_XZ ? 0 : ax > Math.abs(n[2]) ? 1 : 2
+    const full = vertices.map((_, i) => {
+      const w = TERRAIN_CHANNELS.map((__, k) => weights[i]?.[k] ?? 0)
+      w[PROJECTION_CHANNEL] = projection
+      w[UP_CHANNEL] = smooth ? Math.abs(smooth[i]?.[1] ?? 1) : ay
+      return w
+    })
+
+    const crag = this.crag
+    if (!crag?.touches(vertices)) {
+      if (smooth) out.smoothPolygon(vertices, smooth, outward, color, full)
+      else out.polygon(vertices, outward, color, full)
+      return
+    }
+    const pieces = splitOnGrid(
+      vertices.map((p, i) => ({ p, w: full[i] ?? [] })),
+      CRAG_STEP,
+    )
+    for (const piece of pieces) {
+      const first = piece[0]
+      if (!first) continue
+      for (let i = 1; i < piece.length - 1; i++) {
+        const pb = piece[i]
+        const pc = piece[i + 1]
+        if (!pb || !pc) continue
+        // Winding from the undisplaced triangle: the displacement must not flip it.
+        const flat = cross(sub(pb.p, first.p), sub(pc.p, first.p))
+        if (Math.hypot(flat[0], flat[1], flat[2]) < 1e-12) continue
+        const tri = dot(flat, outward) < 0 ? [first, pc, pb] : [first, pb, pc]
+        const moved = tri.map((v) => crag.displace(v.p))
+        const [m0, m1, m2] = moved as [Vec3, Vec3, Vec3]
+        const fn = normalize(cross(sub(m1, m0), sub(m2, m0)))
+        out.rawPolygon(
+          moved,
+          [fn, fn, fn],
+          [color, color, color],
+          tri.map((v) => v.w),
+        )
+      }
+    }
   }
 
   /** Material colour times a brightness factor. */
@@ -383,6 +495,124 @@ export function waterSurfaceNear(
     }
   }
   return null
+}
+
+/** Grid step of the subdivision in craggy areas, in world units (half a cell, one level). */
+const CRAG_STEP = 0.5
+/** Largest displacement of a vertex, in world units. */
+const CRAG_AMPLITUDE = 0.3
+/** Relief (levels between run tops around a lattice point) where crags start and are full. */
+const CRAG_FROM = 2.5
+const CRAG_FULL = 7
+/** Spatial frequency of the displacement noise, per world unit. */
+const CRAG_FREQUENCY = 0.95
+
+/**
+ * Rock relief: how much terrain vertices are displaced, and where.
+ *
+ * The amplitude depends on the position only: at each lattice point it
+ * grows with the local relief (difference between the run tops of the cells
+ * around, overhangs included), and it is bilinear in between. Flat ground
+ * and gentle slopes keep amplitude 0 (untouched, grid and scatter stay
+ * tidy); cliffs, cave mouths and arches get crags. The displacement is a 3D
+ * noise sampled at the lattice points of the cut grid and interpolated
+ * linearly inside each Freudenthal tetrahedron (faces are cut along the
+ * same tetrahedra, `polygonSplit.ts`): every face sharing a point moves it
+ * the same way, and a vertex lying on another face's edge stays on that
+ * edge, so the surface stays watertight.
+ */
+class Crag {
+  private readonly cache = new Map<string, number>()
+  private readonly offsets = new Map<string, Vec3>()
+
+  constructor(private readonly field: TerrainField) {}
+
+  /** Displacement amplitude (world units) at ground position (x, z). */
+  amplitude(x: number, z: number): number {
+    const ix = Math.floor(x)
+    const iz = Math.floor(z)
+    const fx = x - ix
+    const fz = z - iz
+    const a = this.lattice(ix, iz)
+    const b = fx > 0 ? this.lattice(ix + 1, iz) : a
+    if (fz === 0) return a + (b - a) * fx
+    const c = this.lattice(ix, iz + 1)
+    const d = fx > 0 ? this.lattice(ix + 1, iz + 1) : c
+    const near = a + (b - a) * fx
+    const far = c + (d - c) * fx
+    return near + (far - near) * fz
+  }
+
+  /** `p` moved by the relief noise (less vertically than horizontally). */
+  displace(p: Vec3): Vec3 {
+    // Zero amplitude here means zero on the whole grid face holding p.
+    if (this.amplitude(p[0], p[2]) <= 0) return p
+    const d = freudenthalInterpolate(p, CRAG_STEP, (i, j, k) => this.latticeOffset(i, j, k))
+    return [p[0] + d[0], p[1] + d[1], p[2] + d[2]]
+  }
+
+  /**
+   * Offset of lattice point (i, j, k) (position times {@link CRAG_STEP}):
+   * smooth noise scaled by the local amplitude. Offsets elsewhere are
+   * interpolated linearly per tetrahedron (see `polygonSplit.ts`), which
+   * keeps the displaced surface watertight.
+   */
+  private latticeOffset(i: number, j: number, k: number): Vec3 {
+    const key = `${i},${j},${k}`
+    const cached = this.offsets.get(key)
+    if (cached) return cached
+    const x = i * CRAG_STEP
+    const y = j * CRAG_STEP
+    const z = k * CRAG_STEP
+    const a = this.amplitude(x, z)
+    const f = CRAG_FREQUENCY
+    const n = (seed: number): number => (valueNoise3(x * f, y * f * 1.7, z * f, seed) - 0.5) * 2
+    const offset: Vec3 = a > 0 ? [n(811) * a, n(823) * a * 0.4, n(827) * a] : [0, 0, 0]
+    this.offsets.set(key, offset)
+    return offset
+  }
+
+  /**
+   * Whether the relief reaches the cells under a face (any of their lattice
+   * points has an amplitude). Decided per cell, not per vertex: the two
+   * triangles of a top share a diagonal, which is displaced as soon as one
+   * corner of the cell is, so both must be cut and displaced.
+   */
+  touches(vertices: readonly Vec3[]): boolean {
+    const xs = vertices.map((v) => v[0])
+    const zs = vertices.map((v) => v[2])
+    for (let x = Math.floor(Math.min(...xs)); x <= Math.ceil(Math.max(...xs)); x++) {
+      for (let z = Math.floor(Math.min(...zs)); z <= Math.ceil(Math.max(...zs)); z++) {
+        if (this.lattice(x, z) > 0) return true
+      }
+    }
+    return false
+  }
+
+  /** Amplitude at lattice point (lx, lz). */
+  private lattice(lx: number, lz: number): number {
+    const key = `${lx},${lz}`
+    const cached = this.cache.get(key)
+    if (cached !== undefined) return cached
+    let lo = Infinity
+    let hi = -Infinity
+    for (const [dx, dz] of [
+      [-1, -1],
+      [0, -1],
+      [-1, 0],
+      [0, 0],
+    ] as const) {
+      for (const run of this.field.runsAt(lx + dx, lz + dz)) {
+        if (!Number.isFinite(run.top)) continue
+        lo = Math.min(lo, run.top)
+        hi = Math.max(hi, run.top)
+      }
+    }
+    const relief = hi >= lo ? hi - lo : 0
+    const amplitude = smoothstep(CRAG_FROM, CRAG_FULL, relief) * CRAG_AMPLITUDE
+    this.cache.set(key, amplitude)
+    return amplitude
+  }
 }
 
 /** A boundary along an edge: height (levels) as a linear function of t in [0, 1]. */

@@ -8,7 +8,7 @@
  */
 import { Raycaster, Vector2, type Scene } from 'three/webgpu'
 import { CHUNK_SIZE, VOXEL_HEIGHT, type VoxelCoord } from '@/core/coords'
-import { TerrainField, facetHeightAt } from '@/core/terrainSurface'
+import { TerrainField } from '@/core/terrainSurface'
 import { isTerrainMaterial, materialName } from '@/core/materials'
 import { shapeDefinition, topHeightAt, voxelTopCorners } from '@/core/shapes'
 import { resolveColumnHit, resolveHit, type HitFacing, type SurfaceHit } from '@/core/surface'
@@ -17,6 +17,8 @@ import type { VoxelMap } from '@/core/voxelMap'
 import { CameraRig, type CameraRigSettings } from './cameraRig'
 import { ChunkRenderer } from './chunkRenderer'
 import { NO_CUT, createLayerMaterials, type LayerMaterialSet } from './materials'
+import { NO_HOVER } from './terrainMaterial'
+import { SectionPlane, createStencilMaterials, type StencilMaterials } from './sectionCap'
 import { createRenderer, type RenderBackend, type RendererHandle } from './createRenderer'
 import { SurfaceHighlight, type SurfaceSampler } from './highlight'
 import { materialColor } from './materialPalette'
@@ -28,6 +30,13 @@ import { setLightUniforms } from './lightUniforms'
 import { LIGHTING, lightDirection, type TimeOfDay } from './timeOfDay'
 import { SunShadow, type ShadowQuality } from './sunShadow'
 import { FrameStats, estimateVram, type VramEstimate } from './frameStats'
+
+/**
+ * Margin (world units) of the hover tint's height band around the base
+ * facet heights: more than the crags' offsets, less than the lowest cave or
+ * arch roof above a floor.
+ */
+const HOVER_BAND = 0.45
 
 /** What the cursor points at, for the HUD. Voxel coordinates. */
 export interface HoverInfo {
@@ -157,9 +166,12 @@ export class Engine {
   private readonly chunks: ChunkRenderer
   /** One material per render layer, shared by all chunks, plus shared controls. */
   private readonly layerMaterials: LayerMaterialSet
-  private readonly highlight = new SurfaceHighlight()
+  private readonly highlight: SurfaceHighlight
   /** Fills the section of what the cut slices. */
   private readonly cutCap: CutCap
+  /** Cut section: stencil companions of the solid layers and the plane they mask. */
+  private readonly stencilMaterials: StencilMaterials
+  private readonly sectionPlane = new SectionPlane()
   /** The cap must be rebuilt (the cut height changed). */
   private capDirty = false
   /** Latest resolved hit under the cursor. */
@@ -186,6 +198,7 @@ export class Engine {
     this.lights = createScene(LIGHTING[options.timeOfDay])
     this.scene = this.lights.scene
     this.layerMaterials = createLayerMaterials(options.grid)
+    this.highlight = new SurfaceHighlight(this.layerMaterials.cutHeight)
     this.sunShadow = new SunShadow(this.lights.sun, options.shadows)
     this.applyTimeOfDay(options.timeOfDay)
     this.rig = new CameraRig(options.camera)
@@ -194,7 +207,14 @@ export class Engine {
       options.mesher === 'faceted'
         ? new HybridMesher(materialColor)
         : new BlockyMesher(materialColor)
-    this.chunks = new ChunkRenderer(options.map, mesher, this.layerMaterials.materials)
+    this.stencilMaterials = createStencilMaterials(this.layerMaterials.cutHeight)
+    this.chunks = new ChunkRenderer(
+      options.map,
+      mesher,
+      this.layerMaterials.materials,
+      this.stencilMaterials,
+    )
+    this.scene.add(this.sectionPlane.mesh)
     this.scene.add(this.chunks.group)
     this.scene.add(this.highlight.mesh)
     const terrain = options.mesher === 'faceted' ? isTerrainVoxel : (): boolean => false
@@ -264,12 +284,15 @@ export class Engine {
 
   /**
    * Hide everything above `height` (world units, any value; null shows
-   * everything), to open caves and look under roofs. What the cut slices is
-   * filled by a cap (`cutCap.ts`). Display only: the map is untouched, and
-   * picking ignores what is hidden.
+   * everything), to open caves and look under roofs. What the cut slices
+   * shows as a section: a plane masked by stencil (`sectionCap.ts`), and
+   * the patterned caps of built voxels over it (`cutCap.ts`). Display
+   * only: the map is untouched, and picking ignores what is hidden.
    */
   setCutHeight(height: number | null): void {
     this.layerMaterials.cutHeight.value = height ?? NO_CUT
+    this.chunks.setSectionVisible(height !== null)
+    this.sectionPlane.update(height)
     // Rebuilt in the next frame (several slider events may arrive per frame).
     this.capDirty = true
     this.highlightKey = ''
@@ -314,6 +337,9 @@ export class Engine {
     this.resizeObserver.disconnect()
     this.chunks.dispose()
     this.cutCap.dispose()
+    this.sectionPlane.dispose()
+    this.stencilMaterials.back.dispose()
+    this.stencilMaterials.front.dispose()
     for (const material of Object.values(this.layerMaterials.materials)) material.dispose()
     // dispose() is async in WebGPURenderer; nothing to wait for on teardown.
     void this.handle.renderer.dispose()
@@ -365,11 +391,13 @@ export class Engine {
     let resolved: SurfaceHit | null = null
     if (this.pointerNdc) {
       this.raycaster.setFromCamera(this.pointerNdc, this.rig.camera)
-      // First hit below the cut: what is hidden cannot be picked.
+      // First front-facing hit below the cut: what is hidden cannot be
+      // picked, nor inner faces.
       const cut = this.layerMaterials.cutHeight.value + 1e-3
+      const direction = this.raycaster.ray.direction
       const hit = this.raycaster
         .intersectObjects(this.chunks.pickables, false)
-        .find((h) => h.point.y <= cut)
+        .find((h) => h.point.y <= cut && (h.face?.normal.dot(direction) ?? 0) < 0)
       // Chunk meshes have an identity transform: the face normal is already in
       // world space. It is the geometric normal of the hit triangle.
       if (hit?.face) {
@@ -385,15 +413,29 @@ export class Engine {
 
     const hover = resolved ? toHoverInfo(resolved) : null
     if (resolved) {
-      // Re-drape only when the target or the terrain changed: draping casts rays.
+      // Update only when the target or the terrain changed.
       const key = `${hoverKey(hover)}#${this.hud.lastRebuild?.seq ?? 0}`
       if (key !== this.highlightKey) {
         this.highlightKey = key
-        const { x, z } = resolved.surface
-        this.highlight.show(x, z, this.surfaceSampler(resolved))
+        const band = this.terrainBand(resolved)
+        if (band) {
+          // Terrain: the terrain shader tints the cell (exact on the drawn ground).
+          this.highlight.hide()
+          this.layerMaterials.hover.value.set(
+            resolved.surface.x,
+            resolved.surface.z,
+            band[0],
+            band[1],
+          )
+        } else {
+          this.layerMaterials.hover.value.set(NO_HOVER, NO_HOVER, 0, 0)
+          const { x, z } = resolved.surface
+          this.highlight.show(x, z, this.surfaceSampler(resolved))
+        }
       }
     } else {
       this.highlight.hide()
+      this.layerMaterials.hover.value.set(NO_HOVER, NO_HOVER, 0, 0)
       this.highlightKey = ''
     }
 
@@ -401,22 +443,27 @@ export class Engine {
   }
 
   /**
-   * Height function of the targeted surface cell, in world units.
-   *
-   * Blocky tops follow the voxel's corner heights. Faceted terrain does not
-   * match voxel tops: its height is the facet of the targeted run, computed
-   * from the same model as the mesh (`TerrainField` corner heights), so the
-   * highlight lies exactly on the rendered ground, on steep slopes and
-   * under roofs alike.
+   * Height function of the targeted surface cell, in world units: the
+   * voxel's top corners (blocks, and the fallback for terrain).
    */
   private surfaceSampler(hit: SurfaceHit): SurfaceSampler {
-    const { x, y, z } = hit.surface
+    const { y } = hit.surface
     const corners = voxelTopCorners(hit.surfaceValue)
-    const voxelTop: SurfaceSampler = (fx, fz) => (y + topHeightAt(corners, fx, fz)) * VOXEL_HEIGHT
-    const faceted =
-      this.options.mesher === 'faceted' && isTerrainMaterial(materialOf(hit.surfaceValue))
-    if (!faceted) return voxelTop
+    return (fx, fz) => (y + topHeightAt(corners, fx, fz)) * VOXEL_HEIGHT
+  }
 
+  /**
+   * World height band of the targeted terrain cell's ground, for the
+   * terrain shader's hover tint: the base facet heights of the targeted run
+   * (`TerrainField` corner heights), widened by {@link HOVER_BAND} for the
+   * crags; a cave ceiling or a ledge above stays out. Null when the target
+   * is not faceted terrain.
+   */
+  private terrainBand(hit: SurfaceHit): [number, number] | null {
+    const { x, y, z } = hit.surface
+    if (this.options.mesher !== 'faceted' || !isTerrainMaterial(materialOf(hit.surfaceValue))) {
+      return null
+    }
     // Same vertical window as the chunk mesher, so heights agree with the mesh.
     const oy = Math.floor(y / CHUNK_SIZE) * CHUNK_SIZE
     const field = new TerrainField(
@@ -426,9 +473,9 @@ export class Engine {
       oy + 2 * CHUNK_SIZE - 1,
     )
     const run = field.runsAt(x, z).find((r) => r.topY === y)
-    if (!run) return voxelTop
-    const heights = field.cornerHeights(x, z, run)
-    return (fx, fz) => facetHeightAt(heights, fx, fz) * VOXEL_HEIGHT
+    if (!run) return null
+    const heights = field.cornerHeights(x, z, run).map((h) => h * VOXEL_HEIGHT)
+    return [Math.min(...heights) - HOVER_BAND, Math.max(...heights) + HOVER_BAND]
   }
 
   /**

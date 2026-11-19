@@ -3,12 +3,15 @@ import { Material, isTerrainMaterial } from '@/core/materials'
 import { materialOf, packVoxel, type Voxel } from '@/core/voxel'
 import { VoxelMap } from '@/core/voxelMap'
 import type { MeshData } from './mesher'
+import { createKitchenSinkMap } from '@/core/generators/kitchenSinkMap'
 import { createOrganicMap } from '@/core/generators/organicMap'
 import { TerrainMesher, uncoveredStrips } from './terrainMesher'
-import { openStretches } from './watertight'
+import { openStretches, unmatchedEdges } from './watertight'
 
 const isTerrain = (v: Voxel): boolean => isTerrainMaterial(materialOf(v))
-const mesher = new TerrainMesher({ isTerrain, colorOf: () => [1, 1, 1] })
+// Base surface, without rock relief: exact and watertight.
+const mesher = new TerrainMesher({ isTerrain, colorOf: () => [1, 1, 1], crags: false })
+const craggy = new TerrainMesher({ isTerrain, colorOf: () => [1, 1, 1] })
 const GRASS = packVoxel(Material.GRASS)
 
 const meshAll = (map: VoxelMap): MeshData[] =>
@@ -226,10 +229,71 @@ describe('TerrainMesher watertightness', () => {
     expect(openStretches(meshAll(map))).toEqual([])
   })
 
+  it('stays watertight with crags (cave, organic and kitchen-sink maps)', () => {
+    const craggyAll = (map: VoxelMap): MeshData[] =>
+      [...map.chunks()].map((c) => craggy.mesh(map, c).terrain)
+    // Map borders (x or z at 0 or the size) and the floor stay open.
+    const border =
+      (width: number, depth: number) =>
+      (p: readonly number[]): boolean =>
+        Math.abs(p[1] ?? 0) < 1e-3 ||
+        [0, width].some((b) => Math.abs((p[0] ?? 0) - b) < 1e-2) ||
+        [0, depth].some((b) => Math.abs((p[2] ?? 0) - b) < 1e-2)
+    const tunnel = new VoxelMap()
+    box(tunnel, 0, 10, 2, 12, 0, 10)
+    for (let x = 0; x < 10; x++)
+      for (let y = 4; y < 7; y++) for (let z = 4; z < 6; z++) tunnel.set(x, y, z, 0)
+    expect(unmatchedEdges(craggyAll(tunnel), border(10, 10))).toEqual([])
+    const { map } = createOrganicMap({ seed: 3, size: 32 })
+    expect(unmatchedEdges(craggyAll(map), border(32, 32)).slice(0, 5)).toEqual([])
+    expect(unmatchedEdges(craggyAll(createKitchenSinkMap()), border(40, 32)).slice(0, 5)).toEqual(
+      [],
+    )
+  })
+
   it('has no gap anywhere on an organic map except the map floor and borders', () => {
     const size = 48
     const { map } = createOrganicMap({ seed: 3, size })
     const open = openStretches(meshAll(map), onFloorOrBorder(size))
     expect(open.slice(0, 5)).toEqual([])
+  })
+})
+
+describe('TerrainMesher crags', () => {
+  /** Flat ground (level 4) with a tall block (level 16) in the middle. */
+  function cliffMap(): VoxelMap {
+    const map = new VoxelMap()
+    box(map, 0, 16, 0, 4, 0, 16)
+    box(map, 6, 10, 4, 16, 6, 10)
+    return map
+  }
+
+  it('subdivides and displaces faces around marked relief only', () => {
+    const map = cliffMap()
+    const chunk = [...map.chunks()].find((c) => c.cy === 0)
+    if (!chunk) throw new Error('no chunk')
+    const plain = mesher.mesh(map, chunk).terrain
+    const rocky = craggy.mesh(map, chunk).terrain
+    expect(rocky.indices.length).toBeGreaterThan(plain.indices.length * 1.5)
+    let displaced = 0
+    for (let v = 0; v < rocky.positions.length / 3; v++) {
+      const x = at(rocky.positions, v, 0)
+      const y = at(rocky.positions, v, 1)
+      const z = at(rocky.positions, v, 2)
+      const onGrid = [x, y, z].every((c) => Math.abs(c * 2 - Math.round(c * 2)) < 1e-6)
+      if (!onGrid) displaced++
+      // Far from the cliff the ground stays exactly flat.
+      if (x < 3 || z < 3) expect(y === 0 || Math.abs(y - 2) < 1e-6).toBe(true)
+    }
+    expect(displaced).toBeGreaterThan(50)
+  })
+
+  it('is deterministic', () => {
+    const map = cliffMap()
+    const [chunk] = [...map.chunks()]
+    if (!chunk) throw new Error('no chunk')
+    expect(craggy.mesh(map, chunk).terrain.positions).toEqual(
+      craggy.mesh(map, chunk).terrain.positions,
+    )
   })
 })

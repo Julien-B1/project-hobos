@@ -22,8 +22,7 @@
  *   turning around the vertical to face the camera; 1 flat on the ground,
  *   corners already rotated).
  * - **props** (props layer): small rocks (jittered icosahedra): smooth
- *   pebbles and a few stones on rocky ground only, and faceted boulders at
- *   the foot of rock faces (cliffs, cave mouths, arches).
+ *   pebbles and a few stones on rocky ground only.
  *
  * Density is deliberately low: one candidate point per cell, most left
  * empty.
@@ -111,51 +110,10 @@ export class ScatterMesher {
             tree: nearestTree(trunks, x, z, run.topY),
           }
           for (let i = 0; i < POINTS_PER_CELL; i++) this.decorate(cards, props, cell, i)
-          this.boulders(props, map, field, cell, !isAir(above))
         }
       }
     }
     return { cards: cards.toMeshData(), props: props.toMeshData() }
-  }
-
-  /**
-   * Boulders at the foot of rock faces: for each edge of the cell beyond
-   * which rock rises by at least {@link BOULDER_RISE} levels (a cliff, the
-   * side of a cave mouth or of an arch), a faceted block may rest against
-   * it, sunk into the ground. They break the straight lines of the terrain
-   * around openings and cliffs without changing it: the ground, the cut and
-   * picking keep the exact base geometry. Under water (`wet`) none.
-   */
-  private boulders(
-    props: MeshBuilder,
-    map: VoxelMap,
-    field: TerrainField,
-    cell: Cell,
-    wet: boolean,
-  ): void {
-    if (wet) return
-    const { x, z, run, heights } = cell
-    const roofed = field.runsAt(x, z).some((r) => r.bottom > run.topY)
-    CELL_EDGES.forEach((edge, e) => {
-      const nx = x + edge.dx
-      const nz = z + edge.dz
-      const rises = field
-        .runsAt(nx, nz)
-        .some((r) => r.bottom <= run.top && r.top - run.top >= BOULDER_RISE)
-      if (!rises) return
-      const face = materialOf(map.get(nx, run.topY + 1, nz))
-      if (face !== Material.ROCK && face !== Material.STONE) return
-      const h = (k: number): number => hash01(x * 92821 + e, z * 31 + run.topY, 701 + k)
-      // Fewer and smaller inside a cave or under an arch, to keep the way clear.
-      if (h(0) > (roofed ? 0.3 : 0.65)) return
-      const t = 0.15 + 0.7 * h(1)
-      const inset = 0.12
-      const fx = edge.a[0] + (edge.b[0] - edge.a[0]) * t - edge.dx * inset
-      const fz = edge.a[1] + (edge.b[1] - edge.a[1]) * t - edge.dz * inset
-      const ground = facetHeightAt(heights, fx, fz) * VOXEL_HEIGHT
-      const radius = roofed ? 0.2 + 0.12 * h(2) : 0.3 + 0.3 * h(2)
-      rock(props, [x + fx, ground, z + fz], radius, (k) => h(10 + k), true)
-    })
   }
 
   /** Place the items of random point `i` of a cell. */
@@ -207,17 +165,6 @@ export class ScatterMesher {
     }
   }
 }
-
-/** The 4 edges of a cell: neighbour offset and the edge's two ends (cell-local x, z). */
-const CELL_EDGES = [
-  { dx: 1, dz: 0, a: [1, 0], b: [1, 1] },
-  { dx: -1, dz: 0, a: [0, 0], b: [0, 1] },
-  { dx: 0, dz: 1, a: [0, 1], b: [1, 1] },
-  { dx: 0, dz: -1, a: [0, 0], b: [1, 0] },
-] as const
-
-/** Rise (levels) of a neighbouring rock face from which boulders gather at its foot. */
-const BOULDER_RISE = 4
 
 /** What the decoration of a cell depends on. */
 interface Cell {
@@ -377,25 +324,20 @@ const ICO_FACES: readonly (readonly [number, number, number])[] = [
 ]
 
 /**
- * A low-poly rock of radius about `radius` (world units) half sunk into the
+ * A low-poly rock of radius about `radius` (world units) sunk into the
  * ground at `base`: an icosahedron with jittered vertices, squashed and
- * turned at random, tinted grey. Pebbles are smooth-shaded (rounded);
- * `faceted` boulders are flat-shaded, like cut rock.
+ * turned at random, tinted grey, smooth-shaded (rounded).
  */
-function rock(
-  out: MeshBuilder,
-  base: Vec3,
-  radius: number,
-  h: (k: number) => number,
-  faceted = false,
-): void {
+function rock(out: MeshBuilder, base: Vec3, radius: number, h: (k: number) => number): void {
   const tints = ROCK_TINTS
   const flatten = 0.5 + 0.3 * h(10)
   const stretch = 0.8 + 0.5 * h(11)
   const a = h(12) * Math.PI * 2
   const cs = Math.cos(a)
   const sn = Math.sin(a)
-  const centre: Vec3 = [base[0], base[1] + radius * flatten * 0.35, base[2]]
+  // Sunk down to its widest part: no overhang over the ground (light passing
+  // under the bulge showed as a bright rim between the stone and its shadow).
+  const centre: Vec3 = [base[0], base[1] - radius * flatten * 0.05, base[2]]
   const points = ICO_VERTICES.map((v, i): Vec3 => {
     const r =
       radius * (0.8 + 0.4 * hash01(Math.round(base[0] * 977) + i, Math.round(base[2] * 977), 613))
@@ -427,7 +369,6 @@ function rock(
         p[2] - centre[2],
       ]),
     )
-    if (faceted) out.polygon([p0, p1, p2], outward, tint)
-    else out.smoothPolygon([p0, p1, p2], normals, outward, tint)
+    out.smoothPolygon([p0, p1, p2], normals, outward, tint)
   }
 }

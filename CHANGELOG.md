@@ -31,15 +31,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Very light hue drift of the grass.
 - Cut slider (vertical, left edge, continuous height): hides everything
   above a height (all layers and their shadows, picking included) to open
-  caves and look under roofs; what the cut slices is filled by a hatched
-  cap computed exactly from the mesh's corner heights, vaults included
-  (`CapMesher`, `CutCap`,
-  `Engine.setCutHeight`).
+  caves and look under roofs. What the cut slices shows as an opaque,
+  hatched section by stencil capping (`sectionCap.ts`): the solid layers
+  (terrain, blocks and trunks, stones) count back and front faces below
+  the cut into the stencil buffer, and a plane at the cut height is drawn
+  where the count says "inside", so its outline is exactly the cut of the
+  drawn meshes (crags, round trunks, stones); every layer tests the
+  stencil, so nothing shows through the section. The terrain is closed by a floor face under the lowest
+  run. Built voxels also get the section of their solid in their own
+  colour, slopes included (`CapMesher`, `CutCap`, `Engine.setCutHeight`).
 - Openings in faceted terrain: runs around a corner touched by a covered
   run (cave or arch floor) only join when they agree on it, so cave mouths
   and natural arches stay open with a vertical face around them.
-- Faceted boulders at the foot of rock faces (cliffs, cave mouths, arches),
-  as decoration over the exact base geometry (`ScatterMesher`).
+- Craggy rock: where the relief is marked (cliffs, cave mouths, arches),
+  terrain faces are cut along the tetrahedra of the half-cell lattice and
+  displaced by noise offsets interpolated linearly per tetrahedron, so the
+  surface stays watertight; flat-shaded (`Crag`, `meshing/polygonSplit.ts`,
+  test helper `unmatchedEdges`).
+  Texture projection and the slope rule come from the undisplaced face
+  (two extra weight channels, `PROJECTION_CHANNEL`, `UP_CHANNEL`), so
+  the small facets keep one coherent texture.
+- Dev and preview servers gzip their responses (`tooling/gzip.ts`, Node
+  zlib, no dependency); pre-bundled dependencies are minified and served
+  without their inline source maps: Three.js and Vue go from about 11 MB
+  to about 0.4 MB on the wire.
 - Vaulted undersides: cave and arch roofs drop towards their side walls
   with a small random offset (`TerrainField.cornerBottoms`), so openings
   are irregular arches instead of rectangles.
@@ -55,6 +70,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Battle-map grid on terrain, blocks and water, drawn in the shaders
   (anti-aliased, fades at far zoom and on steep faces); `G` toggles it,
   `?grid=off` starts hidden.
+- Hover highlight on faceted terrain drawn by the terrain shader (cell
+  square, height band, ground faces only): covers exactly the drawn
+  ground, crags included, cut with it; light fill with a thin border.
+  Block highlight cut like the scene, lighter.
 - Debug HUD figures: map, resolved seed, mesher, shadow quality, drawing
   buffer size, GPU time per frame and GPU load (timestamp queries), estimated
   page VRAM, draw calls, triangles, shadow passes and camera pose
@@ -142,6 +161,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Water no longer receives shadows: they fell on the surface and on the
+  bed seen through it, twice and offset; they now land on the bed only.
+- No more lit strip between an object's foot and its shadow: blocks,
+  trunks and stones cast shadows from their front faces (Three's default
+  is the back faces, whose depth next to the foot is almost the ground's,
+  within the shadow bias).
 - Foliage no longer shows hard shadow edges (one shadow lookup per card);
   rocks and walls away from the sun no longer go black (upward-biased rock
   normals, lifted ambient from below); the hover highlight lies exactly on

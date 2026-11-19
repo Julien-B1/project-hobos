@@ -33,7 +33,7 @@ import {
   vec2,
   vertexColor,
 } from 'three/tsl'
-import { MeshStandardNodeMaterial, type DataTexture, type Node } from 'three/webgpu'
+import { FrontSide, MeshStandardNodeMaterial, type DataTexture, type Node } from 'three/webgpu'
 import { applyGrid, type GridOpacity } from './gridOverlay'
 import { BlockLook } from './meshing/mesher'
 
@@ -56,6 +56,11 @@ export function createBlocksMaterial(
 ): MeshStandardNodeMaterial {
   const material = new MeshStandardNodeMaterial({ roughness: 0.9, metalness: 0 })
   material.name = 'blocks'
+  // Shadows cast by the front faces (Three's default for front-sided
+  // materials is the back faces): with back faces, the depth stored right
+  // next to an object's foot is its shaded side, almost at the ground's own
+  // depth, and the shadow bias left a lit strip between object and shadow.
+  material.shadowSide = FrontSide
 
   const look = attribute('weightsA', 'vec4').x
   const is = (id: number): Node<'bool'> => abs(look.sub(id)).lessThan(0.5)

@@ -8,12 +8,13 @@
 import { fileURLToPath, URL } from 'node:url'
 import vue from '@vitejs/plugin-vue'
 import { defineConfig } from 'vitest/config'
+import { gzip } from './tooling/gzip.ts'
 
 /** Polling fallback for file watching, enabled with VITE_USE_POLLING=true. */
 const usePolling = process.env.VITE_USE_POLLING === 'true'
 
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [vue(), gzip()],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
@@ -24,6 +25,12 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     watch: usePolling ? { usePolling: true, interval: 200 } : {},
+  },
+  optimizeDeps: {
+    // Pre-bundled dependencies (Three.js, Vue) are served minified: the dev
+    // server sends them with inline source maps, unminified they weigh
+    // about 11 MB.
+    rolldownOptions: { output: { minify: true } },
   },
   build: {
     // Three.js alone is ~800 kB minified; the default 500 kB warning is noise

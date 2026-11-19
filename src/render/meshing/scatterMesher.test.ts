@@ -82,21 +82,4 @@ describe('ScatterMesher', () => {
       for (let z = 0; z < 16; z++) map.set(x, 4, z, packVoxel(Material.WOOD))
     expect(cardCount(meshOf(map).cards)).toBe(0)
   })
-
-  it('rests boulders against rock faces only', () => {
-    const cliff = (material: number): VoxelMap => {
-      const map = field(Material.GRASS)
-      for (let x = 8; x < 16; x++)
-        for (let z = 0; z < 16; z++)
-          for (let y = 4; y < 14; y++) map.set(x, y, z, packVoxel(material))
-      return map
-    }
-    const chunkOf = (map: VoxelMap): { cards: MeshData; props: MeshData } => {
-      const chunk = [...map.chunks()].find((c) => c.cy === 0)
-      if (!chunk) throw new Error('no chunk')
-      return mesher.mesh(map, chunk)
-    }
-    expect(chunkOf(cliff(Material.ROCK)).props.positions.length).toBeGreaterThan(0)
-    expect(chunkOf(cliff(Material.DIRT)).props.positions).toHaveLength(0)
-  })
 })

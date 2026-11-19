@@ -1,21 +1,19 @@
 /**
- * Cut cap: the mesh that fills what the cut plane slices (see
- * `meshing/capMesher.ts`), rebuilt when the cut height or the terrain
- * changes.
+ * Cut cap: the mesh that fills the built blocks the cut plane slices (see
+ * `meshing/capMesher.ts`), rebuilt when the cut height or the map changes.
+ * Everything else is filled by the stencil-masked section plane
+ * (`sectionCap.ts`), which this cap is drawn over.
  *
  * Layer: render. One mesh for the whole map (maps are encounter sized), not
- * pickable. Its material shows the cut material's colour with diagonal
- * hatching, the usual way to draw a section, and is lit and shadowed like
- * the rest. Cost: a few ALU per pixel, no texture.
+ * pickable. Its material shows the cut material's colour, darkened and
+ * hatched (`sectionColor`), the usual way to draw a section, unlit like
+ * the terrain's section. Cost: a few ALU per pixel, no texture.
  */
-import { float, fract, positionWorld, smoothstep, abs, vertexColor } from 'three/tsl'
+import { vec3, vertexColor } from 'three/tsl'
 import { BufferAttribute, BufferGeometry, Mesh, MeshStandardNodeMaterial } from 'three/webgpu'
 import type { VoxelMap } from '@/core/voxelMap'
 import type { CapMesher } from './meshing/capMesher'
-
-/** Hatch lines per world unit, and how much they darken the cap. */
-const HATCH_FREQUENCY = 3
-const HATCH_STRENGTH = 0.3
+import { sectionColor } from './terrainMaterial'
 
 /** Owns the cap mesh. Add {@link CutCap.mesh} to the scene. */
 export class CutCap {
@@ -28,9 +26,13 @@ export class CutCap {
   ) {
     this.material = new MeshStandardNodeMaterial({ roughness: 1, metalness: 0 })
     this.material.name = 'cut cap'
-    const stripe = abs(fract(positionWorld.x.add(positionWorld.z).mul(HATCH_FREQUENCY)).sub(0.5))
-    const hatch = float(1).sub(smoothstep(0.18, 0.08, stripe).mul(HATCH_STRENGTH))
-    this.material.colorNode = vertexColor().rgb.mul(hatch)
+    // Same look as the terrain's section: unlit, hatched on the screen.
+    this.material.colorNode = vec3(0)
+    this.material.emissiveNode = sectionColor(vertexColor().rgb)
+    // Drawn over the section plane (same height) that fills everything else.
+    this.material.polygonOffset = true
+    this.material.polygonOffsetFactor = -1
+    this.material.polygonOffsetUnits = -4
     this.mesh = new Mesh(new BufferGeometry(), this.material)
     this.mesh.name = 'cut cap'
     this.mesh.castShadow = true

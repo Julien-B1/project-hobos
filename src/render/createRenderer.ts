@@ -7,6 +7,7 @@
  * so the HUD can display it.
  */
 import { NeutralToneMapping, PCFShadowMap, WebGPURenderer } from 'three/webgpu'
+import { STENCIL_BASE } from './sectionCap'
 
 /** Graphics backend actually used by the renderer after initialisation. */
 export type RenderBackend = 'WebGPU' | 'WebGL 2'
@@ -48,7 +49,10 @@ export async function createRenderer(
     forceWebGL: options.forceWebGL,
     // GPU timing for the debug HUD; a few queries per frame, negligible cost.
     trackTimestamp: true,
+    // Stencil buffer for the cut section (`sectionCap.ts`).
+    stencil: true,
   })
+  renderer.setClearStencil(STENCIL_BASE)
   // Neutral tone mapping (Khronos PBR Neutral): leaves mid-tones and the
   // material palette almost untouched and only rolls off highlights (sun
   // glints on water), instead of clipping them to white. A few ALU per pixel.

@@ -10,13 +10,14 @@
  * 1. Each vertex carries blended material weights (grass, dirt, sand, rock,
  *    stone, path), averaged per lattice point in `core/terrainSurface.ts`, so
  *    weights are continuous from cell to cell.
- * 2. Textures are projected in world space on the plane facing the facet,
- *    chosen from the facet's geometric normal (screen derivatives of the
- *    position): the smooth shading normal varies across a triangle and would
- *    cut the projection in the middle of it. The detail texture is rotated
+ * 2. Textures are projected in world space on the plane facing the
+ *    undisplaced face, chosen by the mesher and passed per vertex: neither
+ *    the smooth shading normal (varies across a triangle) nor the facets of
+ *    displaced rock (vary from facet to facet) would give a stable choice. The detail texture is rotated
  *    so nothing lines up with the cell grid.
  * 3. Steep ground moves weight to dirt (medium slopes) and rock (steep
- *    slopes), from the smooth normal, so the change is continuous.
+ *    slopes), from the base surface's smooth slope (per vertex), so the
+ *    change is continuous and ignores the crags' facets.
  * 4. **Height blending**: each material gets a height, its detail pattern
  *    (grass clumps, pebbles, rock grain, sand ripples) plus a random
  *    large-scale offset. Where materials meet, the highest one wins within a
@@ -27,27 +28,35 @@
  *    modulated by its detail pattern; grass also drifts very slightly
  *    between warmer and cooler greens.
  * 6. The battle-map grid darkens the cell borders (`gridOverlay.ts`).
+ * 7. The hovered cell is tinted (`applyHover`): the cursor on terrain.
  */
 import {
   abs,
   attribute,
+  fract,
+  screenCoordinate,
   color,
-  cross,
-  dFdx,
-  dFdy,
   float,
   max,
+  min,
   mix,
-  normalWorld,
-  normalize,
   positionWorld,
   select,
   smoothstep,
+  step,
   texture,
+  uniform,
   vec2,
   vec3,
 } from 'three/tsl'
-import { MeshStandardNodeMaterial, type DataTexture, type Node } from 'three/webgpu'
+import {
+  Color,
+  MeshStandardNodeMaterial,
+  Vector4,
+  type DataTexture,
+  type Node,
+  type UniformNode,
+} from 'three/webgpu'
 import { applyGrid, type GridOpacity } from './gridOverlay'
 
 /** One terrain channel's look, in `TERRAIN_CHANNELS` order. */
@@ -102,11 +111,61 @@ const HEIGHT_INFLUENCE = 0.5
 /** Width of the band where two materials mix, in weight units: smaller is crisper. */
 const BLEND_BAND = 0.12
 
+/**
+ * Hovered terrain cell, read by the terrain shader: (x, z) of the cell's
+ * corner and the world height band (min, max) of its ground. x far off the
+ * map (see {@link NO_HOVER}) shows nothing.
+ */
+export type HoverCell = UniformNode<'vec4'>
+
+/** Hover value that marks no cell. */
+export const NO_HOVER = -1e6
+
+/** Create the hovered-cell uniform (nothing hovered). */
+export function createHoverCell(): HoverCell {
+  return uniform(new Vector4(NO_HOVER, NO_HOVER, 0, 0))
+}
+
+/** Hover tint colour (sRGB) and strength: light fill, stronger thin border. */
+const HOVER_COLOR = 0xffe066
+const HOVER_FILL = 0.16
+const HOVER_BORDER = 0.55
+
+/**
+ * Tint the hovered cell: every terrain pixel inside the cell square, within
+ * the height band and on ground (`up`, not walls), so the cursor covers
+ * exactly the drawn ground, crags included, and is cut like it. A few ALU.
+ */
+function applyHover(
+  base: Node<'vec3'>,
+  p: Node<'vec3'>,
+  up: Node<'float'>,
+  hover: HoverCell,
+): Node<'vec3'> {
+  const fx = p.x.sub(hover.x)
+  const fz = p.z.sub(hover.y)
+  const inCell = step(0, fx).mul(step(fx, 1)).mul(step(0, fz)).mul(step(fz, 1))
+  const inBand = step(hover.z, p.y).mul(step(p.y, hover.w))
+  const amount = inCell.mul(inBand).mul(smoothstep(0.2, 0.35, up))
+  const edge = min(min(fx, float(1).sub(fx)), min(fz, float(1).sub(fz)))
+  const border = float(1).sub(smoothstep(0.025, 0.05, edge))
+  const tint = new Color(HOVER_COLOR) // linear RGB
+  const strength = amount.mul(border.mul(HOVER_BORDER - HOVER_FILL).add(HOVER_FILL))
+  return mix(base, vec3(tint.r, tint.g, tint.b), strength)
+}
+
+/** Brightness of the cut section relative to the material colour. */
+const SECTION_SHADE = 0.55
+/** Hatching of the cut section: period in pixels and darkening of the lines. */
+const HATCH_PIXELS = 9
+const HATCH_STRENGTH = 0.3
+
 /** Create the material of the terrain layer. */
 export function createTerrainMaterial(
   noise: DataTexture,
   detailTexture: DataTexture,
   grid: GridOpacity,
+  hover: HoverCell,
 ): MeshStandardNodeMaterial {
   const material = new MeshStandardNodeMaterial({ roughness: 0.95, metalness: 0 })
   material.name = 'terrain'
@@ -114,11 +173,14 @@ export function createTerrainMaterial(
   const wa = attribute('weightsA', 'vec4')
   const wb = attribute('weightsB', 'vec4')
 
-  // Planar projection facing the facet: XZ for tops, ZY or XY for walls.
-  // The geometric normal's sign does not matter here (abs).
+  // Planar projection facing the undisplaced face (weight channel 6, set
+  // by the mesher: 0 = XZ, 1 = ZY, 2 = XY), constant over a face and over
+  // all the small displaced facets cut from it.
   const p = positionWorld
-  const f = abs(normalize(cross(dFdx(p), dFdy(p))))
-  const uv = select(f.y.greaterThan(0.6), p.xz, select(f.x.greaterThan(f.z), p.zy, p.xy))
+  const projection = wb.z
+  const uv = select(projection.lessThan(0.5), p.xz, select(projection.lessThan(1.5), p.zy, p.xy))
+  // How much the undisplaced surface faces up (weight channel 7, smooth).
+  const up = wb.w
   const large = texture(noise, uv.div(LARGE_SCALE))
   const small = texture(noise, uv.div(SMALL_SCALE).add(vec2(0.37, 0.71)))
   const c = Math.cos(DETAIL_ANGLE)
@@ -127,12 +189,12 @@ export function createTerrainMaterial(
   const detail = texture(detailTexture, rotated.div(DETAIL_SCALE))
 
   // Steep ground: weight moves to dirt on medium slopes, rock on steep ones
-  // (less on sand, so beaches stay sandy).
-  const n = abs(normalWorld)
+  // (less on sand, so beaches stay sandy). From the base surface's slope,
+  // so displaced facets do not flip between materials one by one.
   const raw: Node<'float'>[] = [wa.x, wa.y, wa.z, wa.w, wb.x, wb.y]
   const sandShare = raw[SAND] ?? float(0)
-  const steep = smoothstep(0.86, 0.6, n.y).mul(float(1).sub(sandShare.mul(0.7)))
-  const rocky = smoothstep(0.62, 0.35, n.y)
+  const steep = smoothstep(0.86, 0.6, up).mul(float(1).sub(sandShare.mul(0.7)))
+  const rocky = smoothstep(0.62, 0.35, up)
   const weights = raw.map((w, i) => {
     let out = w.mul(float(1).sub(steep))
     if (i === DIRT) out = out.add(steep.mul(float(1).sub(rocky)))
@@ -175,6 +237,17 @@ export function createTerrainMaterial(
   // Broad brightness variation at a few cells' scale.
   const variation = small.g.mul(0.2).add(0.9)
   const ground = mixed.div(max(sum, float(1e-5))).mul(variation)
-  material.colorNode = applyGrid(ground, p, f.y, grid)
+  material.colorNode = applyHover(applyGrid(ground, p, up, grid), p, up, hover)
   return material
+}
+
+/**
+ * Colour of a cut section: `base` darkened, with diagonal hatching fixed on
+ * the screen. Shared by the section plane (`sectionCap.ts`) and the
+ * blocks' cap (`cutCap.ts`); emit it unlit.
+ */
+export function sectionColor(base: Node<'vec3'>): Node<'vec3'> {
+  const stripe = abs(fract(screenCoordinate.x.add(screenCoordinate.y).div(HATCH_PIXELS)).sub(0.5))
+  const hatch = float(1).sub(smoothstep(0.2, 0.1, stripe).mul(HATCH_STRENGTH))
+  return base.mul(SECTION_SHADE).mul(hatch)
 }

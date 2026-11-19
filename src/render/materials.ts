@@ -9,7 +9,8 @@
  * opacity uniform is returned with them.
  */
 import { positionWorld, uniform } from 'three/tsl'
-import type { UniformNode } from 'three/webgpu'
+import { GreaterEqualStencilFunc, KeepStencilOp, type UniformNode } from 'three/webgpu'
+import { STENCIL_BASE } from './sectionCap'
 import type { LayerMaterials } from './chunkRenderer'
 import { createDetailTexture } from './detailTexture'
 import { createFoliageMaterial } from './foliageMaterial'
@@ -19,7 +20,7 @@ import { createLightUniforms, type LightUniforms } from './lightUniforms'
 import { createNoiseTexture } from './noiseTexture'
 import { createPropsMaterial, createScatterMaterial } from './scatterMaterial'
 import { createBlocksMaterial } from './blocksMaterial'
-import { createTerrainMaterial } from './terrainMaterial'
+import { createHoverCell, createTerrainMaterial, type HoverCell } from './terrainMaterial'
 import { createWaterMaterial } from './waterMaterial'
 
 /** Layer materials and the controls they share. */
@@ -35,6 +36,8 @@ export interface LayerMaterialSet {
    * {@link NO_CUT} shows everything.
    */
   readonly cutHeight: UniformNode<'float'>
+  /** Hovered terrain cell, tinted by the terrain shader (the cursor on terrain). */
+  readonly hover: HoverCell
 }
 
 /** Cut height that hides nothing. */
@@ -49,8 +52,9 @@ export function createLayerMaterials(gridVisible: boolean): LayerMaterialSet {
   const gridOpacity = createGridOpacity(gridVisible)
   const light = createLightUniforms()
   const cutHeight = uniform(NO_CUT)
+  const hover = createHoverCell()
   const materials = {
-    terrain: createTerrainMaterial(noise, detail, gridOpacity),
+    terrain: createTerrainMaterial(noise, detail, gridOpacity, hover),
     blocks: createBlocksMaterial(noise, gridOpacity),
     water: createWaterMaterial(noise, gridOpacity, light),
     foliage: createFoliageMaterial(leaves),
@@ -60,6 +64,16 @@ export function createLayerMaterials(gridVisible: boolean): LayerMaterialSet {
   // One mask for every layer: keep only what lies below the cut.
   for (const material of Object.values(materials)) {
     material.maskNode = positionWorld.y.lessThan(cutHeight)
+    // Never drawn where the cut section says "inside matter" (stencil above
+    // its base, see `sectionCap.ts`): what pokes into the ground, or lies
+    // just under the section plane, cannot show through it. Without a cut
+    // the stencil stays at its base and every pixel passes.
+    material.stencilWrite = true
+    material.stencilRef = STENCIL_BASE
+    material.stencilFunc = GreaterEqualStencilFunc // passes where stencil <= STENCIL_BASE
+    material.stencilFail = KeepStencilOp
+    material.stencilZFail = KeepStencilOp
+    material.stencilZPass = KeepStencilOp
   }
-  return { materials, gridOpacity, light, cutHeight }
+  return { materials, gridOpacity, light, cutHeight, hover }
 }

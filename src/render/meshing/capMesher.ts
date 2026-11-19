@@ -1,31 +1,26 @@
 /**
- * Cap mesher: fills the cross-section of what the cut plane slices.
+ * Cap mesher: fills the cross-section of the built blocks the cut plane
+ * slices.
  *
  * Layer: render (no Three.js import, unit-tested). The cut (see
  * `Engine.setCutHeight`) hides everything above a height; chunk meshes are
- * hollow shells, so without a cap one would look inside the ground. This
- * mesher builds the missing horizontal faces at the cut height:
- * - **terrain**: for every run crossing the height, the part of its faceted
- *   top that rises above the cut and of its (vaulted) underside that lies
- *   below it, clipped triangle by triangle from the mesh's own corner
- *   heights and laid flat at the cut height: the cap's outline is exactly
- *   the cut of the geometry, cave interiors stay open.
- * - **blocks**: one square per built voxel (not terrain, water, foliage or
- *   tree trunk) containing the height.
- * Colours are the material of the voxel at the cut, darkened; the cap
- * shader adds hatching.
+ * hollow shells. A stencil-masked plane fills every solid section in one
+ * colour (`sectionCap.ts`); this mesher adds, over it, the caps of built
+ * voxels in their own colour.
+ * Blocks get, for each built voxel (not terrain, water, foliage or tree
+ * trunk) the cut crosses, the section of its solid: the part of the cell
+ * where its top (flat, slope or wedge) rises above the cut.
+ * Colours are the material of the voxel at the cut; the cap shader darkens
+ * and hatches them.
  */
 import { CHUNK_SIZE, VOXEL_HEIGHT } from '@/core/coords'
 import { Material, isFoliageMaterial } from '@/core/materials'
-import { TerrainField, facetDiagonal, type FacetCorners } from '@/core/terrainSurface'
 import { findTrunks, isTrunkVoxel } from '@/core/trees'
+import { type CornerHeights, topDiagonal, voxelTopCorners } from '@/core/shapes'
 import { isAir, materialOf, type Voxel } from '@/core/voxel'
 import type { VoxelMap } from '@/core/voxelMap'
 import { MeshBuilder, type Vec3 } from './meshBuilder'
 import type { ColorLookup, MeshData } from './mesher'
-
-/** Brightness of the cap relative to the material colour. */
-const CAP_SHADE = 0.55
 
 /** A point on the ground plane of a cell: local x and z in [0, 1]. */
 type Point2 = readonly [number, number]
@@ -67,23 +62,20 @@ const CORNERS: readonly Point2[] = [
 ]
 
 /**
- * The two triangles of a faceted surface over a cell (split by
- * `facetDiagonal`): for each, its footprint, the half of the cell it covers
- * (as a function positive inside) and its height (levels) as a function of
- * the position.
+ * The two triangles of a voxel's top surface (split by `topDiagonal`, as
+ * the mesh): for each, its footprint and its height (voxel units, 0..1) as
+ * a function of the position in the cell.
  */
-function facets(h: FacetCorners): { footprint: Point2[]; inside: Field; height: Field }[] {
+function facets(h: CornerHeights): { footprint: Point2[]; height: Field }[] {
   const [h00, h10, h11, h01] = h
-  if (facetDiagonal(h) === 0) {
+  if (topDiagonal(h) === 0) {
     return [
       {
         footprint: [CORNERS[0], CORNERS[1], CORNERS[2]] as Point2[],
-        inside: (x, z) => x - z,
         height: (x, z) => h00 + (h10 - h00) * (x - z) + (h11 - h00) * z,
       },
       {
         footprint: [CORNERS[0], CORNERS[2], CORNERS[3]] as Point2[],
-        inside: (x, z) => z - x,
         height: (x, z) => h00 + (h01 - h00) * (z - x) + (h11 - h00) * x,
       },
     ]
@@ -91,12 +83,10 @@ function facets(h: FacetCorners): { footprint: Point2[]; inside: Field; height: 
   return [
     {
       footprint: [CORNERS[1], CORNERS[3], CORNERS[0]] as Point2[],
-      inside: (x, z) => 1 - x - z,
       height: (x, z) => h00 + (h10 - h00) * x + (h01 - h00) * z,
     },
     {
       footprint: [CORNERS[1], CORNERS[2], CORNERS[3]] as Point2[],
-      inside: (x, z) => x + z - 1,
       height: (x, z) => h11 + (h01 - h11) * (1 - x) + (h10 - h11) * (1 - z),
     },
   ]
@@ -116,10 +106,7 @@ export class CapMesher {
   /** Cap of `map` at world height `height`. */
   mesh(map: VoxelMap, height: number): MeshData {
     const out = new MeshBuilder()
-    const level = height / VOXEL_HEIGHT
-    const voxelY = Math.floor(level)
-    // Scan from below the floor so runs starting at level 0 have a finite bottom.
-    const field = new TerrainField(map, this.isTerrain, -1, voxelY + 2 * CHUNK_SIZE)
+    const voxelY = Math.floor(height / VOXEL_HEIGHT)
     const columns = new Set<string>()
     for (const chunk of map.chunks()) columns.add(`${chunk.cx},${chunk.cz}`)
 
@@ -138,63 +125,11 @@ export class CapMesher {
       )
       for (let z = oz; z < oz + CHUNK_SIZE; z++) {
         for (let x = ox; x < ox + CHUNK_SIZE; x++) {
-          this.terrainCap(out, map, field, x, z, level, height)
           this.blockCap(out, map, trunks, x, voxelY, z, height)
         }
       }
     }
     return out.toMeshData()
-  }
-
-  /**
-   * Cap of the terrain runs of column (x, z): for each run, the region of
-   * the cell where the cut height lies between its (vaulted) underside and
-   * its faceted top, computed exactly from the same corner heights as the
-   * mesh, so the cap's outline is the cut of the geometry.
-   */
-  private terrainCap(
-    out: MeshBuilder,
-    map: VoxelMap,
-    field: TerrainField,
-    x: number,
-    z: number,
-    level: number,
-    height: number,
-  ): void {
-    for (const run of field.runsAt(x, z)) {
-      if (!Number.isFinite(run.top)) continue
-      const tops = field.cornerHeights(x, z, run)
-      if (Math.max(...tops) <= level) continue
-      const overhang = Number.isFinite(run.bottom)
-      const bottoms = overhang ? field.cornerBottoms(x, z, run) : null
-      if (bottoms && Math.min(...bottoms) >= level) continue // cut under the roof
-
-      // Colour of the run's voxel at the cut (its lowest one under a vault).
-      const lowest = overhang ? Math.ceil(run.bottom) : -Infinity
-      const voxel = map.get(x, Math.max(Math.min(Math.floor(level), run.topY), lowest), z)
-      const color = this.capColor(this.isTerrain(voxel) ? materialOf(voxel) : run.material)
-
-      for (const top of facets(tops)) {
-        const above = clipPositive(top.footprint, (px, pz) => top.height(px, pz) - level)
-        if (above.length === 0) continue
-        const pieces = bottoms
-          ? facets(bottoms).map((under) =>
-              clipPositive(
-                clipPositive(above, under.inside),
-                (px, pz) => level - under.height(px, pz),
-              ),
-            )
-          : [above]
-        for (const polygon of pieces) {
-          if (polygon.length === 0) continue
-          out.polygon(
-            polygon.map(([px, pz]): Vec3 => [x + px, height, z + pz]),
-            [0, 1, 0],
-            color,
-          )
-        }
-      }
-    }
   }
 
   /** Cap of a built voxel (blocks layer) containing the cut height. */
@@ -212,23 +147,25 @@ export class CapMesher {
     if (isAir(voxel) || this.isTerrain(voxel)) return
     if (material === Material.WATER || isFoliageMaterial(material)) return
     if (isTrunkVoxel(trunks, x, y, z)) return
-    // Nothing to fill when the cut grazes the voxel's bottom face.
-    if (height <= y * VOXEL_HEIGHT + 1e-6) return
-    out.polygon(
-      [
-        [x, height, z],
-        [x, height, z + 1],
-        [x + 1, height, z + 1],
-        [x + 1, height, z],
-      ],
-      [0, 1, 0],
-      this.capColor(material),
-    )
+    // Section of the voxel's solid at the cut: where its top (slopes and
+    // wedges included) rises above the cut, laid flat at the cut height.
+    const local = height / VOXEL_HEIGHT - y
+    if (local <= 1e-6) return // the cut grazes the voxel's bottom face
+    const color = this.capColor(material)
+    for (const top of facets(voxelTopCorners(voxel))) {
+      const section = clipPositive(top.footprint, (px, pz) => top.height(px, pz) - local)
+      if (section.length === 0) continue
+      out.polygon(
+        section.map(([px, pz]): Vec3 => [x + px, height, z + pz]),
+        [0, 1, 0],
+        color,
+      )
+    }
   }
 
-  /** Darkened colour of a material, for cut faces. */
+  /** Colour of a material for cut faces (the cap shader darkens and hatches it). */
   private capColor(material: number): Vec3 {
     const c = this.colorOf(material)
-    return [c[0] * CAP_SHADE, c[1] * CAP_SHADE, c[2] * CAP_SHADE]
+    return c
   }
 }

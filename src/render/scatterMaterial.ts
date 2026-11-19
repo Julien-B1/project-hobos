@@ -30,7 +30,7 @@ import {
   vec4,
   vertexColor,
 } from 'three/tsl'
-import { DoubleSide, MeshStandardNodeMaterial, type DataTexture } from 'three/webgpu'
+import { DoubleSide, FrontSide, MeshStandardNodeMaterial, type DataTexture } from 'three/webgpu'
 import { LEAF_TEXTURE_SIZE } from './leafTexture'
 import { windSway } from './wind'
 
@@ -92,6 +92,11 @@ export function createScatterMaterial(atlas: DataTexture): MeshStandardNodeMater
 export function createPropsMaterial(noise: DataTexture): MeshStandardNodeMaterial {
   const material = new MeshStandardNodeMaterial({ roughness: 0.85, metalness: 0 })
   material.name = 'props'
+  // Shadows cast by the front faces (Three's default for front-sided
+  // materials is the back faces): with back faces, the depth stored right
+  // next to an object's foot is its shaded side, almost at the ground's own
+  // depth, and the shadow bias left a lit strip between object and shadow.
+  material.shadowSide = FrontSide
   const p = positionWorld
   const variation = texture(noise, p.xz.add(p.y).div(1.7)).g.mul(0.3).add(0.85)
   material.colorNode = vertexColor().rgb.mul(variation)

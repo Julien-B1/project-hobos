@@ -79,3 +79,65 @@ export function openStretches(
   }
   return open
 }
+
+/** A point, world units. */
+type Point = [number, number, number]
+
+/**
+ * Midpoints of triangle edges that no edge running the other way passes
+ * through (within 1e-4): holes in the surface. Unlike {@link openStretches}
+ * it needs no exact line match, so it also checks displaced meshes, whose
+ * T-junction pieces are collinear only up to rounding. `ignore` filters
+ * midpoints expected to be open (map borders).
+ */
+export function unmatchedEdges(
+  meshes: readonly MeshData[],
+  ignore: (midpoint: readonly number[]) => boolean = () => false,
+): Point[] {
+  const segments: [Point, Point][] = []
+  for (const m of meshes) {
+    const p = (i: number): Point => [
+      m.positions[i * 3] ?? 0,
+      m.positions[i * 3 + 1] ?? 0,
+      m.positions[i * 3 + 2] ?? 0,
+    ]
+    for (let t = 0; t < m.indices.length; t += 3) {
+      const ids = [0, 1, 2].map((k) => m.indices[t + k] ?? 0)
+      for (let k = 0; k < 3; k++) segments.push([p(ids[k] ?? 0), p(ids[(k + 1) % 3] ?? 0)])
+    }
+  }
+  // Spatial hash of the segments' bounding boxes.
+  const cell = 0.25
+  const hash = new Map<string, number[]>()
+  segments.forEach(([a, b], i) => {
+    const lo = [0, 1, 2].map((c) => Math.floor(Math.min(a[c] ?? 0, b[c] ?? 0) / cell))
+    const hi = [0, 1, 2].map((c) => Math.floor(Math.max(a[c] ?? 0, b[c] ?? 0) / cell))
+    for (let x = lo[0] ?? 0; x <= (hi[0] ?? 0); x++)
+      for (let y = lo[1] ?? 0; y <= (hi[1] ?? 0); y++)
+        for (let z = lo[2] ?? 0; z <= (hi[2] ?? 0); z++) {
+          const key = `${x},${y},${z}`
+          const list = hash.get(key) ?? []
+          list.push(i)
+          hash.set(key, list)
+        }
+  })
+  const out: Point[] = []
+  for (const [a, b] of segments) {
+    const mid: Point = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2]
+    if (ignore(mid)) continue
+    const d: Point = [b[0] - a[0], b[1] - a[1], b[2] - a[2]]
+    const key = mid.map((c) => Math.floor(c / cell)).join(',')
+    const matched = (hash.get(key) ?? []).some((j) => {
+      const [c, e] = segments[j] ?? [mid, mid]
+      const f: Point = [e[0] - c[0], e[1] - c[1], e[2] - c[2]]
+      if (d[0] * f[0] + d[1] * f[1] + d[2] * f[2] >= 0) return false // same way
+      const ff = f[0] * f[0] + f[1] * f[1] + f[2] * f[2]
+      const t = ((mid[0] - c[0]) * f[0] + (mid[1] - c[1]) * f[1] + (mid[2] - c[2]) * f[2]) / ff
+      if (t < -1e-6 || t > 1 + 1e-6) return false
+      const q: Point = [c[0] + f[0] * t, c[1] + f[1] * t, c[2] + f[2] * t]
+      return Math.hypot(q[0] - mid[0], q[1] - mid[1], q[2] - mid[2]) < 1e-4
+    })
+    if (!matched) out.push(mid)
+  }
+  return out
+}

@@ -181,24 +181,48 @@ scatter, props), each layer with its own shared material
 - **Cut** (`materials.ts` `cutHeight`, `Engine.setCutHeight`, `cutCap.ts`,
   `meshing/capMesher.ts`, `CutSlider.vue`): every layer material has a mask
   discarding what lies above a world height (any value, also in the shadow
-  pass, re-rendered on change); picking skips hits above it. Chunk meshes
-  are hollow shells, so a cap fills the section: for terrain, the part of
-  each faceted top above the cut and of each vaulted underside below it,
-  clipped per triangle from the mesh's own corner heights and laid flat at
-  the cut height (exact outline, cave interiors stay open); for built voxels, a square. The cap
-  is hatched, rebuilt when the height or the terrain changes. Display only,
-  the map is untouched.
+  pass, re-rendered on change); picking skips hits above it and back
+  faces. Chunk meshes are hollow shells, filled by stencil capping
+  (`sectionCap.ts`): each solid layer mesh (terrain, blocks with trunks,
+  props) has two companions sharing its geometry, drawn only while
+  cutting, first, into the stencil buffer only (masked by the cut, depth
+  test off): back faces increment, front faces decrement. The stencil is
+  cleared to 128, so a count above it means the pixel's ray enters the cut
+  plane inside matter (closed shells and their unions; a negative count
+  from an open shell never reads as solid). Then a plane at the cut height
+  is drawn where the count is above 128, opaque, depth-written, unlit, one
+  earth colour with screen-space hatching (`sectionColor`): its outline is
+  exactly the cut of the drawn meshes. Every layer material also tests the
+  stencil (drawn only where it is at most 128), so nothing pokes through
+  the section, whatever its depth. A floor face under the lowest terrain run closes the ground.
+  Built voxels also get their own coloured cap over it (`CapMesher`: the
+  section of each voxel's solid, slopes and wedges following their top).
+  Display only, the map is untouched.
 - **Openings** (`core/terrainSurface.ts`): around a corner touched by a
   covered run (cave or arch floor), runs only join when they agree on it,
   so the ground stays level in front of a mouth and the hill keeps a
   vertical face there; undersides are vaulted (`cornerBottoms`: corners
   against the side walls drop by half the opening's height, plus a random
   offset), so openings are irregular arches.
-- **Rock dressing**: the terrain geometry is never distorted (the ground,
-  the cut cap and the hover highlight all come from the same corner
-  heights and match exactly). Rocky relief is decoration: faceted boulders
-  (props layer) rest at the foot of rock faces rising 4 levels or more
-  (cliffs, sides of cave mouths and arches), fewer and smaller under roofs.
+- **Crags** (`meshing/terrainMesher.ts` `Crag`, `meshing/polygonSplit.ts`):
+  where the relief around a lattice point is marked (run tops differing by
+  2.5 levels or more, full at 7), terrain faces are cut by the half-cell
+  lattice planes (x, y, z and x - y, y - z, x - z = k / 2: the tetrahedra
+  of the Freudenthal triangulation of the grid cubes), and displaced by
+  offsets drawn from a 3D value noise at the lattice points (amplitude up
+  to 0.3 unit, less vertically), interpolated linearly inside each
+  tetrahedron. Every piece lies in one tetrahedron, where the displacement
+  is linear: a vertex on another face's edge (T-junction) stays on the
+  displaced edge, so the surface is watertight (the stencil section
+  needs closed shells; checked by `unmatchedEdges` in the tests).
+  Whether a face is cut is decided per cell (both triangles of a top share
+  their diagonal). Pieces are flat-shaded: irregular faceted rock.
+  Flat ground and gentle slopes are untouched. Each vertex also carries
+  the undisplaced face's texture projection plane and upward facing (weight
+  channels `PROJECTION_CHANNEL`, `UP_CHANNEL`): the terrain shader
+  projects textures and applies the slope rule from them, so the small
+  facets keep one coherent texture. The cut section and the hover
+  highlight follow the drawn mesh (stencil capping, mesh pieces).
 - **Battle-map grid** (`render/gridOverlay.ts`): the terrain, blocks and
   water shaders darken the cell borders (integer x, z) with thin,
   translucent lines. The line pattern is box-filtered over the pixel
@@ -251,11 +275,16 @@ trees and grid. Shadow quality barely changes GPU time; `high` costs about
 - Picking on faceted terrain: hits on upward facets are resolved by column
   (`resolveColumnHit`: surface of that column closest in height), other
   hits by `resolveHit`.
-- Hover highlight: a 3 x 3 patch draped on the surface cell. On faceted
-  terrain its heights are measured with short downward rays on the chunk
-  meshes, started just above the voxel surface so a bridge deck or a tunnel
-  ceiling above is ignored. Re-draped only when the target or the terrain
-  changes.
+- Hover highlight. On faceted terrain the terrain shader tints the cell
+  (`applyHover`, uniform `hover`): every pixel inside the cell square,
+  within a height band (the base facet heights from `TerrainField`, plus
+  0.45 unit for the crags: a cave ceiling or a ledge above stays out) and
+  on ground (undisplaced face facing up, `UP_CHANNEL`: not walls). It
+  covers exactly the drawn ground, crags included, is cut with it, and
+  costs a few ALU: light fill (16 %), thin stronger border. On blocks, a
+  translucent 3 x 3 patch on the voxel's top corners (20 % opacity, cut
+  like the scene). On blocks, a 3 x 3 patch on the voxel's top corners. Rebuilt
+  only when the target or the terrain changes.
 - **Edits** (debug): `src/app/editing/debugEdits.ts` writes to the map from
   the engine's `hoveredHit` (right click removes the touched voxel,
   `Shift` + click places a stone voxel on the surface). The map marks the

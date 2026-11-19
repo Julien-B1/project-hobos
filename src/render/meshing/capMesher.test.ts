@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { Material, isTerrainMaterial } from '@/core/materials'
 import { materialOf, packVoxel, type Voxel } from '@/core/voxel'
 import { VoxelMap } from '@/core/voxelMap'
+import { Orientation, Shape } from '@/core/shapes'
 import { CapMesher, clipPositive } from './capMesher'
 import type { MeshData } from './mesher'
 
@@ -35,6 +36,27 @@ function block(top: number): VoxelMap {
   return map
 }
 
+describe('CapMesher', () => {
+  it('leaves the terrain to its own section (no cap)', () => {
+    expect(mesher.mesh(block(8), 2).indices).toHaveLength(0)
+  })
+
+  it('caps built voxels', () => {
+    const map = new VoxelMap()
+    map.set(0, 0, 0, packVoxel(Material.STONE_BRICK))
+    map.set(0, 1, 0, packVoxel(Material.STONE_BRICK))
+    expect(area(mesher.mesh(map, 0.75))).toBeCloseTo(1)
+  })
+
+  it('follows the slope of a sloped block', () => {
+    const map = new VoxelMap()
+    map.set(0, 0, 0, packVoxel(Material.STONE_BRICK, Shape.SLOPE, Orientation.EAST))
+    // Halfway up the slope: half the cell is solid.
+    expect(area(mesher.mesh(map, 0.25))).toBeCloseTo(0.5)
+    expect(area(mesher.mesh(map, 0.125))).toBeCloseTo(0.75)
+  })
+})
+
 describe('clipPositive', () => {
   it('keeps the part of a polygon where the function is positive', () => {
     const square = [
@@ -48,42 +70,5 @@ describe('clipPositive', () => {
     const half = clipPositive(square, (x) => x - 0.25)
     expect(half).toHaveLength(4)
     expect(Math.min(...half.map((p) => p[0]))).toBeCloseTo(0.25)
-  })
-})
-
-describe('CapMesher', () => {
-  it('fills the section of solid ground at the cut height', () => {
-    const cap = mesher.mesh(block(8), 2) // cut at level 4 of 8
-    expect(area(cap)).toBeCloseTo(16)
-    for (let v = 0; v < cap.positions.length / 3; v++) {
-      expect(cap.positions[v * 3 + 1]).toBeCloseTo(2)
-      expect(cap.normals[v * 3 + 1]).toBeCloseTo(1)
-    }
-  })
-
-  it('draws nothing when the cut is above everything', () => {
-    expect(mesher.mesh(block(8), 10).indices).toHaveLength(0)
-  })
-
-  it('leaves cave interiors open and caps the rock around them', () => {
-    const map = block(12)
-    // A cave: air at levels 2..5 in the 2 x 4 middle strip.
-    for (let x = 1; x < 3; x++)
-      for (let z = 0; z < 4; z++) for (let y = 2; y < 6; y++) map.set(x, y, z, 0)
-    // Cut low in the cave (under the vault): only the two side strips are solid.
-    expect(area(mesher.mesh(map, 1.2))).toBeCloseTo(8)
-    // Cut through the vault: the roof fills in from the walls, partly.
-    const through = area(mesher.mesh(map, 2.4))
-    expect(through).toBeGreaterThan(8)
-    expect(through).toBeLessThan(16)
-    // Cut above the cave: everything is solid again.
-    expect(area(mesher.mesh(map, 4.5))).toBeCloseTo(16)
-  })
-
-  it('caps built voxels', () => {
-    const map = new VoxelMap()
-    map.set(0, 0, 0, packVoxel(Material.STONE_BRICK))
-    map.set(0, 1, 0, packVoxel(Material.STONE_BRICK))
-    expect(area(mesher.mesh(map, 0.75))).toBeCloseTo(1)
   })
 })

@@ -9,9 +9,18 @@
 import { BufferAttribute, BufferGeometry, Group, Mesh, type Material } from 'three/webgpu'
 import type { VoxelMap } from '@/core/voxelMap'
 import { FOLIAGE_CARD_REACH } from './meshing/treeMesher'
+import {
+  addStencilCompanions,
+  setCompanionsVisible,
+  syncCompanions,
+  type StencilMaterials,
+} from './sectionCap'
 
 /** Layers left out of picking: decoration whose shapes do not match voxels. */
 const UNPICKABLE: ReadonlySet<string> = new Set(['foliage', 'scatter', 'props'])
+
+/** Solid layers: closed shells counted by the cut section's stencil pass. */
+const SOLID: ReadonlySet<string> = new Set(['terrain', 'blocks', 'props'])
 
 /** Tallest scatter card, in world units (bounding sphere margin). */
 const SCATTER_REACH = 1.6
@@ -32,17 +41,40 @@ export class ChunkRenderer {
   readonly group = new Group()
   /** Per chunk key, one mesh per non-empty layer. */
   private readonly meshes = new Map<string, Partial<Record<MeshLayer, Mesh>>>()
+  /** Whether the cut section's stencil companions are drawn. */
+  private sectionOn = false
 
   /**
    * @param materials One material per layer, shared by all chunks (the
    *   engine owns and disposes them).
+   * @param stencil Materials of the cut section's stencil companions
+   *   (`sectionCap.ts`), added to the solid layers' meshes; none when null.
    */
   constructor(
     private readonly map: VoxelMap,
     private readonly mesher: LayeredMesher,
     private readonly materials: LayerMaterials,
+    private readonly stencil: StencilMaterials | null = null,
   ) {
     this.group.name = 'chunks'
+  }
+
+  /** Draw (true) or skip the stencil companions of the solid layers (cut on/off). */
+  setSectionVisible(on: boolean): void {
+    this.sectionOn = on
+    for (const layers of this.meshes.values()) {
+      for (const mesh of Object.values(layers)) setCompanionsVisible(mesh, on)
+    }
+  }
+
+  /** Meshes of one layer, every chunk (a fresh array each call). */
+  layerMeshes(layer: MeshLayer): Mesh[] {
+    const out: Mesh[] = []
+    for (const layers of this.meshes.values()) {
+      const mesh = layers[layer]
+      if (mesh) out.push(mesh)
+    }
+    return out
   }
 
   /**
@@ -118,6 +150,7 @@ export class ChunkRenderer {
       if (old) {
         old.geometry.dispose()
         old.geometry = geometry
+        syncCompanions(old)
         next[layer] = old
         continue
       }
@@ -128,7 +161,10 @@ export class ChunkRenderer {
       // Water is see-through and scatter cards are tiny: they receive shadows
       // but cast none. Foliage casts through its alpha test (dappled shadows).
       mesh.castShadow = layer !== 'water' && layer !== 'scatter'
-      mesh.receiveShadow = true
+      // Clear water lets light through: shadows land on the bed, seen through
+      // it; a shadow on the surface as well would show twice, offset.
+      mesh.receiveShadow = layer !== 'water'
+      if (this.stencil && SOLID.has(layer)) addStencilCompanions(mesh, this.stencil, this.sectionOn)
       this.group.add(mesh)
       next[layer] = mesh
     }

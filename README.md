@@ -47,8 +47,13 @@ make lint        # ESLint
 make typecheck   # vue-tsc
 make check       # lint + typecheck + tests
 make build       # production build into dist/
+make preview     # serve the production build on http://localhost:5173
 make sh          # shell inside the container
 ```
+
+Both servers gzip their responses. Over a slow link, prefer `make build`
+then `make preview`: about 0.3 MB on the wire, against about 0.5 MB plus
+many small modules for the dev server.
 
 Maps are battle-map sized (32 x 32 squares, one encounter). URL switches:
 `?forceWebGL=1` forces the WebGL 2 backend; `?map=flat` or `?map=organic`
