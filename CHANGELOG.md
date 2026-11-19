@@ -32,6 +32,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   highlight follows the surface, tilted on slopes; the HUD shows voxel,
   material, shape, face and surface. Tests cover the bridge-over-path
   column, slopes, a cliff face and the tunnel.
+- Debug edits: right click removes the voxel under the cursor, `Shift` +
+  left click places a stone voxel on the surface. Only the edited chunk (and
+  face neighbours for border voxels) is rebuilt; the HUD shows each rebuild
+  batch with chunk keys and time.
 
 ### Changed
 

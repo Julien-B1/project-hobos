@@ -85,6 +85,11 @@ BufferGeometry on one Mesh per chunk (shared vertex-colour material)
 - Colours come from `render/materialPalette.ts` (sRGB authored, converted to
   linear once), multiplied by a per-face shade and a small per-voxel jitter
   so cells stay readable.
+- **Edits** (debug): `src/app/editing/debugEdits.ts` writes to the map from
+  the engine's `hoveredHit` (right click removes the touched voxel,
+  `Shift` + click places a stone voxel on the surface). The map marks the
+  edited chunk dirty, plus face neighbours for border voxels; the next frame
+  rebuilds only those. The HUD shows each rebuild batch (count, keys, time).
 - How to add materials, shapes, meshers and maps: see [[Extending]].
 
 ## Documentation rules in code

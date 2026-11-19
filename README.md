@@ -65,6 +65,8 @@ Keys are bound by physical position: the same keys work on AZERTY and QWERTY.
 | Pan                    | Middle mouse drag                                  |
 | Zoom                   | Mouse wheel, `R` / `F`, numpad `+` / `-`           |
 | Reset view             | `C` or `Home`                                      |
+| Remove voxel (debug)   | Right click                                        |
+| Place voxel (debug)    | `Shift` + left click                               |
 
 Camera settings (pitch, FOV, zoom bounds, speeds) live in `src/app/config.ts`.
 

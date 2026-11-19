@@ -46,6 +46,18 @@ export interface EngineHudState {
   readonly hover: HoverInfo | null
   /** Number of chunk meshes in the scene. */
   readonly chunkMeshes: number
+  /** Last chunk rebuild batch, to check that edits rebuild only what they must. */
+  readonly lastRebuild: RebuildInfo | null
+}
+
+/** One batch of chunk rebuilds (one frame). */
+export interface RebuildInfo {
+  /** Keys ("cx,cy,cz") of the rebuilt or removed chunks. */
+  readonly keys: readonly string[]
+  /** Time spent meshing and uploading, in milliseconds. */
+  readonly ms: number
+  /** Sequence number, increases with every batch. */
+  readonly seq: number
 }
 
 /** Options for {@link Engine.create}. */
@@ -100,8 +112,6 @@ export class Engine {
     this.rig = new CameraRig(options.camera)
 
     this.chunks = new ChunkRenderer(options.map, new CulledMesher(materialColor))
-    // Every chunk of a freshly generated map is dirty: the first update builds them all.
-    this.chunks.update()
     this.scene.add(this.chunks.group)
     this.scene.add(this.highlight.mesh)
 
@@ -109,8 +119,11 @@ export class Engine {
       backend: handle.backend,
       fps: 0,
       hover: null,
-      chunkMeshes: this.chunks.meshCount,
+      chunkMeshes: 0,
+      lastRebuild: null,
     }
+    // Every chunk of a freshly generated map is dirty: the first update builds them all.
+    this.rebuildDirtyChunks()
 
     // Observe the canvas itself: it is sized by CSS, the renderer follows.
     this.resizeObserver = new ResizeObserver(() => {
@@ -175,11 +188,25 @@ export class Engine {
     const dt = this.lastFrameTime === null ? 0 : (time - this.lastFrameTime) / 1000
     this.lastFrameTime = time
     this.rig.update(Math.min(dt, MAX_FRAME_DT))
-    this.chunks.update()
+    this.rebuildDirtyChunks()
     // Pick every frame: the camera may move under a still cursor.
     this.updateHover()
     this.updateFps(time)
     this.handle.renderer.render(this.scene, this.rig.camera)
+  }
+
+  /** Rebuild dirty chunks and report the batch to the HUD when not empty. */
+  private rebuildDirtyChunks(): void {
+    const start = performance.now()
+    const keys = this.chunks.update()
+    if (keys.length === 0) return
+    const ms = performance.now() - start
+    const seq = (this.hud.lastRebuild?.seq ?? 0) + 1
+    this.publish({
+      ...this.hud,
+      chunkMeshes: this.chunks.meshCount,
+      lastRebuild: { keys, ms, seq },
+    })
   }
 
   /** Raycast the cursor against the chunk meshes and update highlight and HUD. */

@@ -17,8 +17,12 @@
  *
  * Mouse: left drag = free rotation, middle drag = pan, wheel = zoom. The
  * cursor position is forwarded for hover picking.
+ *
+ * Debug edits: right click = remove the voxel under the cursor,
+ * Shift + left click (without dragging) = place a voxel on the surface.
  */
 import type { CameraRig } from '@/render/cameraRig'
+import type { EditActions } from '@/app/editing/debugEdits'
 
 /** What the bindings drive: the camera rig and the hover cursor. Implemented by `Engine`. */
 export interface InputTarget {
@@ -70,6 +74,7 @@ export function bindInputs(
   canvas: HTMLCanvasElement,
   target: InputTarget,
   settings: InputSettings,
+  edits: EditActions,
 ): () => void {
   const rig = target.cameraRig
   const pressed = new Set<string>()
@@ -122,6 +127,7 @@ export function bindInputs(
       e.preventDefault()
       drag = { kind: 'pan', lastX: e.clientX, lastY: e.clientY }
     } else {
+      if (e.button === 2) edits.remove()
       return
     }
     canvas.setPointerCapture(e.pointerId)
@@ -148,6 +154,9 @@ export function bindInputs(
 
   const onPointerUp = (e: PointerEvent): void => {
     if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId)
+    // A left press that never turned into a rotation is a click.
+    const isClick = e.type === 'pointerup' && drag.kind === 'left' && !drag.rotating
+    if (isClick && e.button === 0 && e.shiftKey) edits.place()
     drag = { kind: 'none' }
   }
 
@@ -160,6 +169,11 @@ export function bindInputs(
 
   const onPointerLeave = (): void => {
     target.clearPointer()
+  }
+
+  /** Right click is a debug edit, not the browser menu. */
+  const onContextMenu = (e: MouseEvent): void => {
+    e.preventDefault()
   }
 
   /** Middle click must not open the auto-scroll or paste on some systems. */
@@ -177,6 +191,7 @@ export function bindInputs(
   canvas.addEventListener('pointerleave', onPointerLeave)
   canvas.addEventListener('wheel', onWheel, { passive: false })
   canvas.addEventListener('auxclick', onAuxClick)
+  canvas.addEventListener('contextmenu', onContextMenu)
 
   return () => {
     window.removeEventListener('keydown', onKeyDown)
@@ -189,5 +204,6 @@ export function bindInputs(
     canvas.removeEventListener('pointerleave', onPointerLeave)
     canvas.removeEventListener('wheel', onWheel)
     canvas.removeEventListener('auxclick', onAuxClick)
+    canvas.removeEventListener('contextmenu', onContextMenu)
   }
 }

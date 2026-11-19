@@ -10,6 +10,7 @@ import { onBeforeUnmount, onMounted, ref, useTemplateRef } from 'vue'
 import { Engine, type EngineHudState } from '@/render/engine'
 import { config, readUrlFlags } from '@/app/config'
 import { bindInputs } from '@/app/input/bindings'
+import { createDebugEdits } from '@/app/editing/debugEdits'
 import { createTestMap } from '@/core/generators/catalog'
 
 const emit = defineEmits<{
@@ -46,7 +47,9 @@ onMounted(async () => {
     // Frame the map (also the reset view) and keep the target over it.
     engine.cameraRig.setHome(world.home.x, world.home.y, world.home.z)
     engine.cameraRig.setTargetBounds({ minX: 0, maxX: world.width, minZ: 0, maxZ: world.depth })
-    unbindInputs = bindInputs(canvas.value, engine, config.input)
+    const engineRef = engine
+    const edits = createDebugEdits(world.map, () => engineRef.hoveredHit)
+    unbindInputs = bindInputs(canvas.value, engine, config.input, edits)
     engine.start()
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)

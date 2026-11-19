@@ -20,7 +20,14 @@ defineProps<{
         Backend: <strong>{{ state.backend }}</strong>
       </div>
       <div>FPS: {{ state.fps }}</div>
-      <div>Chunks: {{ state.chunkMeshes }}</div>
+      <div>Chunks: {{ state.chunkMeshes }} meshes</div>
+      <div v-if="state.lastRebuild">
+        Rebuild #{{ state.lastRebuild.seq }}: {{ state.lastRebuild.keys.length }} chunk(s) in
+        {{ state.lastRebuild.ms.toFixed(1) }} ms
+        <span v-if="state.lastRebuild.keys.length <= 8" class="keys">
+          [{{ state.lastRebuild.keys.join(' | ') }}]
+        </span>
+      </div>
       <template v-if="state.hover">
         <div>
           Voxel: ({{ state.hover.voxel.x }}, {{ state.hover.voxel.y }}, {{ state.hover.voxel.z }})
@@ -52,5 +59,9 @@ defineProps<{
     monospace;
   pointer-events: none;
   user-select: none;
+}
+
+.keys {
+  opacity: 0.7;
 }
 </style>
