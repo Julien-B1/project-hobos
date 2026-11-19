@@ -5,15 +5,15 @@
  * mesh:
  * - terrain materials (`isTerrainMaterial`: grass, dirt, rock, ...) go
  *   through the `TerrainMesher` (faceted low-poly height surface);
- * - everything else (wood, leaves, water) goes through the `CulledMesher`,
- *   so built structures and stairs keep sharp edges and water stays flat.
+ * - wood and leaves go through the `CulledMesher`, so built structures and
+ *   stairs keep sharp edges;
+ * - water is drawn by the `TerrainMesher` as a flat plane, so shorelines
+ *   follow the terrain facets.
  *
- * Occlusion rules for the blocky part:
- * - water hides its faces against any solid voxel (no water walls poking
- *   through banks, whose faceted surface does not follow voxel faces);
- * - other blocks hide a face only against a FULL face of another blocky
- *   voxel. Faces against terrain are kept: the faceted surface can recede
- *   inside the cell and would otherwise leave a gap.
+ * Occlusion rule for the blocky part: a face is hidden only against a FULL
+ * face of another blocky voxel or of water. Faces against terrain are kept:
+ * the faceted surface can recede inside the cell and would otherwise leave
+ * a gap.
  */
 import type { Chunk } from '@/core/chunk'
 import { Material, isTerrainMaterial } from '@/core/materials'
@@ -37,11 +37,10 @@ export class HybridMesher implements ChunkMesher {
   constructor(colorOf: ColorLookup) {
     this.terrain = new TerrainMesher({ isTerrain: isTerrainVoxel, colorOf })
     this.blocky = new CulledMesher(colorOf, {
-      include: (voxel) => !isTerrainVoxel(voxel),
-      occludes: (self, neighbour, face) => {
-        if (isAir(neighbour)) return false
-        if (materialOf(self) === Material.WATER) return true
-        if (isTerrainVoxel(neighbour)) return false
+      // Water is drawn by the terrain mesher as a flat plane.
+      include: (voxel) => !isTerrainVoxel(voxel) && materialOf(voxel) !== Material.WATER,
+      occludes: (_self, neighbour, face) => {
+        if (isAir(neighbour) || isTerrainVoxel(neighbour)) return false
         return faceProfile(neighbour, oppositeFace(face)) === FaceProfile.FULL
       },
     })

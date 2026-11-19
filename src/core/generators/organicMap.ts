@@ -127,7 +127,10 @@ function buildHeightField(size: number, seed: number): Int32Array {
       let h = smooth[i] ?? MIN_LEVEL
       // Cliff zones: hills become plateaus separated by steep risers.
       const cliff = smoothstep(0.52, 0.6, fbm2(x / 60, z / 60, seed + 300, { octaves: 2 }))
-      if (cliff > 0 && h > WATER_LEVEL + 2) h += (terrace(h, TERRACE) - h) * cliff
+      // Terraces count from just above the water: a plateau never sinks below
+      // it (otherwise water would flood the terrace and draw contour channels).
+      const shore = WATER_LEVEL + 2
+      if (cliff > 0 && h > shore) h += (shore + terrace(h - shore, TERRACE) - h) * cliff
       heights[i] = Math.max(MIN_LEVEL, Math.min(MAX_LEVEL, Math.round(h)))
       stepLimits[i] = cliff > 0.5 ? CLIFF_MAX_STEP : MAX_STEP
     }

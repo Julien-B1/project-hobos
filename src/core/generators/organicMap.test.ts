@@ -107,6 +107,27 @@ describe('organic map', () => {
     expect(steepest).toBeGreaterThanOrEqual(4)
   })
 
+  it('never floods a terrace into a one-cell water channel', () => {
+    for (const seed of [1337, 42, 7]) {
+      const big = createOrganicMap({ seed })
+      // A water column with dry land above the water on both sides of an
+      // axis is a one-cell channel, typical of a terrace sunk below the water.
+      let channels = 0
+      for (let z = 1; z < big.size - 1; z++)
+        for (let x = 1; x < big.size - 1; x++) {
+          if (big.heightAt(x, z) >= big.waterLevel) continue
+          const dryX =
+            big.heightAt(x - 1, z) > big.waterLevel + 1 &&
+            big.heightAt(x + 1, z) > big.waterLevel + 1
+          const dryZ =
+            big.heightAt(x, z - 1) > big.waterLevel + 1 &&
+            big.heightAt(x, z + 1) > big.waterLevel + 1
+          if (dryX || dryZ) channels++
+        }
+      expect(channels).toBe(0)
+    }
+  })
+
   it('grows trees with trunks and leaves', () => {
     let wood = 0
     let leaves = 0

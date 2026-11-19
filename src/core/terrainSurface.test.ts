@@ -92,35 +92,11 @@ describe('corner heights', () => {
   })
 })
 
-describe('shores', () => {
-  it('puts dry corners next to water exactly on the water surface', () => {
-    const map = new VoxelMap()
-    const water = packVoxel(Material.WATER)
-    const isWater = (v: Voxel): boolean => materialOf(v) === Material.WATER
-    for (let z = 0; z < 3; z++) {
-      column(map, 0, z, 0, 7) // river bed, water 7..9 (surface level 10)
-      for (let y = 7; y < 10; y++) map.set(0, y, z, water)
-      column(map, 1, z, 0, 12) // bank
-    }
-    const f = new TerrainField(map, isTerrain, -4, 40, isWater)
-    const bank = f.runsAt(1, 1)[0]
-    const bed = f.runsAt(0, 1)[0]
-    if (!bank || !bed) throw new Error('no run')
-    expect(bed.waterLevel).toBe(10)
-    const c = f.cornerHeights(1, 1, bank)
-    expect(c[0]).toBeCloseTo(10) // water side
-    expect(c[1]).toBeCloseTo(12) // inland
-    // The bed does not blend with the bank.
-    expect(f.cornerHeights(0, 1, bed)[1]).toBeCloseTo(7)
-  })
-})
-
 describe('connects', () => {
   const run = (bottom: number, top: number): TerrainRun => ({
     bottom,
     top,
     topY: Math.ceil(top) - 1,
-    waterLevel: null,
   })
 
   it('connects equal tops and open steps', () => {

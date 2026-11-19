@@ -13,8 +13,11 @@
  *   walls, map borders);
  * - **bottoms**: flat faces under overhangs (tunnel roofs), never under the
  *   map floor (level 0);
- * - **shores**: banks meet the water exactly at its surface (see
- *   `core/terrainSurface.ts`); the water itself is drawn as blocks.
+ * - **water**: a flat quad at the water surface over every cell whose top
+ *   dips below it (water cells and the banks next to them). Beds blend with
+ *   banks, so the shoreline is the exact line where facets cross the plane,
+ *   not the cell grid. The plane sits a hair below the surface level so land
+ *   facets lying exactly at that level win the depth test.
  * Steep triangles take the colour of the layer under the top voxel (dirt
  * under grass, rock under rock), so slopes and cliffs read as bare ground.
  */
@@ -45,6 +48,12 @@ export interface TerrainMesherOptions {
  * camera stays above the map), so they are not meshed.
  */
 const FLOOR_LEVEL = 0
+
+/** How far below the water surface level the plane is drawn, in world units. */
+const WATER_DROP = 0.02
+
+/** Deepest water column scanned, in voxels. */
+const MAX_WATER_DEPTH = 32
 
 /** Triangles whose normal's y is below this count as steep (bare ground colour). */
 const STEEP_NORMAL_Y = 0.72
@@ -89,7 +98,6 @@ export class TerrainMesher implements ChunkMesher {
       this.options.isTerrain,
       oy - CHUNK_SIZE,
       oy + 2 * CHUNK_SIZE - 1,
-      (v) => materialOf(v) === Material.WATER,
     )
     const out = new MeshBuilder()
 
@@ -101,6 +109,7 @@ export class TerrainMesher implements ChunkMesher {
             const corners = field.cornerHeights(x, z, run)
             this.top(out, map, x, z, run, corners)
             this.walls(out, map, field, x, z, run, corners)
+            this.water(out, map, x, z, run, corners)
           }
           const b = run.bottom
           const ownsBottom = Number.isFinite(b) && b > FLOOR_LEVEL && b >= oy && b < oy + CHUNK_SIZE
@@ -211,6 +220,63 @@ export class TerrainMesher implements ChunkMesher {
       [0, -1, 0],
       this.shade(material, cellJitter(x, run.bottom, z)),
     )
+  }
+
+  /**
+   * Water plane over this cell: drawn when the column holds water above this
+   * run, or a neighbouring column (8 around) has a water surface, and the
+   * run's facet dips below that surface.
+   */
+  private water(
+    out: MeshBuilder,
+    map: VoxelMap,
+    x: number,
+    z: number,
+    run: TerrainRun,
+    h: FacetCorners,
+  ): void {
+    const level = this.waterSurfaceNear(map, x, z, run)
+    if (level === null || Math.min(h[0], h[1], h[2], h[3]) >= level) return
+    const y = level * VOXEL_HEIGHT - WATER_DROP
+    out.polygon(
+      [
+        [x, y, z],
+        [x + 1, y, z],
+        [x + 1, y, z + 1],
+        [x, y, z + 1],
+      ],
+      [0, 1, 0],
+      this.shade(Material.WATER, 1),
+    )
+  }
+
+  /**
+   * Level of the water surface relevant to a run: the top of the water
+   * column resting on it, else a water surface in a neighbouring column
+   * between this run's facet and its top. Null when there is none.
+   */
+  private waterSurfaceNear(map: VoxelMap, x: number, z: number, run: TerrainRun): number | null {
+    const isWater = (vx: number, vy: number, vz: number): boolean =>
+      materialOf(map.get(vx, vy, vz)) === Material.WATER
+    if (isWater(x, run.topY + 1, z)) {
+      let top = run.topY + 1
+      while (isWater(x, top + 1, z) && top < run.topY + MAX_WATER_DEPTH) top++
+      return top + 1
+    }
+    for (let y = run.topY - MAX_WATER_DEPTH; y <= run.topY; y++) {
+      for (let dz = -1; dz <= 1; dz++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (
+            (dx !== 0 || dz !== 0) &&
+            isWater(x + dx, y, z + dz) &&
+            !isWater(x + dx, y + 1, z + dz)
+          ) {
+            return y + 1
+          }
+        }
+      }
+    }
+    return null
   }
 
   /** Material colour times a brightness factor. */

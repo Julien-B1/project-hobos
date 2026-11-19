@@ -120,8 +120,10 @@ stairs) keep sharp edges, leaves stay cubic, water is a flat block.
   column is solid down to the lower top and nothing covers the lower run
   below the higher top (max rise 12 levels). Connected runs share the mean
   of their tops as corner height.
-- **Shores**: runs under water (beds) only group with other beds; a dry
-  corner touching a water column is set to the water surface level.
+- **Water** is not terrain: beds blend with banks like any ground. The
+  mesher draws a flat water plane (0.02 world units below the surface level)
+  over cells whose facet dips below a water surface in the cell or its 8
+  neighbours; the shoreline is where the facets cross it.
 - Each top is split into two triangles along the diagonal whose ends are
   closest in height (`facetDiagonal`); `facetHeightAt` samples it.
 
