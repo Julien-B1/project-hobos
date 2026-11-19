@@ -8,6 +8,9 @@ Browser-first HD-2D voxel RPG prototype. Original specification:
 [`BOOTSTRAP.md`](BOOTSTRAP.md). Deeper documentation lives in
 [`docs/wiki/`](docs/wiki/) (published to the GitHub wiki).
 
+> Picking up the project? Start with the handover pack in
+> [`docs/handover/`](docs/handover/README.md).
+
 ## Hard rules
 
 1. **Docker only.** Never run `node`, `pnpm` or `npx` on the host. Use the

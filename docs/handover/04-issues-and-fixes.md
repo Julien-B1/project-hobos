@@ -1,0 +1,40 @@
+# 4. Problems met and how they were solved
+
+Each entry: symptom, root cause, fix, and where the fix lives.
+
+## Environment
+
+| Symptom                                                             | Root cause                                                                                           | Fix                                                                                                                                                            |
+| ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Container could not write the bind mount (`Permission denied`).     | Docker runs **rootless** on the owner's machine: container uid 1000 maps to an unprivileged sub-uid. | Makefile detects rootless Docker and runs the container as `0:0` (mapped to the host user). See [Development-Environment](../wiki/Development-Environment.md). |
+| pnpm downloaded its binary on every run.                            | pnpm 12 fetches a native binary lazily.                                                              | Warm it at image build time (`docker/Dockerfile.dev`).                                                                                                         |
+| `pnpm install` refused `eslint-plugin-jsdoc@65.5.0`.                | pnpm `minimumReleaseAge` (package published less than a day earlier).                                | Pinned `^65.4.0`, regenerated the lockfile.                                                                                                                    |
+| `typescript-eslint` incompatible with TypeScript 7.                 | Peer range `<6.1.0`.                                                                                 | TypeScript pinned to `~6.0.3`.                                                                                                                                 |
+| `git commit` failed (no identity); `AGENTS.md`/`CLAUDE.md` ignored. | No global git identity; global gitignore ignores agent files.                                        | Local identity `Kratos`; `!AGENTS.md`, `!CLAUDE.md` in the repo `.gitignore`.                                                                                  |
+| `make wiki-publish` failed.                                         | Temporary wiki clone had no git identity.                                                            | Script reuses the repository identity (`c1c7b5c`).                                                                                                             |
+| Private repo could not have a wiki.                                 | GitHub free plan.                                                                                    | Owner made the repo public; branch model `master` (README) / `dev` (work).                                                                                     |
+
+## Terrain look
+
+| Symptom                                                                                              | Root cause                                                                                                                                                                                                                                   | Fix                                                                                                                                                            |
+| ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Saw-teeth on diagonal slopes, checkerboard of cubes.                                                 | One shape per voxel rises one level per cell, along one axis only; noisy heights quantised.                                                                                                                                                  | `CORNERS` wedges, blurred height field (`0220863`), step limit (`5bcaf4d`). Still blocky: led to a rendering change.                                           |
+| Smooth (surface-nets) terrain judged hideous: blobby, merged tree canopies, magenta/black artefacts. | Technique not suited to the HD-2D look; leaves treated as terrain; vertices without material.                                                                                                                                                | Replaced by the **faceted low-poly** terrain (ADR-005, `8d7723a`): corner heights averaged over _connected_ runs (`core/terrainSurface.ts`).                   |
+| Blue ponds and chaotic triangles on banks; then blue slits everywhere after pinning shores.          | Wall strips between a run and its neighbour were paired at both edge ends; when the two tops crossed along the edge, the strip closed at the wrong place, leaving slits through which water showed. Shore pinning multiplied such crossings. | `uncoveredStrips()` splits each edge at boundary crossings: exact walls (`003a308`). T-junction tolerant watertightness test (`render/meshing/watertight.ts`). |
+| Winding blue channels inland.                                                                        | Cliff terraces snapped plateaus below the water level; water filled them along contour lines.                                                                                                                                                | Terraces counted from 2 levels above water; regression test on 3 seeds (`b7937ce`).                                                                            |
+| Saw-tooth shorelines.                                                                                | Water drawn as blocks: shore follows the cell grid.                                                                                                                                                                                          | Water as a flat plane drawn by `TerrainMesher`; beds blend with banks, so the shoreline is where facets cross the plane (`b7937ce`).                           |
+
+## Rendering performance and process
+
+| Symptom                                   | Root cause                                                                                        | Fix                                                                                                               |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| GPU saturated ("ça crame mon GPU").       | First TSL terrain shader evaluated ~40 3D noise functions per pixel plus a derivative-based bump. | Precomputed 256 x 256 tileable noise texture, 2 fetches per pixel, no bump (`de78de4`).                           |
+| Owner angry about Playwright screenshots. | Agent added a headless browser to the image and ran heavy diagnostics without being asked.        | Removed entirely; rule: ask before any heavy tooling or costly diagnostic, ask the owner for screenshots instead. |
+
+## Lessons
+
+- The owner validates visually: when a fix is uncertain, ask for a
+  screenshot (with the URL including `seed`) rather than guessing.
+- Fix root causes found by targeted tests (e.g. the slit bug), not symptoms
+  (shore pinning hid nothing and made it worse).
+- Performance first for anything that runs per pixel.
