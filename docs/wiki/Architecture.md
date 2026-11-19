@@ -26,6 +26,25 @@ Why `core` is strict: it is the part that will be reused by the native
 builds, the future navigation graph and tests. Keeping it free of rendering
 types also makes it fully unit-testable in Node.
 
+## Runtime flow
+
+```
+App.vue
+ ├─ GameCanvas.vue ── creates ──> Engine (src/render/engine.ts)
+ │        ▲                         ├─ createRenderer(): WebGPURenderer, await init(),
+ │        │ onHudChange(snapshot)   │   backend detection (WebGPU / WebGL 2)
+ │        └─────────────────────────├─ createScene(): background + lights
+ │                                  └─ render loop (setAnimationLoop), resize observer
+ └─ DebugHud.vue <── snapshot (shallowRef in App.vue)
+```
+
+- The engine is created in `GameCanvas.vue` `onMounted` and disposed in
+  `onBeforeUnmount`. It is kept in a plain variable, never in reactive state.
+- The engine pushes immutable HUD snapshots (`EngineHudState`) through a
+  callback, at most a few times per second. Vue only stores the latest one.
+- Debug URL flags are read by the app layer (`src/app/config.ts`):
+  `?forceWebGL=1` forces the WebGL 2 backend.
+
 ## Documentation rules in code
 
 - Every exported symbol in `core` and `render` has a TSDoc comment

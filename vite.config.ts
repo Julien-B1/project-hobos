@@ -25,6 +25,11 @@ export default defineConfig({
     strictPort: true,
     watch: usePolling ? { usePolling: true, interval: 200 } : {},
   },
+  build: {
+    // Three.js alone is ~800 kB minified; the default 500 kB warning is noise
+    // for a game bundle. Revisit when code-splitting matters.
+    chunkSizeWarningLimit: 1500,
+  },
   preview: {
     host: true,
     port: 5173,
