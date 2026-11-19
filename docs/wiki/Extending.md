@@ -41,14 +41,30 @@ when present. Keep `profileFromCorners` for height-field shapes.
    `HybridMesher` combines the faceted terrain mesher and the blocky mesher with
    `mergeMeshData`).
 3. Check watertightness with `openStretches()` (`render/meshing/watertight.ts`,
-   tolerant to T-junctions), as `terrainMesher.test.ts` does on a full map.
+   tolerant to T-junctions), as `terrainMesher.test.ts` does on a full map,
+   or `unmatchedEdges()` for displaced meshes (crags, structures), whose
+   T-junction pieces are collinear only up to rounding. Closed shells
+   matter: the cut section's stencil count needs them.
 4. If the mesher reads further than 2 voxels beyond its chunk, raise
    `DIRTY_MARGIN` in `src/core/voxelMap.ts`.
+
+## Add a structure kind (a bridge, a building...)
+
+See [[Structures]] (section "Adding a kind"): a core kind (`defineKind`:
+parameter guard, bounds, stamp, optional `surfaceAt`) registered in
+`defaultStructureKinds()`, and a render mesher (`defineMesher`, closed
+primitives from `render/geometry/primitives.ts`) registered in
+`defaultStructureMeshers()`. Test the stamp (walkable, inside the bounds)
+and the mesh (closed with `unmatchedEdges`, deterministic). The registries
+are the only lists to edit: the engine, the chunk meshers and the
+generators do not change.
 
 ## Add a test map
 
 1. Write a deterministic generator in `src/core/generators/` returning a
-   `VoxelMap`, with tests.
+   `VoxelMap` (and a `StructureSet` if it places structures), with tests.
 2. Register it in `src/core/generators/catalog.ts` (`TEST_MAP_IDS` and
-   `createTestMap`: footprint and camera home).
-3. Open it with `?map=<id>`.
+   `createTestMap`: footprint, camera home, structures). The map picker
+   lists it automatically.
+3. Open it with `?map=<id>`; frame a view with `&cam=x,z,distance,yaw`
+   and capture it with `make screenshots VIEWS=...`.

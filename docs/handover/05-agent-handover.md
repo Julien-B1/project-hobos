@@ -8,13 +8,15 @@ Read this first, then [`AGENTS.md`](../../AGENTS.md). Talk to the owner in
 1. **Docker only**: never run `node`/`pnpm` on the host; use `make`
    (`make help`). Docker is rootless on the owner's machine (handled by the
    Makefile).
-2. **Ask before** adding dependencies, tools (browsers, Playwright, ...),
-   changing the Docker image, or running expensive diagnostics.
+2. **Ask before** adding dependencies or tools, changing the Docker image,
+   or running expensive diagnostics. Exception approved by the owner:
+   `make screenshots` (Playwright in the image) for visual self-checks.
 3. **Performance first** for rendering: count the per-pixel cost of any
    shader or effect; heavy effects must be optional and off by default.
-4. **Commits**: one per significant step, Conventional Commits, with the
-   `Co-Authored-By` trailer; `make check` must pass. **Never push** unless
-   the owner explicitly asks in the current exchange.
+4. **Commits**: the owner's standing rule is to commit each completed step
+   (once `make check` passes) without asking, Conventional Commits with the
+   `Co-Authored-By` trailer, and to push `dev` in batches: at the end of a
+   topic, when asked, or after a while. Never push to `master`.
 5. **Docs in the same commit**: TSDoc on exports, `CHANGELOG.md`
    `[Unreleased]`, relevant `docs/wiki/*.md` page.
 6. **Layering** (ESLint-enforced): `src/core` pure TypeScript,
@@ -25,36 +27,43 @@ Read this first, then [`AGENTS.md`](../../AGENTS.md). Talk to the owner in
 
 ## Repository map
 
-| Path                                                                       | What                                                                                                                        |
-| -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `src/core/voxel.ts`, `voxelMap.ts`, `chunk.ts`, `coords.ts`                | Voxel encoding, sparse chunked map, dirty tracking.                                                                         |
-| `src/core/shapes.ts`                                                       | FULL / SLOPE / CORNERS height-field shapes.                                                                                 |
-| `src/core/surface.ts`                                                      | Logical surfaces, `resolveHit`, `resolveColumnHit`.                                                                         |
-| `src/core/terrainSurface.ts`                                               | Faceted terrain model: runs, connected corner groups, heights and material weights.                                         |
-| `src/core/generators/`                                                     | `referenceMap`, `organicMap`, `flatMap`, `catalog` (`?map=`).                                                               |
-| `src/render/meshing/`                                                      | `terrainMesher` (facets, walls, water plane), `culledMesher` (blocks), `hybridMesher` (layers), `watertight` (test helper). |
-| `src/render/terrainMaterial.ts`, `noiseTexture.ts`, `materials.ts`         | TSL materials per layer.                                                                                                    |
-| `src/render/engine.ts`, `chunkRenderer.ts`, `cameraRig.ts`, `highlight.ts` | Engine loop, chunk meshes per layer, camera, hover patch.                                                                   |
-| `src/app/`                                                                 | Vue shell, HUD, input bindings, debug edits, `config.ts`.                                                                   |
-| `docs/wiki/`                                                               | Architecture, Conventions, Decisions (ADRs), Extending, maps, dev environment.                                              |
+| Path                                                                       | What                                                                                                   |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `src/core/voxel.ts`, `voxelMap.ts`, `chunk.ts`, `coords.ts`                | Voxel encoding, sparse chunked map, dirty tracking.                                                    |
+| `src/core/shapes.ts`, `surface.ts`                                         | Height-field shapes; logical surfaces, `resolveHit`, `resolveColumnHit`, `wadeThrough`.                |
+| `src/core/terrainSurface.ts`, `trees.ts`                                   | Faceted terrain model (runs, corner groups, vaults); tree recognition.                                 |
+| `src/core/structures/`                                                     | Structures (ADR-007): kinds, registry, `StructureSet`, bridges, crossing measure and choice.           |
+| `src/core/generators/`                                                     | `referenceMap`, `organicMap`, `flatMap`, `kitchenSinkMap`, `bridgesShowcaseMap`, `catalog` (`?map=`).  |
+| `src/render/meshing/`                                                      | Terrain (facets, crags, walls, water), blocks, trees, scatter, hybrid layers, cap, watertight helpers. |
+| `src/render/structures/`, `src/render/geometry/`                           | One mesher per structure kind; closed primitives (box, beam, tube, hexahedron, slab stone, boulder).   |
+| `src/render/*Material.ts`, `outputEncoding.ts`, `sectionCap.ts`            | TSL materials per layer; tone mapping in materials (ADR-009); stencil cut section (ADR-008).           |
+| `src/render/engine.ts`, `chunkRenderer.ts`, `cameraRig.ts`, `highlight.ts` | Engine loop, probes, picking and cursor, chunk meshes per layer, camera.                               |
+| `src/app/`                                                                 | Vue shell, HUD, map picker, time of day, cut slider, input bindings, `config.ts`.                      |
+| `scripts/screenshots.mjs`, `tooling/gzip.ts`                               | Headless screenshots; gzip dev server.                                                                 |
+| `docs/wiki/`                                                               | Architecture, Conventions, Decisions (ADR-001 to 010), Extending, Structures, maps, dev environment.   |
 
 ## URL switches
 
-`?map=reference|organic|flat`, `&seed=<int>` (organic), `?mesher=blocky`,
-`?forceWebGL=1`.
+`?map=reference|organic|flat|kitchen-sink|bridges`, `&seed=<int>&size=<n>`
+(organic), `?cam=x,z,distance,yaw`, `?time=dawn|...|late-night`,
+`?shadows=off|low|high`, `?grid=off`, `?mesher=blocky`, `?forceWebGL=1`.
+The map picker (bottom right) switches map, seed and size without reload.
 
 ## State at handover
 
-- Branch `dev`, last commit `de78de4` (plus this handover commit). Remote
-  `dev` is at `59345c7` (v0.2.0); everything after is local.
-- 145 tests pass. The owner approved the faceted terrain and shorelines
-  (`b7937ce`). The procedural material `de78de4` is waiting for the owner's
-  feedback on GPU load.
+- Branch `dev`; `origin/dev` at `998b02a`, local `e20fe7d` not pushed yet.
+- 261 tests pass. The owner validated the terrain look, the wooden bridge,
+  the stone arch and the overall bridges map; recent fixes (cursor on decks
+  and fords) still to be checked on screen.
+- The owner's machine: rootless Docker, accesses the dev server over
+  Tailscale (HTTP, so WebGL 2; WebGPU needs a secure context). Keep the
+  local `allowedHosts` line of `vite.config.ts` out of commits.
 
 ## How to start
 
 1. `make image && make install && make check`.
-2. Read [02-next-steps.md](02-next-steps.md) and
-   [04-issues-and-fixes.md](04-issues-and-fixes.md).
-3. Ask the owner for feedback on `de78de4` (GPU load, look) before starting
-   water, lighting or GI, and confirm which of them to do first.
+2. Read [02-next-steps.md](02-next-steps.md),
+   [04-issues-and-fixes.md](04-issues-and-fixes.md) and the wiki's
+   [Structures](../wiki/Structures.md) page.
+3. Check visually with `make screenshots` before reporting rendering work;
+   ask the owner which topic comes next (buildings were announced).

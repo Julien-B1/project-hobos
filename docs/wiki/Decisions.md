@@ -145,3 +145,59 @@ accepted record: add a new one that supersedes it.
   - Structure meshes must be closed volumes (the cut section counts faces).
   - A structure is meshed once, with the chunk of its first owned voxel;
     editing voxels does not move or rebuild structures yet.
+
+## ADR-008: The cut section is drawn by stencil capping
+
+- **Status:** accepted (2026-11-19)
+- **Context.** The cut slider hides everything above a height; chunk meshes
+  are hollow shells, so the cut must be filled. A CPU cap computed from the
+  terrain model did not match the displaced crags; drawing the shells' back
+  faces as the section let anything poking into the ground show through.
+- **Decision.** Classic stencil capping (`render/sectionCap.ts`): while
+  cutting, the solid layers are drawn a second time into the stencil only
+  (back faces increment, front faces decrement, below the cut, depth test
+  off; the buffer is cleared to 128), then a plane at the cut height is
+  drawn where the count is above 128, and every layer material tests the
+  stencil so nothing shows through. Built voxels add their own coloured
+  cap on top.
+- **Consequences.**
+  - The section's outline is exactly the cut of the drawn meshes, whatever
+    their shape (crags, round trunks, arches).
+  - Every solid mesh must be a closed shell (terrain floor faces, closed
+    primitives, watertight crags); tests check it.
+  - No cost while the cut is off; while cutting, the solid layers' vertices
+    twice more and a few fragment writes.
+
+## ADR-009: Tone mapping and sRGB encoding are done in the materials
+
+- **Status:** accepted (2026-11-19)
+- **Context.** With tone mapping or an output colour space set on the
+  renderer, `WebGPURenderer` draws into a multisampled half-float target,
+  resolves it and copies it to the canvas with a full-screen pass. Measured
+  on the owner's RTX 5080 (WebGL 2): 11 ms per frame whatever the scene,
+  3.5 ms at half resolution.
+- **Decision.** The renderer has no tone mapping and stays in the working
+  colour space, so it draws straight into the canvas; every visible
+  material ends with Neutral tone mapping and the sRGB transfer
+  (`render/outputEncoding.ts`); the background is given as an encoded
+  colour.
+- **Consequences.**
+  - That fixed per-pixel cost is gone.
+  - New visible materials must call `encodeOutput`, or they render too dark.
+  - Transparent materials blend encoded values: a slight difference only.
+  - Post-processing would bring an intermediate target back; revisit then.
+
+## ADR-010: Screenshots in headless Chromium for visual checks
+
+- **Status:** accepted (2026-11-19, asked by the project owner)
+- **Context.** Rendering work needs visual checks; asking the owner for
+  every screenshot is slow, and the agent cannot see a browser otherwise.
+- **Decision.** Playwright (pinned in `package.json` and the Dockerfile)
+  with its Chromium in the dev image; `make screenshots` starts a Vite
+  server in the container and saves PNGs of chosen views
+  (`?cam=x,z,distance,yaw` frames them) into `screenshots/` (git-ignored).
+- **Consequences.**
+  - Headless Chromium has no GPU: the page runs on WebGL 2 in software
+    (SwiftShader), close to but not exactly a real GPU's image; GPU figures
+    in those captures mean nothing.
+  - The dev image grows by a few hundred MB.

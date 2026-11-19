@@ -36,7 +36,7 @@ pnpm. Everything runs in Docker through `make`. Rationale: wiki page
 | `439f8cf` | Targeted rebuild, debug edits (right click remove, Shift + click place).                               |
 | `59345c7` | Release 0.2.0.                                                                                         |
 
-### After v0.2.0: organic terrain and rendering (local commits, **not pushed**)
+### After v0.2.0: organic terrain and rendering (pushed to `dev`)
 
 | Commit    | Content                                                                                                          |
 | --------- | ---------------------------------------------------------------------------------------------------------------- |
@@ -52,12 +52,26 @@ pnpm. Everything runs in Docker through `make`. Rationale: wiki page
 | `78f1cc6` | Per-layer chunk meshes (terrain, blocks, water); max zoom-out 240.                                               |
 | `de78de4` | Cheap procedural terrain material (noise texture, blended transitions). **Awaiting owner feedback on GPU load.** |
 
+### Battle-map rendering, structures and bridges (pushed to `dev`, except the last commit)
+
+| Commit    | Content                                                                                                                                                                                                                                                             |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `59e06c4` | Battle-map pass: maps sized for one encounter (32 x 32), water, shadows, real trees (oak, pine, birch, bush), scatter, grid, time of day, kitchen-sink map, cut slider, debug HUD figures.                                                                          |
+| `e0f8998` | Watertight crags (Freudenthal lattice), stencil cut section (ADR-008), terrain hover tint in the shader, earthy cave mouths and rocky interiors, gzip dev server.                                                                                                   |
+| `2803ab9` | Structures (ADR-007) and seven river crossings; crossing choice and placement on the organic map (flush or canyon deck, best site); bridges showcase map; map picker; output encoding in the materials (ADR-009); performance probes; `make screenshots` (ADR-010). |
+| `998b02a` | Ford boulders on the gravel in line with the posts; cursor on the bed of shallow water.                                                                                                                                                                             |
+| `e20fe7d` | Cursor on the deck over banks under a bridge's end (local, to push with the next batch).                                                                                                                                                                            |
+
 ## Current state in one paragraph
 
-The voxel grid is the single source of truth for logic. Terrain materials
-(grass, dirt, sand, rock, stone, path) are rendered as a faceted low-poly
-height surface whose corner heights and material weights are averaged over
-connected neighbouring runs; wood and leaves are rendered as blocks; water
-is a flat plane drawn by the terrain mesher. The terrain shader samples a
-small precomputed noise texture twice per pixel. 145 unit tests, lint and
-type-check pass (`make check`).
+The voxel grid is the truth for terrain and gameplay. Terrain materials are
+drawn as a faceted low-poly height surface with watertight crags where the
+relief is marked; trees as round trunks and leaf cards; water as a flat
+plane; built voxels as patterned blocks. Structures (bridges now, buildings
+next) are parametric map objects: their kind stamps gameplay voxels, a
+mesher per kind draws them from closed primitives. Every generated river
+gets one crossing of a kind fitting the site. The cut slider shows a
+stencil-capped section; the hover cursor is a shader tint on terrain and a
+patch on blocks and decks. The frame is drawn straight into the canvas
+(tone mapping in the materials). 261 unit tests, lint and type-check pass
+(`make check`).

@@ -16,11 +16,11 @@ src/core     Pure TypeScript: map data,         no three, no vue,
              pure geometry maths
 ```
 
-| Layer         | Owns                                                                                        | Must not                                                        |
-| ------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| `src/core/`   | Voxel encoding, chunked map, coordinates, shapes, map generators, hit-to-surface resolution | Import Three.js, Vue, render or app. Touch the DOM.             |
-| `src/render/` | Renderer, scene, camera rig, chunk meshing, raycasting, highlight                           | Import Vue or app. Mutate map data (it only reads `core`).      |
-| `src/app/`    | Vue components, HUD state, input bindings, config                                           | Hold rendering logic. Store Three.js objects in reactive state. |
+| Layer         | Owns                                                                                                                                                        | Must not                                                        |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `src/core/`   | Voxel encoding, chunked map, coordinates, shapes, map generators, hit-to-surface resolution, structures (`core/structures`: kinds, stamps, crossing choice) | Import Three.js, Vue, render or app. Touch the DOM.             |
+| `src/render/` | Renderer, scene, camera rig, chunk meshing, structure meshers (`render/structures`), geometric primitives (`render/geometry`), raycasting, highlight        | Import Vue or app. Mutate map data (it only reads `core`).      |
+| `src/app/`    | Vue components, HUD state, input bindings, config                                                                                                           | Hold rendering logic. Store Three.js objects in reactive state. |
 
 Why `core` is strict: it is the part that will be reused by the native
 builds, the future navigation graph and tests. Keeping it free of rendering
@@ -298,7 +298,21 @@ trees and grid. Shadow quality barely changes GPU time; `high` costs about
 
 - Picking on faceted terrain: hits on upward facets are resolved by column
   (`resolveColumnHit`: surface of that column closest in height), other
-  hits by `resolveHit`.
+  hits by `resolveHit`. Over shallow water (2 levels or less: fords,
+  shallow banks) the target is the bed, where one walks (`wadeThrough`);
+  deeper water keeps its surface.
+- Structures (see [[Structures]]): their meshes go into the blocks layer
+  of their home chunk, so they are picked, shadowed and cut like blocks.
+  The hover patch on a structure follows its walking surface
+  (`StructureKind.surfaceAt`: the sagging rope deck); on ground inside a
+  structure's footprint (a bank under a bridge's end) it is the flat patch
+  at the walking level, not the terrain tint (the drawn ground there is
+  smoothed lower, under the deck).
+- **Performance probes** (debug, keys `1` to `6`, `Engine.toggleProbe`):
+  switch off shadows, foliage, scatter and props, water or terrain, or
+  halve the pixel ratio, to read each part's cost in the HUD's GPU time.
+  On WebGL 2 the GPU timer includes idle gaps: the HUD flags it as an upper
+  bound.
 - Hover highlight. On faceted terrain the terrain shader tints the cell
   (`applyHover`, uniform `hover`): every pixel inside the cell square,
   within a height band (the base facet heights from `TerrainField`, plus
@@ -327,11 +341,13 @@ trees and grid. Shadow quality barely changes GPU time; `high` costs about
 
 ## Tooling
 
-| Concern      | Tool and config                                                                                  |
-| ------------ | ------------------------------------------------------------------------------------------------ |
-| Type-check   | `vue-tsc --build`: `tsconfig.app.json` (src, browser) + `tsconfig.node.json` (`vite.config.ts`). |
-| Strictness   | `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride`, `noUnused*`.                         |
-| Lint         | ESLint flat config, `typescript-eslint` strict + stylistic type-checked, `eslint-plugin-vue`.    |
-| Format       | Prettier (`.prettierrc.json`); ESLint formatting rules disabled via `eslint-config-prettier`.    |
-| Tests        | Vitest, Node environment, files `src/**/*.test.ts` next to the module under test.                |
-| Import alias | `@/` maps to `src/` (Vite `resolve.alias` and tsconfig `paths`).                                 |
+| Concern      | Tool and config                                                                                     |
+| ------------ | --------------------------------------------------------------------------------------------------- |
+| Type-check   | `vue-tsc --build`: `tsconfig.app.json` (src, browser) + `tsconfig.node.json` (`vite.config.ts`).    |
+| Strictness   | `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride`, `noUnused*`.                            |
+| Lint         | ESLint flat config, `typescript-eslint` strict + stylistic type-checked, `eslint-plugin-vue`.       |
+| Format       | Prettier (`.prettierrc.json`); ESLint formatting rules disabled via `eslint-config-prettier`.       |
+| Tests        | Vitest, Node environment, files `src/**/*.test.ts` next to the module under test.                   |
+| Import alias | `@/` maps to `src/` (Vite `resolve.alias` and tsconfig `paths`).                                    |
+| Dev server   | `tooling/gzip.ts`: gzip for dev and preview; pre-bundled deps minified, inline maps stripped.       |
+| Screenshots  | `make screenshots` (`scripts/screenshots.mjs`): headless Chromium (Playwright) into `screenshots/`. |

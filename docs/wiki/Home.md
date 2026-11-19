@@ -14,10 +14,14 @@ documentation; the repository README only covers setup and daily usage.
 - [[Extending]]: add materials, shapes, meshers, test maps.
 - [[Organic Map|Organic-Map]]: procedural natural-looking test map (`?map=organic&seed=n`).
 - [[Kitchen Sink Map|Kitchen-Sink-Map]]: hand-made map holding every element (`?map=kitchen-sink`).
+- [[Structures]]: parametric map objects (bridges, later buildings), the seven
+  river crossings, how a crossing is chosen and placed, the bridges showcase
+  map (`?map=bridges`).
 - [[Conventions]]: world frame, units, voxel levels, camera and input conventions.
 - [[Development Environment|Development-Environment]]: Docker stack, `make`
   targets, dev container, troubleshooting.
-- [[Decisions]]: architecture decision records (engine, UI framework, Docker).
+- [[Decisions]]: architecture decision records (engine, UI framework, Docker,
+  terrain rendering, trees, structures, cut section, output encoding).
 
 ## Status
 

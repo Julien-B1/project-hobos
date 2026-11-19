@@ -2,35 +2,32 @@
 
 ## Immediately pending
 
-1. **Owner feedback on `de78de4`** (procedural terrain material). The
-   previous version burned the GPU; this one costs 2 texture fetches per
-   pixel. Do not stack new effects before the owner confirms the GPU load is
-   acceptable.
-2. **Push**: commits after `59345c7` are local only. Push `dev` (and publish
-   the wiki with `make wiki-publish`) only when the owner explicitly asks.
-   Consider a `v0.3.0` release at that point (freeze the changelog first).
+1. **Push** `e20fe7d` (and later commits) to `origin/dev` with the next
+   batch: at the end of a topic, when the owner asks, or after a while (see
+   [05-agent-handover.md](05-agent-handover.md), commit cadence).
+2. **Owner checks** not yet confirmed on screen: the hover cursor on the
+   rope bridge (follows the sagging planks) and on the bed of fords; bridge
+   placement on more organic seeds.
 
-## Requested by the owner, not started
+## Next topics announced by the owner
 
-Owner request (2026-11-19): textures and materials instead of plain colours
-(done in `de78de4`), global illumination, no visible grid patterns, ground
-transitions, translucent water with some IOR, farther max zoom (done).
+- **Buildings and other set pieces** on top of the structures system
+  (ADR-007, [Structures](../wiki/Structures.md)): add kinds and meshers,
+  reuse the primitives (`render/geometry/primitives.ts`), keep meshes
+  closed (cut section).
 
-| Item     | Plan                                                                                                                                                 | Cost / risk                                                                     |
-| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| Water    | `MeshPhysicalNodeMaterial` on the water layer: transmission, IOR 1.33, light absorption tint, normal ripples from the noise texture (not GPU noise). | Medium: transmission renders the opaque scene to a texture. Make it degradable. |
-| Lighting | Sky (`SkyMesh`) and environment lighting, sun shadows (one shadow camera following the camera target, or `CSMShadowNode`), tone mapping.             | Low to medium.                                                                  |
-| GI       | `SSGINode` + `TRAANode` (WebGPU only, needs `rg11b10ufloat-renderable`), `GTAONode` as fallback.                                                     | **High**. Must be optional and **off by default** (`?gi=ssgi                    | ao  | off`). Ask the owner before enabling by default. |
+## Deferred by the owner ("pour plus tard"), do not start unasked
 
-Check each effect's cost and expose a toggle; see the performance rule in
-[05-agent-handover.md](05-agent-handover.md).
+- Several wind intensities for foliage and grass.
+- GPU optimisation beyond the direct-to-canvas output (ADR-009); measure
+  with the probes (keys `1` to `6`) on a real GPU, in WebGPU.
+- Max zoom-out (240) was sized for 128-cell maps; maps are now 32 cells.
 
-## Known limits and ideas (not requested)
+## Known limits
 
-- Picking on faceted terrain resolves by column (`resolveColumnHit`); hits on
-  tunnel walls target the hill top.
-- Edits rebuild up to 12 chunks (vertical neighbours always marked).
-- Meshing the full organic map takes about 0.7 s (Node); `TerrainField`
-  reads voxels through string-keyed lookups and could be optimised.
+- Structures are not rebuilt or moved when voxels around them are edited.
+- The reference map keeps its old voxel bridge.
+- A river shore flat at water level up to the map's edge gets a fallback
+  crossing (half step at the ends); a lake from edge to edge gets none.
 - Out of scope per `BOOTSTRAP.md` until asked: navigation graph, A*, tokens,
   sprites, occlusion fading, editor, save/load.
