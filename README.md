@@ -90,6 +90,13 @@ Keys are bound by physical position: the same keys work on AZERTY and QWERTY.
 
 Camera settings (pitch, FOV, zoom bounds, speeds) live in `src/app/config.ts`.
 
+### Desktop demo
+
+`make release` builds desktop executables (Neutralino) into
+`release/hobos/`: `hobos-win_x64.exe` for Windows 10/11 (about 4 MB, no
+install), plus Linux and macOS binaries. Demo builds are published as
+GitHub pre-releases.
+
 ## Branches
 
 `master` only holds this README. Code and documentation live on the

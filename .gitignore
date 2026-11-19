@@ -19,3 +19,7 @@ screenshots/
 
 # Intermediate model files (make models)
 tooling/.build/
+
+# Desktop demo (make release): Neutralino runtimes and packaged executables
+bin/
+release/

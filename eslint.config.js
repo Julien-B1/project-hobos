@@ -23,7 +23,16 @@ export default defineConfigWithVueTs(
   {
     name: 'project/ignores',
     // eslint.config.js is not part of any tsconfig, so type-aware rules cannot run on it.
-    ignores: ['dist/**', 'coverage/**', 'node_modules/**', 'eslint.config.js'],
+    ignores: [
+      'dist/**',
+      'coverage/**',
+      'node_modules/**',
+      'eslint.config.js',
+      // Generated: model pipeline intermediates, desktop demo runtimes and builds.
+      'tooling/.build/**',
+      'bin/**',
+      'release/**',
+    ],
   },
   {
     name: 'project/files',

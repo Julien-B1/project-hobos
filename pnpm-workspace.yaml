@@ -1,0 +1,7 @@
+# pnpm settings (single package, no workspace packages).
+# Build scripts of the neu CLI's optional dependencies: not needed (native
+# speed-ups of a WebSocket library, a postinstall banner), left off.
+allowBuilds:
+  bufferutil: false
+  es5-ext: false
+  utf-8-validate: false

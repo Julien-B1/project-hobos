@@ -17,7 +17,7 @@
  *   lists them, is never cached (revalidated on every load);
  * - build: writes `.br` and `.gz` next to each compressible output file,
  *   for a host that serves precompressed files (nginx `brotli_static`,
- *   `gzip_static`).
+ *   `gzip_static`); skipped with `PRECOMPRESS=off` (desktop demo).
  * Node's own zlib, no dependency.
  *
  * Responses are buffered, then compressed in one go: fine for these
@@ -103,6 +103,8 @@ export function compression(): Plugin {
       server.middlewares.use(middleware(true))
     },
     async writeBundle() {
+      // The desktop demo (`make release`) serves files locally: no use for them.
+      if (process.env.PRECOMPRESS === 'off') return
       for (const file of await listFiles(outDir)) {
         if (!COMPRESSIBLE_FILE.test(file)) continue
         const body = await readFile(file)

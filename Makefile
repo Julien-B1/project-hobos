@@ -23,7 +23,7 @@ RUN     := $(COMPOSE) run --rm app
 
 .DEFAULT_GOAL := help
 
-.PHONY: help image install up down test test-watch lint format format-check typecheck build preview check screenshots sh wiki-publish clean
+.PHONY: help image install up down test test-watch lint format format-check typecheck build preview check screenshots models release sh wiki-publish clean
 
 help: ## List available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -76,6 +76,9 @@ models: ## Rebuild src/assets/models/ from assets-src/models/ (host: python3 + n
 	  python3 -I tooling/compress_glb.py $$f tooling/.build/$$name --flat 12 --texture-only && \
 	  $(RUN) pnpm exec gltfpack -i tooling/.build/$$name -o src/assets/models/$$name -cc -vpf -vtf || exit 1; \
 	done
+
+release: ## Desktop demo (Neutralino): build, then executables for Windows, Linux and macOS into release/hobos/
+	$(RUN) sh -c "PRECOMPRESS=off pnpm build && { [ -d bin ] || pnpm exec neu update; } && pnpm exec neu build --release --embed-resources"
 
 sh: ## Open a shell inside the dev container
 	$(RUN) bash
