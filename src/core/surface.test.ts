@@ -71,6 +71,12 @@ describe('resolveHit on the reference map', () => {
     expect(hit?.surface).toEqual({ x: 10, y: L.tunnel.floorTop - 1, z: 51 })
   })
 
+  it('finds the voxel when a smooth mesh surface lies in front of the voxel face', () => {
+    // Smooth meshes round corners: the hit can be a little outside the solid.
+    const hit = resolveHit(map, { x: 23.5, y: L.path.top * 0.5 + 0.3, z: 5.5 }, UP)
+    expect(hit?.surface).toEqual({ x: 23, y: L.path.top - 1, z: 5 })
+  })
+
   it('returns null when the point resolves to air', () => {
     expect(resolveHit(map, { x: 10.5, y: 30, z: 10.5 }, UP)).toBeNull()
   })

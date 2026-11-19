@@ -6,18 +6,19 @@
  *
  * Pipeline:
  * 1. Height field: fractal value noise shaped into plains and hills,
- *    blurred, rounded to integer surface levels (one level = one half-height
- *    voxel), then limited to one level of difference between neighbours.
+ *    blurred, terraced into plateaus and cliffs inside noise-selected cliff
+ *    zones, rounded to integer surface levels (one level = one half-height
+ *    voxel), then step-limited (2 levels on ordinary ground, 8 in cliffs).
  * 2. River: a meandering channel carved across the map, with banks blended
  *    into the terrain; everything below the water level is filled with water
  *    (river and natural lakes).
  * 3. Columns: stone core, dirt under the top, top material chosen from
- *    height and a patch noise (sand on shores, grass, rocky patches on hills,
- *    stone on peaks).
+ *    height, steepness and a patch noise (sand on shores, grass, rock on
+ *    steep faces and in patches on hills, stone on peaks).
  * 4. Wedges: every dry column next to higher ground gets a wedge on top
  *    whose raised corners follow the surrounding cells (slopes, outer and
- *    inner corners). With steps limited to one level, the terrain is
- *    continuous everywhere.
+ *    inner corners). They give one-level steps a walkable slope; the smooth
+ *    terrain renderer rounds everything else.
  * 5. Trees: trunks and leaf canopies on flat grass, denser in forest patches.
  */
 import { CHUNK_SIZE } from '../coords'
@@ -56,11 +57,17 @@ const PEAK_LEVEL = 27
 /** Levels from which rocky patches may replace grass on hills. */
 const ROCK_LEVEL = 17
 /**
- * Maximum height difference between two orthogonal neighbours, in levels.
- * One level is exactly what a wedge can bridge, so the whole terrain is
- * smooth (no vertical step).
+ * Maximum height difference between two orthogonal neighbours, in levels,
+ * on ordinary ground. Two levels (one world unit per cell, 45 degrees) is
+ * still a smooth slope once rendered by the smooth terrain mesher.
  */
-const MAX_STEP = 1
+const MAX_STEP = 2
+/** Maximum step inside cliff zones: steep, almost vertical faces. */
+const CLIFF_MAX_STEP = 8
+/** Height of one cliff terrace, in levels. */
+const TERRACE = 7
+/** Height difference to a neighbour (in levels) from which ground is bare rock. */
+const STEEP_STEP = 3
 
 /** Build the organic map. Deterministic for a given seed and size. */
 export function createOrganicMap(options: OrganicMapOptions = {}): OrganicMap {
@@ -113,37 +120,60 @@ function buildHeightField(size: number, seed: number): Int32Array {
   // a checkerboard of cubes once quantised to half-height levels.
   const smooth = boxBlur(boxBlur(boxBlur(raw, size), size), size)
   const heights = new Int32Array(size * size)
-  for (let i = 0; i < heights.length; i++) {
-    heights[i] = Math.max(MIN_LEVEL, Math.min(MAX_LEVEL, Math.round(smooth[i] ?? MIN_LEVEL)))
+  const stepLimits = new Int32Array(size * size)
+  for (let z = 0; z < size; z++) {
+    for (let x = 0; x < size; x++) {
+      const i = x + z * size
+      let h = smooth[i] ?? MIN_LEVEL
+      // Cliff zones: hills become plateaus separated by steep risers.
+      const cliff = smoothstep(0.52, 0.6, fbm2(x / 60, z / 60, seed + 300, { octaves: 2 }))
+      if (cliff > 0 && h > WATER_LEVEL + 2) h += (terrace(h, TERRACE) - h) * cliff
+      heights[i] = Math.max(MIN_LEVEL, Math.min(MAX_LEVEL, Math.round(h)))
+      stepLimits[i] = cliff > 0.5 ? CLIFF_MAX_STEP : MAX_STEP
+    }
   }
-  limitSteps(heights, size, MAX_STEP)
+  limitSteps(heights, size, stepLimits)
   return heights
 }
 
 /**
- * Lower cells so no orthogonal neighbours differ by more than `maxStep`.
+ * Terrace a height: flat plateaus every `step` levels joined by steep risers
+ * (the last 25 % of each step climbs the whole step).
+ */
+function terrace(h: number, step: number): number {
+  const base = Math.floor(h / step) * step
+  const t = (h - base) / step
+  return base + step * smoothstep(0.75, 1, t)
+}
+
+/**
+ * Lower cells so a cell never rises more than its step limit above an
+ * orthogonal neighbour (`limits[i]` levels for cell i).
  *
  * This is a min-plus distance transform: each cell becomes
- * min(own height, neighbour height + maxStep), propagated in one forward and
- * one backward raster pass (exact for 4-connectivity). Only lowers terrain:
- * river beds and valleys stay where they are; hills too steep around them
- * are cut back into regular slopes.
+ * min(own height, neighbour height + own limit), propagated in one forward
+ * and one backward raster pass. Only lowers terrain: river beds and valleys
+ * stay where they are; hills too steep around them are cut back into regular
+ * slopes, except in cliff zones whose limit is high.
  */
-function limitSteps(heights: Int32Array, size: number, maxStep: number): void {
+function limitSteps(heights: Int32Array, size: number, limits: Int32Array): void {
   const at = (x: number, z: number): number => heights[x + z * size] ?? 0
+  const limit = (x: number, z: number): number => limits[x + z * size] ?? MAX_STEP
   for (let z = 0; z < size; z++) {
     for (let x = 0; x < size; x++) {
       let h = at(x, z)
-      if (x > 0) h = Math.min(h, at(x - 1, z) + maxStep)
-      if (z > 0) h = Math.min(h, at(x, z - 1) + maxStep)
+      const m = limit(x, z)
+      if (x > 0) h = Math.min(h, at(x - 1, z) + m)
+      if (z > 0) h = Math.min(h, at(x, z - 1) + m)
       heights[x + z * size] = h
     }
   }
   for (let z = size - 1; z >= 0; z--) {
     for (let x = size - 1; x >= 0; x--) {
       let h = at(x, z)
-      if (x < size - 1) h = Math.min(h, at(x + 1, z) + maxStep)
-      if (z < size - 1) h = Math.min(h, at(x, z + 1) + maxStep)
+      const m = limit(x, z)
+      if (x < size - 1) h = Math.min(h, at(x + 1, z) + m)
+      if (z < size - 1) h = Math.min(h, at(x, z + 1) + m)
       heights[x + z * size] = h
     }
   }
@@ -182,7 +212,8 @@ function fillColumns(
       // Rocky patches: low-frequency noise, so rock comes in coherent areas
       // instead of speckles.
       const rocky = fbm2(x / 11, z / 11, seed + 200, { octaves: 2 }) > 0.58
-      const top = topMaterial(h, rocky, nearWater(x, z, size, heightAt))
+      const steep = maxNeighbourDrop(x, z, size, heightAt) >= STEEP_STEP
+      const top = topMaterial(h, rocky || steep, nearWater(x, z, size, heightAt))
       const under = top === Material.ROCK || top === Material.STONE ? packVoxel(top) : dirt
       for (let y = 0; y < h; y++) {
         if (y === h - 1) map.set(x, y, z, packVoxel(top))
@@ -198,7 +229,7 @@ function fillColumns(
 function topMaterial(h: number, rocky: boolean, shore: boolean): number {
   if (h < WATER_LEVEL || (shore && h <= WATER_LEVEL + 1)) return Material.SAND // beds and beaches
   if (h >= PEAK_LEVEL) return Material.STONE
-  if (rocky && h >= ROCK_LEVEL) return Material.ROCK
+  if (rocky && h >= ROCK_LEVEL) return Material.ROCK // patches on hills, steep faces
   return Material.GRASS
 }
 

@@ -1,45 +1,35 @@
 /**
- * Hover highlight: a translucent quad laid on the targeted surface.
+ * Hover highlight: a translucent patch laid on the targeted surface cell.
  *
- * Layer: render. The quad follows the top of the surface voxel, so it lies
- * flat on blocks and tilts on slopes. Positioned by the engine after picking.
+ * Layer: render. The patch is a small grid (GRID x GRID quads) whose vertex
+ * heights come from a sampling function, so it can follow a blocky top
+ * (corner heights) or the smooth terrain mesh (downward raycasts). The
+ * engine decides how to sample; this class only owns the geometry.
  */
 import { BufferAttribute, BufferGeometry, DoubleSide, Mesh, MeshBasicMaterial } from 'three/webgpu'
-import { VOXEL_HEIGHT } from '@/core/coords'
-import { topDiagonal, type CornerHeights } from '@/core/shapes'
+
+/** Subdivisions per side of the patch. */
+export const HIGHLIGHT_GRID = 3
 
 /**
- * Small lift above the surface, in world units, so the quad does not
+ * Small lift above the surface, in world units, so the patch does not
  * z-fight with the terrain it covers.
  */
-const LIFT = 0.02
+const LIFT = 0.03
 
-/** Corner offsets (dx, dz) within a cell, in `CornerHeights` order. */
-const CORNERS: readonly (readonly [number, number])[] = [
-  [0, 0],
-  [1, 0],
-  [1, 1],
-  [0, 1],
-]
+/** World height of the surface at a point of the cell (fx, fz in [0, 1]). */
+export type SurfaceSampler = (fx: number, fz: number) => number
 
-/** Translucent quad marking the hovered surface. Hidden until `show` is called. */
+/** Translucent patch marking the hovered surface. Hidden until `show` is called. */
 export class SurfaceHighlight {
   /** Scene object to add to the scene once. */
   readonly mesh: Mesh
-  private readonly positions = new Float32Array(4 * 3)
-  /**
-   * Index buffers for the two possible top splits (see `topDiagonal`), so
-   * the quad bends exactly like the terrain triangles under it.
-   */
-  private readonly splits = [
-    new BufferAttribute(new Uint16Array([0, 2, 1, 0, 3, 2]), 1),
-    new BufferAttribute(new Uint16Array([1, 3, 2, 1, 0, 3]), 1),
-  ] as const
+  private readonly positions = new Float32Array((HIGHLIGHT_GRID + 1) ** 2 * 3)
 
   constructor(color = 0xffe066) {
     const geometry = new BufferGeometry()
     geometry.setAttribute('position', new BufferAttribute(this.positions, 3))
-    geometry.setIndex(this.splits[0])
+    geometry.setIndex(gridIndices(HIGHLIGHT_GRID))
     const material = new MeshBasicMaterial({
       color,
       transparent: true,
@@ -56,26 +46,39 @@ export class SurfaceHighlight {
     this.mesh.raycast = () => undefined
   }
 
-  /**
-   * Show the highlight on top of voxel (x, y, z), following its top corner
-   * heights (voxel units).
-   */
-  show(x: number, y: number, z: number, corners: CornerHeights): void {
-    CORNERS.forEach(([dx, dz], i) => {
-      const h = corners[i as 0 | 1 | 2 | 3]
-      this.positions.set([x + dx, (y + h) * VOXEL_HEIGHT + LIFT, z + dz], i * 3)
-    })
+  /** Show the patch over cell (x, z), with heights from `heightAt`. */
+  show(x: number, z: number, heightAt: SurfaceSampler): void {
+    const g = HIGHLIGHT_GRID
+    for (let j = 0; j <= g; j++) {
+      for (let i = 0; i <= g; i++) {
+        const fx = i / g
+        const fz = j / g
+        this.positions.set([x + fx, heightAt(fx, fz) + LIFT, z + fz], (i + j * (g + 1)) * 3)
+      }
+    }
     const geometry = this.mesh.geometry
-    const split = this.splits[topDiagonal(corners)]
-    if (geometry.getIndex() !== split) geometry.setIndex(split)
-    const position = geometry.getAttribute('position')
-    position.needsUpdate = true
+    geometry.getAttribute('position').needsUpdate = true
     geometry.computeBoundingSphere()
     this.mesh.visible = true
   }
 
-  /** Hide the highlight. */
+  /** Hide the patch. */
   hide(): void {
     this.mesh.visible = false
   }
+}
+
+/** Triangle indices of a (g + 1) x (g + 1) vertex grid. */
+function gridIndices(g: number): number[] {
+  const indices: number[] = []
+  for (let j = 0; j < g; j++) {
+    for (let i = 0; i < g; i++) {
+      const a = i + j * (g + 1)
+      const b = a + 1
+      const c = a + g + 1
+      const d = c + 1
+      indices.push(a, c, b, b, c, d)
+    }
+  }
+  return indices
 }

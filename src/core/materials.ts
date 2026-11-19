@@ -32,3 +32,24 @@ export function materialName(id: number): string {
   }
   return `unknown(${id})`
 }
+
+/**
+ * Natural materials: terrain and vegetation, as opposed to built or fluid
+ * ones (wood structures, water). The renderer draws natural materials with
+ * the smooth terrain mesher and the others as blocks, so a wooden bridge or
+ * a staircase keeps its sharp edges while hills are smoothed.
+ */
+const NATURAL: ReadonlySet<number> = new Set([
+  Material.GRASS,
+  Material.DIRT,
+  Material.STONE,
+  Material.ROCK,
+  Material.SAND,
+  Material.PATH,
+  Material.LEAVES,
+])
+
+/** True for natural (smoothed) materials, see {@link NATURAL}. */
+export function isNaturalMaterial(id: number): boolean {
+  return NATURAL.has(id)
+}

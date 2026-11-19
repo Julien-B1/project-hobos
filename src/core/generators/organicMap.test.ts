@@ -89,12 +89,22 @@ describe('organic map', () => {
     expect(wedges).toBeGreaterThan(100)
   })
 
-  it('never steps more than one level between orthogonal neighbours', () => {
+  it('limits height steps between orthogonal neighbours (8 levels in cliffs)', () => {
     for (let z = 0; z < SIZE; z++)
       for (let x = 0; x < SIZE - 1; x++) {
-        expect(Math.abs(organic.heightAt(x + 1, z) - organic.heightAt(x, z))).toBeLessThanOrEqual(1)
-        expect(Math.abs(organic.heightAt(z, x + 1) - organic.heightAt(z, x))).toBeLessThanOrEqual(1)
+        expect(Math.abs(organic.heightAt(x + 1, z) - organic.heightAt(x, z))).toBeLessThanOrEqual(8)
+        expect(Math.abs(organic.heightAt(z, x + 1) - organic.heightAt(z, x))).toBeLessThanOrEqual(8)
       }
+  })
+
+  it('has steep cliffs somewhere on the default map', () => {
+    const big = createOrganicMap()
+    let steepest = 0
+    for (let z = 0; z < big.size; z++)
+      for (let x = 0; x < big.size - 1; x++) {
+        steepest = Math.max(steepest, Math.abs(big.heightAt(x + 1, z) - big.heightAt(x, z)))
+      }
+    expect(steepest).toBeGreaterThanOrEqual(4)
   })
 
   it('grows trees with trunks and leaves', () => {

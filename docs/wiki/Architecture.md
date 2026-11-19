@@ -73,7 +73,10 @@ render/chunkRenderer.update()  ── drainDirty() ──> keys to rebuild
         │ for each key
         ▼
 ChunkMesher.mesh(map, chunk) ──> MeshData (typed arrays, no Three.js)
-        │                         (CulledMesher: face culling, slope geometry)
+        │   HybridMesher (default, `?mesher=smooth`):
+        │     natural materials -> SurfaceNetsMesher (smooth, rounded)
+        │     wood, water       -> CulledMesher (blocks, exact shapes)
+        │   CulledMesher alone (`?mesher=blocky`)
         ▼
 BufferGeometry on one Mesh per chunk (shared vertex-colour material)
 ```
@@ -83,13 +86,25 @@ BufferGeometry on one Mesh per chunk (shared vertex-colour material)
 - A dirty key whose chunk no longer exists, or whose mesh is empty, removes
   the chunk mesh.
 - Colours come from `render/materialPalette.ts` (sRGB authored, converted to
-  linear once), multiplied by a per-face shade and a small per-voxel jitter
-  so cells stay readable.
+  linear once), multiplied by a small per-cell jitter; the blocky mesher also
+  bakes a per-face shade.
+- **Smooth terrain** (`render/meshing/surfaceNetsMesher.ts`): naive surface
+  nets on a density field. Natural voxels give their solid volume fraction,
+  the field is box-blurred (3 x 3 x 3), one vertex is placed per crossed dual
+  cell and one quad per crossed voxel edge. Edges belong to the chunk of
+  their lower voxel, so chunk meshes join without seams. Normals come from
+  the density gradient (smooth shading). The voxel grid is unchanged: game
+  logic (surfaces, picking) still works on voxels; only the look is smooth.
+- Hover highlight: a 3 x 3 patch draped on the surface cell. On smooth
+  terrain its heights are measured with short downward rays on the chunk
+  meshes, started just above the voxel surface so a bridge deck or a tunnel
+  ceiling above is ignored. Re-draped only when the target or the terrain
+  changes.
 - **Edits** (debug): `src/app/editing/debugEdits.ts` writes to the map from
   the engine's `hoveredHit` (right click removes the touched voxel,
   `Shift` + click places a stone voxel on the surface). The map marks the
-  edited chunk dirty, plus face neighbours for border voxels; the next frame
-  rebuilds only those. The HUD shows each rebuild batch (count, keys, time).
+  edited chunk dirty, plus every neighbour chunk within 2 voxels (the smooth
+  mesher reads that far); the next frame rebuilds only those. The HUD shows each rebuild batch (count, keys, time).
 - How to add materials, shapes, meshers and maps: see [[Extending]].
 
 ## Documentation rules in code

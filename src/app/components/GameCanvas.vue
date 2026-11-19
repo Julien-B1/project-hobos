@@ -34,6 +34,7 @@ onMounted(async () => {
       forceWebGL: flags.forceWebGL,
       camera: config.camera,
       map: world.map,
+      mesher: flags.mesher,
       onHudChange: (state) => {
         emit('hud', state)
       },

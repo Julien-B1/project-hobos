@@ -97,20 +97,28 @@ describe('VoxelMap dirty tracking', () => {
     expect(map.drainDirty()).toEqual([])
   })
 
-  it('marks the face neighbour for a border voxel', () => {
+  it('marks the face neighbour for a voxel within the margin of a border', () => {
     const map = new VoxelMap()
     map.set(15, 5, 5, STONE)
     expect(map.drainDirty().sort()).toEqual([chunkKey(0, 0, 0), chunkKey(1, 0, 0)].sort())
-    map.set(0, 5, 5, STONE)
+    map.set(1, 5, 5, STONE) // local 1 < DIRTY_MARGIN
     expect(map.drainDirty().sort()).toEqual([chunkKey(-1, 0, 0), chunkKey(0, 0, 0)].sort())
+    map.set(2, 5, 5, STONE) // local 2: interior again
+    expect(map.drainDirty()).toEqual([chunkKey(0, 0, 0)])
   })
 
-  it('marks the three face neighbours for a corner voxel', () => {
+  it('marks edge and corner neighbours for a voxel near a chunk corner', () => {
     const map = new VoxelMap()
-    map.set(-16, -1, 31, STONE) // local (0, 15, 15) in chunk (-1, -1, 1)
-    expect(map.drainDirty().sort()).toEqual(
-      [chunkKey(-1, -1, 1), chunkKey(-2, -1, 1), chunkKey(-1, 0, 1), chunkKey(-1, -1, 2)].sort(),
-    )
+    map.set(-16, -1, 30, STONE) // local (0, 15, 14) in chunk (-1, -1, 1)
+    const keys = map.drainDirty().sort()
+    const expected: string[] = []
+    for (const dx of [0, -1])
+      for (const dy of [0, 1])
+        for (const dz of [0, 1]) {
+          expected.push(chunkKey(-1 + dx, -1 + dy, 1 + dz))
+        }
+    expect(keys).toEqual(expected.sort())
+    expect(keys).toHaveLength(8)
   })
 
   it('keeps a removed chunk dirty so its mesh can be dropped', () => {

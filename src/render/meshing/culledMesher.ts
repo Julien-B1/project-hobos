@@ -35,8 +35,9 @@ import {
   type CornerIndex,
   type FaceId,
 } from '@/core/shapes'
-import { isAir, materialOf } from '@/core/voxel'
+import { isAir, materialOf, type Voxel } from '@/core/voxel'
 import type { VoxelMap } from '@/core/voxelMap'
+import { MeshBuilder, cellJitter, type Vec3 } from './meshBuilder'
 import type { ChunkMesher, ColorLookup, MeshData } from './mesher'
 
 /** Brightness factor per face, baked into vertex colours for readability. */
@@ -57,58 +58,40 @@ const CORNER_XZ: readonly (readonly [number, number])[] = [
   [0, 1],
 ]
 
-type Vec3 = readonly [number, number, number]
-
 /** Corner indices in polygon order around the cell. */
 const ALL_CORNERS: readonly CornerIndex[] = [0, 1, 2, 3]
 
-/** Growable output buffers. */
-class MeshBuilder {
-  readonly positions: number[] = []
-  readonly normals: number[] = []
-  readonly colors: number[] = []
-  readonly indices: number[] = []
-
+/** Filters that let the culled mesher handle only part of the voxels. */
+export interface CulledMesherOptions {
+  /** Voxels to mesh (default: every non-air voxel). */
+  readonly include?: (voxel: Voxel) => boolean
   /**
-   * Add a convex planar polygon (3 or 4 vertices) as a triangle fan.
-   * Vertices are reordered if needed so the front face points along
-   * `outward`; the stored normal is the polygon's true normal.
+   * Whether `neighbour` hides the touching face of `self` (default: the
+   * neighbour's touching face is FULL). `face` is the face of `self`.
    */
-  polygon(vertices: Vec3[], outward: Vec3, color: Vec3): void {
-    if (vertices.length < 3) return
-    const [a, b, c] = vertices as [Vec3, Vec3, Vec3]
-    let n = cross(sub(b, a), sub(c, a))
-    if (dot(n, outward) < 0) {
-      vertices.reverse()
-      n = [-n[0], -n[1], -n[2]]
-    }
-    const len = Math.hypot(n[0], n[1], n[2])
-    if (len === 0) return // degenerate polygon
-    const normal: Vec3 = [n[0] / len, n[1] / len, n[2] / len]
-
-    const base = this.positions.length / 3
-    for (const v of vertices) {
-      this.positions.push(v[0], v[1], v[2])
-      this.normals.push(normal[0], normal[1], normal[2])
-      this.colors.push(color[0], color[1], color[2])
-    }
-    for (let i = 1; i < vertices.length - 1; i++) this.indices.push(base, base + i, base + i + 1)
-  }
-
-  toMeshData(): MeshData {
-    return {
-      positions: new Float32Array(this.positions),
-      normals: new Float32Array(this.normals),
-      colors: new Float32Array(this.colors),
-      indices: new Uint32Array(this.indices),
-    }
-  }
+  readonly occludes?: (self: Voxel, neighbour: Voxel, face: FaceId) => boolean
 }
+
+/** Default occlusion rule: the neighbour's touching face covers the whole square. */
+const fullFaceOccludes = (_self: Voxel, neighbour: Voxel, face: FaceId): boolean =>
+  faceProfile(neighbour, oppositeFace(face)) === FaceProfile.FULL
 
 /** Mesher emitting every face not hidden by a full neighbour face. */
 export class CulledMesher implements ChunkMesher {
-  /** @param colorOf Linear RGB colour of a material id. */
-  constructor(private readonly colorOf: ColorLookup) {}
+  private readonly include: (voxel: Voxel) => boolean
+  private readonly occludes: (self: Voxel, neighbour: Voxel, face: FaceId) => boolean
+
+  /**
+   * @param colorOf Linear RGB colour of a material id.
+   * @param options Optional filters (used by the hybrid smooth/blocky setup).
+   */
+  constructor(
+    private readonly colorOf: ColorLookup,
+    options: CulledMesherOptions = {},
+  ) {
+    this.include = options.include ?? ((): boolean => true)
+    this.occludes = options.occludes ?? fullFaceOccludes
+  }
 
   /** Mesh one chunk; see the module comment for the rules. */
   mesh(map: VoxelMap, chunk: Chunk): MeshData {
@@ -121,7 +104,7 @@ export class CulledMesher implements ChunkMesher {
       for (let lz = 0; lz < CHUNK_SIZE; lz++) {
         for (let lx = 0; lx < CHUNK_SIZE; lx++) {
           const voxel = chunk.get(lx, ly, lz)
-          if (isAir(voxel)) continue
+          if (isAir(voxel) || !this.include(voxel)) continue
           // Neighbours inside the chunk are read directly (fast path); only
           // border voxels go through the map's chunk lookup.
           const neighbourAt = (dx: number, dy: number, dz: number): number => {
@@ -160,7 +143,7 @@ export class CulledMesher implements ChunkMesher {
       if (!isSlopedTop) {
         const n = FACE_NORMALS[face] ?? [0, 0, 0]
         const neighbour = neighbourAt(n[0], n[1], n[2])
-        if (faceProfile(neighbour, oppositeFace(face)) === FaceProfile.FULL) continue
+        if (this.occludes(voxel, neighbour, face)) continue
       }
 
       const shade = FACE_SHADE[face] * jitter
@@ -214,28 +197,4 @@ function facePolygons(
   if (corners[b] > 0) vertices.push(corner(b, corners[b]))
   if (corners[a] > 0) vertices.push(corner(a, corners[a]))
   return [vertices]
-}
-
-/**
- * Small deterministic brightness variation per voxel (about +-4 %), so
- * neighbouring cells of the same material stay distinguishable.
- */
-function cellJitter(x: number, y: number, z: number): number {
-  // Integer hash (xorshift-multiply); only the low bits matter here.
-  let h = Math.imul(x, 73856093) ^ Math.imul(y, 19349663) ^ Math.imul(z, 83492791)
-  h = Math.imul(h ^ (h >>> 13), 0x5bd1e995)
-  h ^= h >>> 15
-  return 0.96 + ((h >>> 0) % 1000) / 12500
-}
-
-function sub(a: Vec3, b: Vec3): Vec3 {
-  return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
-}
-
-function cross(a: Vec3, b: Vec3): Vec3 {
-  return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
-}
-
-function dot(a: Vec3, b: Vec3): number {
-  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 }

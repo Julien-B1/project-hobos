@@ -6,19 +6,20 @@
  * app must keep the engine out of reactive state (plain variable or
  * `markRaw`) so Three.js objects are never proxied.
  */
-import { Raycaster, Vector2, type Scene } from 'three/webgpu'
-import type { VoxelCoord } from '@/core/coords'
-import { materialName } from '@/core/materials'
-import { shapeDefinition, voxelTopCorners } from '@/core/shapes'
+import { Raycaster, Vector2, Vector3, type Scene } from 'three/webgpu'
+import { VOXEL_HEIGHT, type VoxelCoord } from '@/core/coords'
+import { isNaturalMaterial, materialName } from '@/core/materials'
+import { shapeDefinition, topHeightAt, voxelTopCorners } from '@/core/shapes'
 import { resolveHit, type HitFacing, type SurfaceHit } from '@/core/surface'
 import { materialOf, shapeOf } from '@/core/voxel'
 import type { VoxelMap } from '@/core/voxelMap'
 import { CameraRig, type CameraRigSettings } from './cameraRig'
 import { ChunkRenderer } from './chunkRenderer'
 import { createRenderer, type RenderBackend, type RendererHandle } from './createRenderer'
-import { SurfaceHighlight } from './highlight'
+import { SurfaceHighlight, type SurfaceSampler } from './highlight'
 import { materialColor } from './materialPalette'
 import { CulledMesher } from './meshing/culledMesher'
+import { HybridMesher } from './meshing/hybridMesher'
 import { createScene } from './sceneSetup'
 
 /** What the cursor points at, for the HUD. Voxel coordinates. */
@@ -68,9 +69,17 @@ export interface EngineOptions {
   readonly camera: CameraRigSettings
   /** Voxel terrain to display and pick on. The engine only reads it. */
   readonly map: VoxelMap
+  /**
+   * Terrain rendering: `smooth` (natural terrain smoothed, structures and
+   * water as blocks) or `blocky` (every voxel as its exact shape).
+   */
+  readonly mesher: TerrainMesherKind
   /** Called when HUD-visible state changes (at most a few times per second for FPS). */
   readonly onHudChange: (state: EngineHudState) => void
 }
+
+/** Available terrain rendering modes, see {@link EngineOptions.mesher}. */
+export type TerrainMesherKind = 'smooth' | 'blocky'
 
 /** Length of the FPS measurement window, in milliseconds. */
 const FPS_WINDOW_MS = 500
@@ -96,6 +105,10 @@ export class Engine {
   /** Latest resolved hit under the cursor. */
   private hit: SurfaceHit | null = null
   private readonly raycaster = new Raycaster()
+  /** Short vertical rays used to drape the highlight on the smooth mesh. */
+  private readonly probe = new Raycaster()
+  /** Hover key and rebuild sequence the highlight was last draped for. */
+  private highlightKey = ''
   /** Cursor in normalised device coordinates, or null when outside the canvas. */
   private pointerNdc: Vector2 | null = null
   private hud: EngineHudState
@@ -111,7 +124,11 @@ export class Engine {
     this.scene = createScene()
     this.rig = new CameraRig(options.camera)
 
-    this.chunks = new ChunkRenderer(options.map, new CulledMesher(materialColor))
+    const mesher =
+      options.mesher === 'smooth'
+        ? new HybridMesher(materialColor)
+        : new CulledMesher(materialColor)
+    this.chunks = new ChunkRenderer(options.map, mesher)
     this.scene.add(this.chunks.group)
     this.scene.add(this.highlight.mesh)
 
@@ -221,15 +238,53 @@ export class Engine {
     }
     this.hit = resolved
 
+    const hover = resolved ? toHoverInfo(resolved) : null
     if (resolved) {
-      const { x, y, z } = resolved.surface
-      this.highlight.show(x, y, z, voxelTopCorners(resolved.surfaceValue))
+      // Re-drape only when the target or the terrain changed: draping casts rays.
+      const key = `${hoverKey(hover)}#${this.hud.lastRebuild?.seq ?? 0}`
+      if (key !== this.highlightKey) {
+        this.highlightKey = key
+        const { x, z } = resolved.surface
+        this.highlight.show(x, z, this.surfaceSampler(resolved))
+      }
     } else {
       this.highlight.hide()
+      this.highlightKey = ''
     }
 
-    const hover = resolved ? toHoverInfo(resolved) : null
     if (hoverKey(hover) !== hoverKey(this.hud.hover)) this.publish({ ...this.hud, hover })
+  }
+
+  /**
+   * Height function of the targeted surface cell, in world units.
+   *
+   * Blocky tops follow the voxel's corner heights. Smooth terrain does not
+   * match voxel tops exactly, so its height is measured on the mesh with a
+   * short downward ray per sample, starting just above the voxel surface
+   * (below any bridge deck or tunnel ceiling above it). Falls back to the
+   * voxel top when a ray misses.
+   */
+  private surfaceSampler(hit: SurfaceHit): SurfaceSampler {
+    const { x, y, z } = hit.surface
+    const corners = voxelTopCorners(hit.surfaceValue)
+    const voxelTop: SurfaceSampler = (fx, fz) => (y + topHeightAt(corners, fx, fz)) * VOXEL_HEIGHT
+    const smooth =
+      this.options.mesher === 'smooth' && isNaturalMaterial(materialOf(hit.surfaceValue))
+    if (!smooth) return voxelTop
+
+    const targets = this.chunks.pickables
+    const startY = (y + 1) * VOXEL_HEIGHT + 0.75
+    const origin = new Vector3()
+    const down = new Vector3(0, -1, 0)
+    this.probe.far = 2
+    return (fx, fz) => {
+      // Stay a hair inside the cell so border samples do not hit the neighbour's wall.
+      const px = x + Math.min(0.99, Math.max(0.01, fx))
+      const pz = z + Math.min(0.99, Math.max(0.01, fz))
+      this.probe.set(origin.set(px, startY, pz), down)
+      const hitBelow = this.probe.intersectObjects(targets, false)[0]
+      return hitBelow ? hitBelow.point.y : voxelTop(fx, fz)
+    }
   }
 
   /** Count frames and publish the FPS once per measurement window. */

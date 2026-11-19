@@ -10,17 +10,22 @@
  * a chunk that becomes all-air is removed.
  *
  * Dirty tracking: every effective change marks the voxel's chunk dirty, plus
- * the face-adjacent chunk(s) when the voxel lies on a chunk border, because
- * their meshes may show or hide a face against this voxel. The renderer
- * consumes the set with {@link VoxelMap.drainDirty}. A dirty key may name a
- * chunk that does not exist (any more): its mesh must then be removed.
+ * every neighbouring chunk (faces, edges and corners) that lies within
+ * {@link DIRTY_MARGIN} voxels of it, because their meshes read voxels across
+ * the border: the blocky mesher looks one voxel away (face culling), the
+ * smooth mesher two (density blur plus dual cells). The renderer consumes the
+ * set with {@link VoxelMap.drainDirty}. A dirty key may name a chunk that does
+ * not exist (any more): its mesh must then be removed.
  */
 import { Chunk } from './chunk'
 import { CHUNK_SIZE, chunkKey, voxelToChunk, voxelToLocal } from './coords'
 import { AIR, isAir, type Voxel } from './voxel'
 
-/** Last local coordinate on a chunk axis (15). */
-const LAST = CHUNK_SIZE - 1
+/**
+ * How far (in voxels) a mesher may read beyond its chunk. A voxel closer than
+ * this to a chunk border also dirties the chunk(s) across that border.
+ */
+export const DIRTY_MARGIN = 2
 
 /** Chunked voxel terrain. */
 export class VoxelMap {
@@ -86,17 +91,27 @@ export class VoxelMap {
   }
 
   /**
-   * Mark the chunk and, for border voxels, the face-adjacent chunks.
-   * Diagonal neighbours are not needed: face culling only looks at the six
-   * face neighbours of a voxel.
+   * Mark the chunk and every neighbour chunk within {@link DIRTY_MARGIN}
+   * voxels: per axis the offsets are {0}, plus -1 near the low border and +1
+   * near the high border; all combinations are marked (up to 8 chunks for a
+   * voxel near a chunk corner).
    */
   private markDirty(cx: number, cy: number, cz: number, lx: number, ly: number, lz: number): void {
-    this.dirty.add(chunkKey(cx, cy, cz))
-    if (lx === 0) this.dirty.add(chunkKey(cx - 1, cy, cz))
-    if (lx === LAST) this.dirty.add(chunkKey(cx + 1, cy, cz))
-    if (ly === 0) this.dirty.add(chunkKey(cx, cy - 1, cz))
-    if (ly === LAST) this.dirty.add(chunkKey(cx, cy + 1, cz))
-    if (lz === 0) this.dirty.add(chunkKey(cx, cy, cz - 1))
-    if (lz === LAST) this.dirty.add(chunkKey(cx, cy, cz + 1))
+    const ox = axisOffsets(lx)
+    const oy = axisOffsets(ly)
+    const oz = axisOffsets(lz)
+    for (const dx of ox)
+      for (const dy of oy)
+        for (const dz of oz) {
+          this.dirty.add(chunkKey(cx + dx, cy + dy, cz + dz))
+        }
   }
+}
+
+/** Chunk offsets along one axis touched by a voxel at local coordinate `l`. */
+function axisOffsets(l: number): number[] {
+  const offsets = [0]
+  if (l < DIRTY_MARGIN) offsets.push(-1)
+  if (l >= CHUNK_SIZE - DIRTY_MARGIN) offsets.push(1)
+  return offsets
 }

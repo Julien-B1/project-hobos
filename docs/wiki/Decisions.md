@@ -48,3 +48,27 @@ accepted record: add a new one that supersedes it.
     a browser.
   - Slight overhead per command (`docker compose run`).
   - `node_modules` is bind-mounted so host editors keep working on Linux/WSL.
+
+## ADR-004: Smooth rendering for natural terrain
+
+- **Status:** accepted (2026-11-19)
+- **Context.** Per-voxel shapes rise at most one half-height level per
+  cell, so steep or diagonal terrain shows stairs and saw teeth, and every
+  corner seen from above stays square. The project owner wants smooth hills,
+  smooth steep slopes and cliffs, and rounded horizontal corners, while
+  built structures and real stairs keep their edges.
+- **Decision.** Render natural materials with a surface-nets mesher on a
+  blurred density field derived from the voxels; render built and fluid
+  materials (wood, water) with the existing culled block mesher
+  (`HybridMesher`). The voxel grid stays the single source of truth for
+  logic: surfaces, picking resolution and edits are unchanged.
+  `?mesher=blocky` keeps the exact block rendering for debugging.
+- **Consequences.**
+  - Terrain looks smooth whatever the slope; cliffs become steep rounded
+    faces; tunnels stay open.
+  - The rendered surface no longer matches voxel faces exactly: picking
+    searches inwards for the voxel, and the highlight is draped on the mesh.
+  - A voxel edit can change meshes up to 2 voxels away: dirty tracking
+    marks neighbour chunks within that margin, diagonals included.
+  - Slopes and corner wedges still matter for logic (walkable ramps) and
+    feed the density as partial volume.

@@ -5,6 +5,7 @@
  * them to tweak the feel without touching engine code.
  */
 import type { CameraRigSettings } from '@/render/cameraRig'
+import type { TerrainMesherKind } from '@/render/engine'
 import { isTestMapId, type TestMapId } from '@/core/generators/catalog'
 
 /** Settings consumed when the engine and input bindings are created. */
@@ -48,11 +49,14 @@ export const config = {
  * - `?forceWebGL=1` forces the WebGL 2 backend to test the fallback path.
  * - `?map=<id>` picks a test map (`reference` by default, `flat`, `organic`).
  * - `?seed=<integer>` changes the seed of procedural maps (`organic`).
+ * - `?mesher=blocky` renders every voxel as its exact block shape instead of
+ *   the default smooth terrain.
  */
 export function readUrlFlags(search: string = window.location.search): {
   forceWebGL: boolean
   map: TestMapId
   seed: number | undefined
+  mesher: TerrainMesherKind
 } {
   const params = new URLSearchParams(search)
   const map = params.get('map') ?? 'reference'
@@ -61,5 +65,6 @@ export function readUrlFlags(search: string = window.location.search): {
     forceWebGL: params.get('forceWebGL') === '1',
     map: isTestMapId(map) ? map : 'reference',
     seed: Number.isFinite(seed) ? seed : undefined,
+    mesher: params.get('mesher') === 'blocky' ? 'blocky' : 'smooth',
   }
 }

@@ -61,6 +61,12 @@ export interface SurfaceHit {
  */
 const INSIDE_EPSILON = 1e-3
 
+/** Farthest distance searched inwards for a solid voxel, in world units. */
+const MAX_INWARD_SEARCH = 1.25
+
+/** Step of that inward search, in world units (a quarter of a voxel height). */
+const INWARD_STEP = 0.125
+
 /** Normal components below this (in absolute value) count as horizontal. */
 const FACING_THRESHOLD = 0.5
 
@@ -74,7 +80,10 @@ const MAX_COLUMN_WALK = 256
  * Steps:
  * 1. Push the hit point slightly inside the mesh (against the normal) and
  *    floor it into voxel coordinates (y divided by the voxel height). This
- *    works for sloped faces too, whose normals are not axis-aligned.
+ *    works for sloped faces too, whose normals are not axis-aligned. With
+ *    the smooth terrain mesh the surface does not follow voxel faces
+ *    exactly, so if that voxel is air the point keeps moving inwards (up to
+ *    {@link MAX_INWARD_SEARCH}) until it meets a solid voxel.
  * 2. Choose the surface in the same column:
  *    - top face (normal mostly up, flat top or slope): the touched voxel;
  *    - side face: climb while the voxel above is solid, so aiming at a wall
@@ -92,11 +101,9 @@ export function resolveHit(
   point: { x: number; y: number; z: number },
   normal: { x: number; y: number; z: number },
 ): SurfaceHit | null {
-  const x = Math.floor(point.x - normal.x * INSIDE_EPSILON)
-  const y = Math.floor((point.y - normal.y * INSIDE_EPSILON) / VOXEL_HEIGHT)
-  const z = Math.floor(point.z - normal.z * INSIDE_EPSILON)
-  const voxelValue = map.get(x, y, z)
-  if (isAir(voxelValue)) return null
+  const found = solidAlongInwardNormal(map, point, normal)
+  if (!found) return null
+  const { x, y, z, voxelValue } = found
 
   const facing: HitFacing =
     normal.y > FACING_THRESHOLD ? 'top' : normal.y < -FACING_THRESHOLD ? 'bottom' : 'side'
@@ -117,6 +124,22 @@ export function resolveHit(
     surface: { x, y: surfaceY, z },
     surfaceValue: map.get(x, surfaceY, z),
   }
+}
+
+/** First solid voxel met when moving from `point` against `normal`, or null. */
+function solidAlongInwardNormal(
+  map: VoxelMap,
+  point: { x: number; y: number; z: number },
+  normal: { x: number; y: number; z: number },
+): { x: number; y: number; z: number; voxelValue: Voxel } | null {
+  for (let d = INSIDE_EPSILON; d <= MAX_INWARD_SEARCH; d += INWARD_STEP) {
+    const x = Math.floor(point.x - normal.x * d)
+    const y = Math.floor((point.y - normal.y * d) / VOXEL_HEIGHT)
+    const z = Math.floor(point.z - normal.z * d)
+    const voxelValue = map.get(x, y, z)
+    if (!isAir(voxelValue)) return { x, y, z, voxelValue }
+  }
+  return null
 }
 
 /** First surface at or below level `fromY` in column (x, z), or null. */

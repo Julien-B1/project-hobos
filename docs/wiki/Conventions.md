@@ -69,7 +69,9 @@ path).
 
 1. The hit point is pushed 0.001 world unit into the mesh (against the
    normal) and floored to voxel coordinates (`y / 0.5`). Works for sloped
-   faces too.
+   faces too. The smooth terrain does not follow voxel faces exactly, so if
+   that voxel is air the point keeps moving inwards (steps of 0.125, up to
+   1.25 world units) until it meets a solid voxel.
 2. The targeted surface is in the same column as the touched voxel:
    - **top face** (normal mostly up, flat or sloped): the touched voxel;
    - **side face**: climb while the voxel above is solid, so a wall or cliff
@@ -89,12 +91,19 @@ the surface voxel `y` and its level `y + 1`.
 - Chunk key: the string `"cx,cy,cz"`.
 - `VoxelMap` is **sparse**: only chunks with at least one non-air voxel
   exist; reading elsewhere returns air; a chunk emptied by writes is deleted.
-- **Dirty tracking**: a write that changes a voxel marks its chunk, plus the
-  face-adjacent chunk on each axis where the voxel is on the border
-  (local 0 or 15). Up to 4 chunks for a corner voxel. Diagonal chunks are not
-  marked because face culling only looks at the 6 face neighbours.
+- **Dirty tracking**: a write that changes a voxel marks its chunk, plus
+  every neighbour chunk (faces, edges, corners) within `DIRTY_MARGIN = 2`
+  voxels: up to 8 chunks near a chunk corner. Meshers may read that far
+  beyond their chunk (blur plus dual cells for the smooth mesher).
   `drainDirty()` returns and clears the set; a dirty key may name a chunk
   that no longer exists (remove its mesh).
+
+## Natural and built materials
+
+`isNaturalMaterial()` (`src/core/materials.ts`): grass, dirt, stone, rock,
+sand, path and leaves are **natural**; they are drawn smooth. Wood and water
+are not: wood structures (bridges, trunks, future stairs) keep sharp block
+edges, water stays a flat block.
 
 ## Camera
 
