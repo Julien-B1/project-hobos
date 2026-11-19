@@ -26,6 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Organic map smoothing: wider relief, blurred height field and wider river
   banks (no height step above 2 levels), and corner-aware wedges instead of
   single-axis slopes, so diagonals and corners no longer show notches.
+- Organic map: height steps limited to one level between neighbours
+  (distance transform), so the terrain is continuous; rock comes in noise
+  patches on hills instead of following steepness; sand only on beds and
+  beaches near water.
+- Lighting: lower sun from the north-west, softer ambient, so gentle slopes
+  read better.
 
 - Culled mesher reads in-chunk neighbours directly instead of through the
   map (about 3x fewer chunk lookups when meshing large maps).

@@ -20,11 +20,14 @@ export function createScene(): Scene {
   scene.background = new Color(BACKGROUND)
 
   // Ambient term: sky colour from above, ground colour from below.
-  const ambient = new HemisphereLight(0xdfe8f2, 0x3a3328, 0.9)
+  // Kept moderate so the sun's direction still reads on gentle slopes.
+  const ambient = new HemisphereLight(0xdfe8f2, 0x3a3328, 0.6)
   scene.add(ambient)
 
-  const sun = new DirectionalLight(0xfff4e0, 2.2)
-  sun.position.set(-20, 40, 12)
+  // Lowish sun (about 45 degrees) from the north-west: slopes facing it are
+  // clearly brighter than slopes facing away.
+  const sun = new DirectionalLight(0xfff4e0, 2.8)
+  sun.position.set(-30, 32, -14)
   scene.add(sun)
 
   return scene

@@ -89,6 +89,14 @@ describe('organic map', () => {
     expect(wedges).toBeGreaterThan(100)
   })
 
+  it('never steps more than one level between orthogonal neighbours', () => {
+    for (let z = 0; z < SIZE; z++)
+      for (let x = 0; x < SIZE - 1; x++) {
+        expect(Math.abs(organic.heightAt(x + 1, z) - organic.heightAt(x, z))).toBeLessThanOrEqual(1)
+        expect(Math.abs(organic.heightAt(z, x + 1) - organic.heightAt(z, x))).toBeLessThanOrEqual(1)
+      }
+  })
+
   it('grows trees with trunks and leaves', () => {
     let wood = 0
     let leaves = 0
