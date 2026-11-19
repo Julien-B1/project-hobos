@@ -81,13 +81,23 @@ try {
       await page.waitForTimeout(step.wait ?? 500)
     }
     // Network weight of the page (what a remote tester downloads).
-    const transfer = await page.evaluate(() =>
+    const entries = await page.evaluate(() =>
       performance
         .getEntriesByType('resource')
         .concat(performance.getEntriesByType('navigation'))
-        .reduce((sum, e) => sum + (e.transferSize ?? 0), 0),
+        .map((e) => ({
+          name: e.name,
+          transfer: e.transferSize ?? 0,
+          body: e.decodedBodySize ?? 0,
+        })),
     )
-    console.log(`${view.name}: ${(transfer / 1024).toFixed(0)} kB transferred`)
+    const kB = (bytes) => `${(bytes / 1024).toFixed(0)} kB`
+    const transfer = entries.reduce((sum, e) => sum + e.transfer, 0)
+    console.log(`${view.name}: ${kB(transfer)} transferred`)
+    // The heavy ones (over 50 kB on the wire): what to slim first.
+    for (const e of entries.filter((e) => e.transfer > 50 * 1024)) {
+      console.log(`  ${kB(e.transfer)} (${kB(e.body)} decoded) ${new URL(e.name).pathname}`)
+    }
     const file = `${OUT}/${view.name}.png`
     await page.screenshot({ path: file })
     console.log('saved', file)
