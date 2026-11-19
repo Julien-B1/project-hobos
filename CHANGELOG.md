@@ -208,6 +208,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Hover on a bank under a bridge's end: the cursor lies on the deck (flat
+  patch at the walking level) instead of the smoothed ground below it.
 - Ford: boulders rest on the gravel (no longer floating) in line with the
   marker posts, on one extra gravel cell each side, so the whole crossing
   width stays clear.

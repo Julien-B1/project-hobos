@@ -532,6 +532,11 @@ export class Engine {
     if (this.options.mesher !== 'faceted' || !isTerrainMaterial(materialOf(hit.surfaceValue))) {
       return null
     }
+    // Ground inside a structure's footprint (a bank under a bridge's end,
+    // at the deck's walking level): the drawn ground there is smoothed
+    // lower, under the deck; the flat patch at the voxel top lies on the
+    // deck instead.
+    if (this.options.structures?.within(x, y + 1, z)) return null
     // Same vertical window as the chunk mesher, so heights agree with the mesh.
     const oy = Math.floor(y / CHUNK_SIZE) * CHUNK_SIZE
     const field = new TerrainField(
