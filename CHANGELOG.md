@@ -26,6 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ChunkRenderer`: one mesh per chunk, rebuilt from the map's dirty set.
 - Test map catalog with `?map=reference|flat`; flat voxel test map.
 - Debug HUD shows the number of chunk meshes. Wiki page _Extending_.
+- Surface picking: `core/surface.resolveHit()` turns a ray hit (point and
+  normal) into the touched voxel and the targeted surface (top face, side
+  face climbs to the stack top, ceiling maps to the floor below). The
+  highlight follows the surface, tilted on slopes; the HUD shows voxel,
+  material, shape, face and surface. Tests cover the bridge-over-path
+  column, slopes, a cliff face and the tunnel.
 
 ### Changed
 

@@ -7,15 +7,34 @@
  * `markRaw`) so Three.js objects are never proxied.
  */
 import { Raycaster, Vector2, type Scene } from 'three/webgpu'
-import { worldToCell, type CellCoord } from '@/core/coords'
+import type { VoxelCoord } from '@/core/coords'
+import { materialName } from '@/core/materials'
+import { shapeDefinition, voxelTopCorners } from '@/core/shapes'
+import { resolveHit, type HitFacing, type SurfaceHit } from '@/core/surface'
+import { materialOf, shapeOf } from '@/core/voxel'
 import type { VoxelMap } from '@/core/voxelMap'
 import { CameraRig, type CameraRigSettings } from './cameraRig'
 import { ChunkRenderer } from './chunkRenderer'
 import { createRenderer, type RenderBackend, type RendererHandle } from './createRenderer'
-import { CellHighlight } from './highlight'
+import { SurfaceHighlight } from './highlight'
 import { materialColor } from './materialPalette'
 import { CulledMesher } from './meshing/culledMesher'
 import { createScene } from './sceneSetup'
+
+/** What the cursor points at, for the HUD. Voxel coordinates. */
+export interface HoverInfo {
+  /** Voxel touched by the ray. */
+  readonly voxel: VoxelCoord
+  /** Material and shape names of the touched voxel. */
+  readonly material: string
+  readonly shape: string
+  /** Orientation of the touched face. */
+  readonly facing: HitFacing
+  /** Voxel whose top is the targeted surface. */
+  readonly surface: VoxelCoord
+  /** Shape name of the surface voxel. */
+  readonly surfaceShape: string
+}
 
 /** Snapshot of engine state shown by the debug HUD. Replaced, never mutated. */
 export interface EngineHudState {
@@ -23,8 +42,8 @@ export interface EngineHudState {
   readonly backend: RenderBackend
   /** Frames per second, averaged over the last measurement window. */
   readonly fps: number
-  /** Cell under the mouse cursor, or null when the cursor is off the terrain. */
-  readonly hoveredCell: CellCoord | null
+  /** Voxel and surface under the cursor, or null when the cursor is off the terrain. */
+  readonly hover: HoverInfo | null
   /** Number of chunk meshes in the scene. */
   readonly chunkMeshes: number
 }
@@ -61,7 +80,9 @@ export class Engine {
   private readonly rig: CameraRig
   private readonly resizeObserver: ResizeObserver
   private readonly chunks: ChunkRenderer
-  private readonly highlight = new CellHighlight()
+  private readonly highlight = new SurfaceHighlight()
+  /** Latest resolved hit under the cursor. */
+  private hit: SurfaceHit | null = null
   private readonly raycaster = new Raycaster()
   /** Cursor in normalised device coordinates, or null when outside the canvas. */
   private pointerNdc: Vector2 | null = null
@@ -87,7 +108,7 @@ export class Engine {
     this.hud = {
       backend: handle.backend,
       fps: 0,
-      hoveredCell: null,
+      hover: null,
       chunkMeshes: this.chunks.meshCount,
     }
 
@@ -120,6 +141,11 @@ export class Engine {
     // NDC: x and y in [-1, 1], y pointing up (screen y points down).
     this.pointerNdc ??= new Vector2()
     this.pointerNdc.set((cssX / width) * 2 - 1, -(cssY / height) * 2 + 1)
+  }
+
+  /** Latest hit under the cursor (voxel and surface), or null. */
+  get hoveredHit(): SurfaceHit | null {
+    return this.hit
   }
 
   /** The cursor left the canvas: stop picking and hide the highlight. */
@@ -158,23 +184,25 @@ export class Engine {
 
   /** Raycast the cursor against the chunk meshes and update highlight and HUD. */
   private updateHover(): void {
-    let cell: CellCoord | null = null
-    let height = 0
+    let resolved: SurfaceHit | null = null
     if (this.pointerNdc) {
       this.raycaster.setFromCamera(this.pointerNdc, this.rig.camera)
       const hit = this.raycaster.intersectObjects(this.chunks.pickables, false)[0]
-      if (hit) {
-        cell = worldToCell(hit.point.x, hit.point.z)
-        height = hit.point.y
-      }
+      // Chunk meshes have an identity transform: the face normal is already in
+      // world space. It is the geometric normal of the hit triangle.
+      if (hit?.face) resolved = resolveHit(this.options.map, hit.point, hit.face.normal)
+    }
+    this.hit = resolved
+
+    if (resolved) {
+      const { x, y, z } = resolved.surface
+      this.highlight.show(x, y, z, voxelTopCorners(resolved.surfaceValue))
+    } else {
+      this.highlight.hide()
     }
 
-    if (cell) this.highlight.showCell(cell.x, cell.z, height)
-    else this.highlight.hide()
-
-    const previous = this.hud.hoveredCell
-    const changed = cell?.x !== previous?.x || cell?.z !== previous?.z
-    if (changed) this.publish({ ...this.hud, hoveredCell: cell })
+    const hover = resolved ? toHoverInfo(resolved) : null
+    if (hoverKey(hover) !== hoverKey(this.hud.hover)) this.publish({ ...this.hud, hover })
   }
 
   /** Count frames and publish the FPS once per measurement window. */
@@ -208,4 +236,23 @@ export class Engine {
     renderer.setSize(width, height, false)
     this.rig.setAspect(width / height)
   }
+}
+
+/** Describe a hit for the HUD. */
+function toHoverInfo(hit: SurfaceHit): HoverInfo {
+  return {
+    voxel: hit.voxel,
+    material: materialName(materialOf(hit.voxelValue)),
+    shape: shapeDefinition(shapeOf(hit.voxelValue)).name,
+    facing: hit.facing,
+    surface: hit.surface,
+    surfaceShape: shapeDefinition(shapeOf(hit.surfaceValue)).name,
+  }
+}
+
+/** Identity of a hover state, to publish only on change. */
+function hoverKey(h: HoverInfo | null): string {
+  if (!h) return ''
+  const { voxel: v, surface: s } = h
+  return `${v.x},${v.y},${v.z}|${s.x},${s.y},${s.z}|${h.facing}|${h.material}|${h.shape}`
 }

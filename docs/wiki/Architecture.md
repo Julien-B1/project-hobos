@@ -52,7 +52,11 @@ App.vue
   from above.
 - Hover picking: bindings forward the cursor to `Engine.setPointer()` (CSS
   pixels, converted to NDC). Every frame the engine raycasts the chunk
-  meshes, moves the highlight and publishes the result in the HUD snapshot
+  meshes and hands the hit point and triangle normal to
+  `core/surface.resolveHit()`, which returns the touched voxel and the
+  targeted surface (rules on the _Conventions_ page). The engine lays the
+  `SurfaceHighlight` quad on that surface (tilted on slopes), keeps the hit
+  for edit actions (`Engine.hoveredHit`) and publishes it in the HUD snapshot
   only when it changes. Picking runs every frame because the camera can move
   under a still cursor.
 - Debug URL flags are read by the app layer (`src/app/config.ts`):

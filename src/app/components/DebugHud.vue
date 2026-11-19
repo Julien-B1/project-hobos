@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Debug overlay: renderer backend, frame rate and hovered cell.
+ * Debug overlay: renderer backend, frame rate, chunks, hovered voxel and surface.
  *
  * Purely presentational: receives a HUD snapshot from the engine (through
  * App.vue) and renders it. Never reads engine objects directly.
@@ -21,13 +21,19 @@ defineProps<{
       </div>
       <div>FPS: {{ state.fps }}</div>
       <div>Chunks: {{ state.chunkMeshes }}</div>
-      <div>
-        Cell:
-        <template v-if="state.hoveredCell">
-          x {{ state.hoveredCell.x }}, z {{ state.hoveredCell.z }}
-        </template>
-        <template v-else>—</template>
-      </div>
+      <template v-if="state.hover">
+        <div>
+          Voxel: ({{ state.hover.voxel.x }}, {{ state.hover.voxel.y }}, {{ state.hover.voxel.z }})
+          {{ state.hover.material }} {{ state.hover.shape }}, {{ state.hover.facing }} face
+        </div>
+        <div>
+          Surface: column ({{ state.hover.surface.x }}, {{ state.hover.surface.z }}), voxel y
+          {{ state.hover.surface.y }} → level {{ state.hover.surface.y + 1 }} ({{
+            state.hover.surfaceShape
+          }})
+        </div>
+      </template>
+      <div v-else>Voxel: —</div>
     </template>
     <div v-else>Starting renderer…</div>
   </aside>

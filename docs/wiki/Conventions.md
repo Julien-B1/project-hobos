@@ -58,6 +58,23 @@ Culling rule: a face is hidden only when the neighbour's touching face is
 (`src/core/surface.ts`). A column can hold several surfaces (bridge over a
 path).
 
+## Picking: from a ray hit to a surface
+
+`core/surface.resolveHit(map, point, normal)`:
+
+1. The hit point is pushed 0.001 world unit into the mesh (against the
+   normal) and floored to voxel coordinates (`y / 0.5`). Works for sloped
+   faces too.
+2. The targeted surface is in the same column as the touched voxel:
+   - **top face** (normal mostly up, flat or sloped): the touched voxel;
+   - **side face**: climb while the voxel above is solid, so a wall or cliff
+     face targets the top of its stack;
+   - **bottom face** (a ceiling seen from below, e.g. in a tunnel): the
+     nearest surface below.
+
+The HUD shows the touched voxel and the surface as a column `(x, z)` plus
+the surface voxel `y` and its level `y + 1`.
+
 ## Chunks and the map
 
 - Chunks are **16 x 16 x 16 voxels**, stored as a dense `Uint16Array(4096)`
