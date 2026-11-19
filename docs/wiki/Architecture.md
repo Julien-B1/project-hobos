@@ -337,8 +337,11 @@ trees and grid. Shadow quality barely changes GPU time; `high` costs about
   feet on the drawn ground. It casts a sun shadow: while a character is on
   the map the shadow map is redrawn every frame (one depth pass of the
   visible chunks; measure it with probe `1`). Toon shading
-  (`actors/toonMaterial.ts`): `MeshToonNodeMaterial` with a 3-step
-  gradient, a warm rim light and an ink outline drawn as an inverted hull
+  (`actors/toonMaterial.ts`): `MeshToonNodeMaterial` with a 2-step
+  gradient (sharp light / shade boundary), the shade tinted rather than
+  grey (emissive: surface colour times a cool tint), a crisp rim light and
+  an outline about 1 pixel wide at any zoom, in a darker shade of the
+  texture, drawn as an inverted hull
   (a second skinned mesh on the same geometry and skeleton, pushed out
   along the skinned normals, back faces only). The selection ring is laid
   along the ground normal.
@@ -350,7 +353,7 @@ trees and grid. Shadow quality barely changes GPU time; `high` costs about
   along the slope. Standing, the feet are locked on the stance of the idle
   clip's first frame. A hop (stepping stones) fades the IK out.
 - **Walk area** (`core/navigation/walkArea.ts`): a stand is a solid voxel,
-  not water or foliage, with 3 free levels above (shallow water, at most
+  not water or foliage, with 4 free levels above (the character is 1.6 units tall) (shallow water, at most
   `WADING_DEPTH`, counts as free). Moves go to the 8 neighbour columns, at
   most 2 levels up or down; diagonals need both orthogonal moves (no
   corner cutting). A* with the octile distance; columns are cached and

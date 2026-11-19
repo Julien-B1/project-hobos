@@ -2,7 +2,7 @@
 """
 Shrink a skinned, animated GLB (characters exported by Tripo / Mixamo).
 
-Usage: python3 -I tooling/compress_glb.py in.glb out.glb
+Usage: python3 -I tooling/compress_glb.py in.glb out.glb [--flat N]
 
 Needs Python 3 with numpy, and ffmpeg (texture to WebP). Run on the host:
 it is a one-off asset step, not part of the build, and the dev image has
@@ -15,7 +15,9 @@ decoder to ship):
   (core glTF);
 - mesh: weights as normalized bytes, UVs as normalized shorts (core glTF),
   normals as normalized bytes (KHR_mesh_quantization);
-- texture: JPEG to WebP (EXT_texture_webp).
+- texture: JPEG to WebP (EXT_texture_webp); with `--flat N`, first turned
+  into flat colours for cel shading (edge-preserving smoothing, then N
+  colours without dithering: the painted shading becomes plain areas).
 Positions, joints and indices are kept as they are.
 """
 import json
@@ -128,15 +130,24 @@ def reduce_keys(times, values, rotation):
     return keep
 
 
-def webp(jpeg):
+def webp(jpeg, flat=None):
     with tempfile.TemporaryDirectory() as tmp:
         src, dst = f"{tmp}/in.jpg", f"{tmp}/out.webp"
         open(src, "wb").write(jpeg)
-        subprocess.run(["ffmpeg", "-loglevel", "error", "-i", src, "-quality", str(WEBP_QUALITY), dst], check=True)
+        command = ["ffmpeg", "-loglevel", "error", "-i", src]
+        if flat:
+            command += [
+                "-filter_complex",
+                "bilateral=sigmaS=6:sigmaR=0.12,split[a][b];"
+                f"[a]palettegen=max_colors={flat}:stats_mode=full:reserve_transparent=0[p];"
+                "[b][p]paletteuse=dither=none,median=radius=1,format=rgb24",
+            ]
+        command += ["-quality", str(WEBP_QUALITY), dst]
+        subprocess.run(command, check=True)
         return open(dst, "rb").read()
 
 
-def main(src, dst):
+def main(src, dst, flat=None):
     gltf, binary = load(src)
     out = Writer()
 
@@ -208,7 +219,7 @@ def main(src, dst):
         view = gltf["bufferViews"][image["bufferView"]]
         raw = binary[view.get("byteOffset", 0) : view.get("byteOffset", 0) + view["byteLength"]]
         if image.get("mimeType") == "image/jpeg":
-            raw = webp(raw)
+            raw = webp(raw, flat)
             image["mimeType"] = "image/webp"
             used.add("EXT_texture_webp")
         image["bufferView"] = out.view(raw)
@@ -236,4 +247,10 @@ def main(src, dst):
 
 
 if __name__ == "__main__":
-    main(*sys.argv[1:3])
+    args = sys.argv[1:]
+    flat = None
+    if "--flat" in args:
+        at = args.index("--flat")
+        flat = int(args[at + 1])
+        del args[at : at + 2]
+    main(args[0], args[1], flat)

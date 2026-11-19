@@ -174,11 +174,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   on the drawn ground (short downward raycast; bridges and rope decks
   included, water waded). HUD line `Character`.
 - Character look: sun shadow (the shadow map is redrawn every frame while
-  a character is on the map), toon shading (3 light bands, rim light) and
-  a thin ink outline (inverted hull of the skinned mesh).
+  a character is on the map) and anime-style cel shading: flat-colour
+  texture (`compress_glb.py --flat 12`), one sharp light / shade boundary,
+  tinted shade, rim light, outline about 1 pixel wide at any zoom in a
+  darker shade of the texture (inverted hull of the skinned mesh).
+  Character height 1.6 units (stands need 4 free levels).
 - `H` shows or hides all the overlays (HUD, pickers, cut slider).
 - Walk area (`core/navigation/walkArea.ts`): stands (solid, not water or
-  foliage, 3 free levels above, shallow water allowed), 8-way moves of at
+  foliage, 4 free levels above, shallow water allowed), 8-way moves of at
   most 2 levels without corner cutting, A* paths, connected regions, spawn
   point.
 - `tooling/compress_glb.py`: shrinks skinned glTF models without a

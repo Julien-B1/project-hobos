@@ -23,8 +23,8 @@ import { isAir, materialOf } from '../voxel'
 import type { VoxelMap } from '../voxelMap'
 import { CHUNK_SIZE } from '../coords'
 
-/** Free levels needed above a stand (1.5 world units: a character's height). */
-export const CLEARANCE = 3
+/** Free levels needed above a stand (2 world units: a character's height, 1.6, and some). */
+export const CLEARANCE = 4
 
 /** Largest height difference between neighbouring stands, in levels (1 world unit). */
 export const MAX_STEP = 2

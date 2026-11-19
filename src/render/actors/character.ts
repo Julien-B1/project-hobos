@@ -34,7 +34,7 @@ import { FootIk } from './footIk'
 import { createOutlineMaterial, createToonMaterial } from './toonMaterial'
 
 /** Character height, in world units (a cell is 1 unit wide). */
-export const CHARACTER_HEIGHT = 1.35
+export const CHARACTER_HEIGHT = 1.6
 
 /** Height of the source model, in model units (top of the head). */
 const MODEL_HEIGHT = 1
@@ -320,11 +320,12 @@ export class Character {
     this.model.traverse((o) => {
       if (o instanceof Mesh) meshes.push(o)
     })
-    const outline = createOutlineMaterial(cutHeight)
-    this.materials.push(outline)
     for (const mesh of meshes) {
       const source = mesh.material as Material & { map?: Texture | null }
-      const material = createToonMaterial(source.map ?? null, source.side, cutHeight)
+      const map = source.map ?? null
+      const material = createToonMaterial(map, source.side, cutHeight)
+      const outline = createOutlineMaterial(map, cutHeight)
+      this.materials.push(outline)
       source.dispose()
       mesh.material = material
       mesh.castShadow = true

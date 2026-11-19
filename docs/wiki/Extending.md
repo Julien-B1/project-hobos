@@ -74,7 +74,9 @@ generators do not change.
 1. Export a skinned glTF binary (Y up, facing +Z, feet at the origin,
    clips in place: no root motion).
 2. Shrink it on the host: `python3 -I tooling/compress_glb.py in.glb
-src/assets/models/name.glb` (needs numpy and ffmpeg). The output loads
+src/assets/models/name.glb --flat 12` (needs numpy and ffmpeg; `--flat N`
+   turns the painted texture into N flat colours for the cel shading). The
+   output loads
    with the stock `GLTFLoader` (`KHR_mesh_quantization`,
    `EXT_texture_webp`).
 3. Import it with `?url` and pass the idle and walk clip names to
