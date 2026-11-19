@@ -39,3 +39,75 @@ export function worldToLevel(worldY: number): number {
 export function levelToWorld(y: number): number {
   return y * VOXEL_HEIGHT
 }
+
+/** Edge length of a chunk, in voxels (chunks are CHUNK_SIZE^3). */
+export const CHUNK_SIZE = 16
+
+/** Number of voxels in one chunk. */
+export const CHUNK_VOLUME = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE
+
+/** Integer voxel coordinates in world voxel space. */
+export interface VoxelCoord {
+  readonly x: number
+  readonly y: number
+  readonly z: number
+}
+
+/** Integer chunk coordinates (one unit = one chunk = CHUNK_SIZE voxels). */
+export interface ChunkCoord {
+  readonly cx: number
+  readonly cy: number
+  readonly cz: number
+}
+
+/**
+ * Chunk coordinate containing voxel coordinate `v` (one axis).
+ *
+ * Arithmetic shift is a floor division by 16 for any 32-bit integer,
+ * including negatives: -1 >> 4 === -1, -16 >> 4 === -1, -17 >> 4 === -2.
+ */
+export function voxelToChunk(v: number): number {
+  return v >> 4
+}
+
+/**
+ * Position of voxel coordinate `v` inside its chunk (one axis), in [0, 15].
+ *
+ * `& 15` keeps the low 4 bits, which is the positive modulo for any 32-bit
+ * integer: -1 & 15 === 15, -16 & 15 === 0.
+ */
+export function voxelToLocal(v: number): number {
+  return v & (CHUNK_SIZE - 1)
+}
+
+/**
+ * Index of a local voxel in a chunk's flat array.
+ *
+ * Layout is x fastest, then z, then y: one horizontal slice (y level) is a
+ * contiguous block of 256 entries.
+ */
+export function localIndex(lx: number, ly: number, lz: number): number {
+  return lx + lz * CHUNK_SIZE + ly * CHUNK_SIZE * CHUNK_SIZE
+}
+
+/** String key of a chunk, used for map lookups: "cx,cy,cz". */
+export function chunkKey(cx: number, cy: number, cz: number): string {
+  return `${cx},${cy},${cz}`
+}
+
+/**
+ * Parse a key produced by {@link chunkKey}.
+ *
+ * @throws Error when the key is malformed.
+ */
+export function parseChunkKey(key: string): ChunkCoord {
+  const parts = key.split(',').map(Number)
+  const [cx, cy, cz] = parts
+  if (parts.length !== 3 || cx === undefined || cy === undefined || cz === undefined) {
+    throw new Error(`Malformed chunk key "${key}"`)
+  }
+  if (!Number.isInteger(cx) || !Number.isInteger(cy) || !Number.isInteger(cz)) {
+    throw new Error(`Malformed chunk key "${key}"`)
+  }
+  return { cx, cy, cz }
+}

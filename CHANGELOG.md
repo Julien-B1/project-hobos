@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Voxel map core: 16-bit voxel encoding (material / shape / orientation),
+  material ids, 16^3 chunks, sparse `VoxelMap` with lazy chunk creation,
+  removal of emptied chunks and dirty-chunk tracking including border
+  neighbours. Fully unit-tested, negative coordinates included.
+
 ### Changed
 
 - Branch model: `master` holds only the README, work happens on `dev`.
