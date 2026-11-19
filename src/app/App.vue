@@ -8,13 +8,15 @@
  * The map settings live here: the map picker replaces them and bumps the
  * canvas `key`, so Vue unmounts GameCanvas (disposing its engine and input
  * bindings) and mounts a fresh one. Time of day, cut and grid are held here
- * too, so they carry over to the new map.
+ * too, so they carry over to the new map. `H` shows or hides all the
+ * overlays (screenshots, a clean view).
  */
-import { ref, shallowRef } from 'vue'
+import { onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import type { EngineHudState } from '@/render/engine'
 import type { TimeOfDay } from '@/render/timeOfDay'
 import type { SessionInfo } from '@/app/session'
 import { readUrlFlags, withMapParams, type MapSettings } from '@/app/config'
+import { isTextEntryTarget } from '@/app/input/bindings'
 import GameCanvas from './components/GameCanvas.vue'
 import DebugHud from './components/DebugHud.vue'
 import TimeOfDayPicker from './components/TimeOfDayPicker.vue'
@@ -67,6 +69,22 @@ function onApplyMap(settings: MapSettings): void {
     pathname + withMapParams(search, settings) + hash,
   )
 }
+
+/** Whether the overlays (HUD, pickers, cut slider) are shown; `H` flips it. */
+const overlays = ref(true)
+
+function onKeyDown(e: KeyboardEvent): void {
+  if (e.code !== 'KeyH' || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return
+  if (isTextEntryTarget(e.target)) return
+  overlays.value = !overlays.value
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', onKeyDown)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeyDown)
+})
 </script>
 
 <template>
@@ -80,10 +98,12 @@ function onApplyMap(settings: MapSettings): void {
       @hud="onHud"
       @session="onSession"
     />
-    <DebugHud :state="hud" :session="session" />
-    <TimeOfDayPicker v-model="timeOfDay" />
-    <CutSlider v-model="cutHeight" />
-    <MapPicker :settings="mapSettings" :session="session" @apply="onApplyMap" />
+    <template v-if="overlays">
+      <DebugHud :state="hud" :session="session" />
+      <TimeOfDayPicker v-model="timeOfDay" />
+      <CutSlider v-model="cutHeight" />
+      <MapPicker :settings="mapSettings" :session="session" @apply="onApplyMap" />
+    </template>
   </main>
 </template>
 

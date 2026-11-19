@@ -603,7 +603,8 @@ export class Engine {
       // Hidden parts no longer cast shadows, the cap does.
       this.sunShadow.invalidate()
     }
-    this.sunShadow.update(this.rig.focus, this.rig.currentDistance, rebuilt)
+    // An animated character casts a moving shadow: redraw the map every frame.
+    this.sunShadow.update(this.rig.focus, this.rig.currentDistance, rebuilt || character !== null)
     // Pick every frame: the camera may move under a still cursor.
     this.updateHover()
     this.handle.renderer.render(this.scene, this.rig.camera)

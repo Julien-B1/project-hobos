@@ -334,10 +334,14 @@ trees and grid. Shadow quality barely changes GPU time; `high` costs about
   it is heading to) to the stand nearest the hovered surface. Each frame
   it walks towards the next cell centre at the walk clip's ground speed
   and a short downward ray on the chunk meshes (water left out) puts its
-  feet on the drawn ground. It casts no shadow-map shadow (the map is only
-  redrawn when the scene changes; a moving character would redraw it
-  every frame): a soft blob decal instead, plus the selection ring, both
-  laid along the ground normal.
+  feet on the drawn ground. It casts a sun shadow: while a character is on
+  the map the shadow map is redrawn every frame (one depth pass of the
+  visible chunks; measure it with probe `1`). Toon shading
+  (`actors/toonMaterial.ts`): `MeshToonNodeMaterial` with a 3-step
+  gradient, a warm rim light and an ink outline drawn as an inverted hull
+  (a second skinned mesh on the same geometry and skeleton, pushed out
+  along the skinned normals, back faces only). The selection ring is laid
+  along the ground normal.
   After the mixer, `FootIk` plants the feet: each foot probes the ground
   under it (decks and stones through their structure surface, never
   between planks), the body is lowered by the largest drop needed, each leg

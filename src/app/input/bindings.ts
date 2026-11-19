@@ -14,6 +14,7 @@
  * | NumpadAdd / NumpadSubtract | + / - (pad)  | Zoom in / out (held)       |
  * | KeyC or Home               | C or Home    | Reset view (animated)      |
  * | KeyG                       | G            | Show / hide the grid       |
+ * | KeyH                       | H            | Show / hide the overlays   |
  * | Digit1 .. Digit6           | 1 .. 6 (row) | Performance probes (debug) |
  * | Arrow keys                 | Arrow keys   | Same as W/A/S/D            |
  *

@@ -172,9 +172,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it (ring at its feet), right click sends it there along the shortest
   path, walking and turning with the walk clip matched to its speed, feet
   on the drawn ground (short downward raycast; bridges and rope decks
-  included, water waded). Soft blob shadow instead of shadow-map shadows
-  (the shadow map is only redrawn when the scene changes). HUD line
-  `Character`.
+  included, water waded). HUD line `Character`.
+- Character look: sun shadow (the shadow map is redrawn every frame while
+  a character is on the map), toon shading (3 light bands, rim light) and
+  a thin ink outline (inverted hull of the skinned mesh).
+- `H` shows or hides all the overlays (HUD, pickers, cut slider).
 - Walk area (`core/navigation/walkArea.ts`): stands (solid, not water or
   foliage, 3 free levels above, shallow water allowed), 8-way moves of at
   most 2 levels without corner cutting, A* paths, connected regions, spawn

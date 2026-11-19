@@ -4,24 +4,23 @@
  *
  * Layer: render. The model's materials are replaced by node materials that
  * end with the scene's output encoding and honour the cut height, like the
- * terrain. The character casts no shadow map shadow (it moves every frame,
- * and the shadow map is only redrawn when the scene changes): a soft blob
- * under the feet stands in for it. A ring at the feet shows the selection.
+ * terrain: toon shading with an ink outline (`toonMaterial.ts`). It casts
+ * and receives sun shadows (the engine redraws the shadow map every frame
+ * while a character is on the map). A ring at the feet shows the selection.
  *
  * Model conventions (Mixamo rig, see `tooling/compress_glb.py`): Y up,
  * facing +Z, feet at the origin, about 1 unit tall, walk clip in place.
  */
-import { float, length, positionWorld, smoothstep, uniform, uv, vec2 } from 'three/tsl'
+import { positionWorld, uniform } from 'three/tsl'
 import {
   AnimationMixer,
-  CircleGeometry,
   DoubleSide,
   Group,
   LoopRepeat,
   Mesh,
   MeshBasicNodeMaterial,
-  MeshStandardNodeMaterial,
   RingGeometry,
+  SkinnedMesh,
   Vector3,
   type AnimationAction,
   type AnimationClip,
@@ -32,6 +31,7 @@ import {
 } from 'three/webgpu'
 import { encodeOutput } from '../outputEncoding'
 import { FootIk } from './footIk'
+import { createOutlineMaterial, createToonMaterial } from './toonMaterial'
 
 /** Character height, in world units (a cell is 1 unit wide). */
 export const CHARACTER_HEIGHT = 1.35
@@ -57,12 +57,11 @@ const TURN_SPEED = 10
 /** Cross-fade between idle and walk, in seconds. */
 const FADE = 0.25
 
-/** Lift of the ring and the blob over the ground, in world units. */
+/** Lift of the ring over the ground, in world units. */
 const DECAL_LIFT = 0.04
 
-/** Radius of the selection ring and of the blob shadow, in world units. */
+/** Radius of the selection ring (and of the body, for picking), in world units. */
 const RING_RADIUS = 0.45
-const BLOB_RADIUS = 0.42
 
 /** Names of the clips in the model (Tripo export). */
 export interface CharacterClips {
@@ -98,7 +97,8 @@ export class Character {
   private readonly idle: AnimationAction
   private readonly walkAction: AnimationAction
   private readonly ring: Mesh
-  private readonly blob: Mesh
+  /** Whether the ring has been laid at least once. */
+  private placed = false
   /** Ring opacity: pulses while selected. */
   private readonly ringOpacity = uniform(0)
   private readonly materials: Material[] = []
@@ -148,10 +148,6 @@ export class Character {
     this.mixer.update(0)
     this.feet.captureStance()
 
-    const blob = blobMaterial(cutHeight)
-    this.materials.push(blob)
-    this.blob = decal(new CircleGeometry(BLOB_RADIUS, 24), blob)
-    this.blob.name = 'character-blob'
     this.ring = decal(
       new RingGeometry(RING_RADIUS * 0.82, RING_RADIUS, 48),
       this.ringMaterial(cutHeight),
@@ -162,7 +158,7 @@ export class Character {
 
   /** Decals that lie on the ground (add them to the scene next to {@link root}). */
   get decals(): readonly Mesh[] {
-    return [this.blob, this.ring]
+    return [this.ring]
   }
 
   /** Whether the character is selected (ring shown). */
@@ -231,17 +227,15 @@ export class Character {
     this.mixer.update(dt)
     this.ringOpacity.value = 0.65 + 0.25 * Math.sin(this.time * 4)
     const moved = this.advance(dt, ground)
-    if (moved || !this.blob.userData.placed) {
+    if (moved || !this.placed) {
       const p = this.root.position
       const hit = ground(p.x, p.z, this.expectedY)
       // Mid-hop the feet follow the arc (set by advance), not the ground.
       if (hit && !this.hop) p.y = hit.y
       const normal = hit?.normal ?? UP
-      for (const d of [this.blob, this.ring]) {
-        d.position.set(p.x, p.y, p.z).addScaledVector(normal, DECAL_LIFT)
-        d.quaternion.setFromUnitVectors(UP, normal)
-      }
-      this.blob.userData.placed = true
+      this.ring.position.set(p.x, p.y, p.z).addScaledVector(normal, DECAL_LIFT)
+      this.ring.quaternion.setFromUnitVectors(UP, normal)
+      this.placed = true
     }
     this.root.updateMatrixWorld(true)
     this.feet.update(dt, this.root.position.y, ground, !this.hop, !this.walking)
@@ -251,7 +245,6 @@ export class Character {
   /** Release geometries and materials (textures included). */
   dispose(): void {
     this.mixer.stopAllAction()
-    this.blob.geometry.dispose()
     this.ring.geometry.dispose()
     for (const m of this.materials) m.dispose()
     this.model.traverse((o) => {
@@ -318,28 +311,39 @@ export class Character {
   }
 
   /**
-   * Replace the model's materials: same texture, node materials with the
-   * scene's output encoding, cut at the cut height. Meshes receive the sun's
-   * shadow but cast none (see the module comment).
+   * Replace the model's materials: same texture, toon shading with the
+   * scene's output encoding, cut at the cut height; add an ink outline
+   * (inverted hull) per skinned mesh. Meshes cast and receive sun shadows.
    */
   private prepareMaterials(cutHeight: UniformNode<'float'>): void {
+    const meshes: Mesh[] = []
     this.model.traverse((o) => {
-      if (!(o instanceof Mesh)) return
-      const source = o.material as Material & { map?: Texture | null }
-      const material = new MeshStandardNodeMaterial({
-        map: source.map ?? null,
-        roughness: 0.85,
-        metalness: 0,
-        side: source.side,
-      })
-      material.maskNode = positionWorld.y.lessThan(cutHeight)
-      encodeOutput(material)
-      source.dispose()
-      o.material = material
-      o.castShadow = false
-      o.receiveShadow = true
-      this.materials.push(material)
+      if (o instanceof Mesh) meshes.push(o)
     })
+    const outline = createOutlineMaterial(cutHeight)
+    this.materials.push(outline)
+    for (const mesh of meshes) {
+      const source = mesh.material as Material & { map?: Texture | null }
+      const material = createToonMaterial(source.map ?? null, source.side, cutHeight)
+      source.dispose()
+      mesh.material = material
+      mesh.castShadow = true
+      mesh.receiveShadow = true
+      this.materials.push(material)
+      if (mesh instanceof SkinnedMesh) {
+        const hull = new SkinnedMesh(mesh.geometry, outline)
+        hull.name = `${mesh.name} outline`
+        hull.bind(mesh.skeleton, mesh.bindMatrix)
+        hull.bindMode = mesh.bindMode
+        hull.position.copy(mesh.position)
+        hull.quaternion.copy(mesh.quaternion)
+        hull.scale.copy(mesh.scale)
+        hull.castShadow = false
+        hull.receiveShadow = false
+        hull.raycast = () => undefined
+        mesh.parent?.add(hull)
+      }
+    }
   }
 
   /** Material of the selection ring: bright, pulsing, drawn over the ground. */
@@ -361,23 +365,10 @@ export class Character {
 const UP = new Vector3(0, 1, 0)
 
 /** A flat mesh laid on the ground (built in the XZ plane, facing up). */
-function decal(geometry: CircleGeometry | RingGeometry, material: Material): Mesh {
+function decal(geometry: RingGeometry, material: Material): Mesh {
   geometry.rotateX(-Math.PI / 2)
   const mesh = new Mesh(geometry, material)
   mesh.renderOrder = 1
   mesh.raycast = () => undefined
   return mesh
-}
-
-/** Soft dark disc under the feet, darker in the middle. */
-function blobMaterial(cutHeight: UniformNode<'float'>): MeshBasicNodeMaterial {
-  const material = new MeshBasicNodeMaterial({
-    color: 0x000000,
-    transparent: true,
-    depthWrite: false,
-  })
-  const r = length(uv().sub(vec2(0.5, 0.5))).mul(2)
-  material.opacityNode = smoothstep(float(1), float(0.25), r).mul(0.45)
-  material.maskNode = positionWorld.y.lessThan(cutHeight)
-  return encodeOutput(material)
 }

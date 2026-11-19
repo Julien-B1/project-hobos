@@ -81,6 +81,7 @@ Keys are bound by physical position: the same keys work on AZERTY and QWERTY.
 | Zoom                   | Mouse wheel, `R` / `F`, numpad `+` / `-`                                |
 | Reset view             | `C` or `Home`                                                           |
 | Show / hide the grid   | `G`                                                                     |
+| Show / hide overlays   | `H` (HUD, pickers, cut slider)                                          |
 | Performance probes     | `1` to `6` (shadows, foliage, scatter, water, terrain, half resolution) |
 | Select the character   | Left click on it (left click elsewhere clears the selection)            |
 | Move the character     | Right click on the destination (character selected)                     |
