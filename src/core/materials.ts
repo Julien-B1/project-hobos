@@ -34,22 +34,21 @@ export function materialName(id: number): string {
 }
 
 /**
- * Natural materials: terrain and vegetation, as opposed to built or fluid
- * ones (wood structures, water). The renderer draws natural materials with
- * the smooth terrain mesher and the others as blocks, so a wooden bridge or
- * a staircase keeps its sharp edges while hills are smoothed.
+ * Terrain materials: ground that is drawn as a faceted height surface
+ * (grass, dirt, stone, rock, sand, path). Everything else is drawn as
+ * blocks: built structures (wood: bridges, trunks, future stairs), leaves
+ * and water, so they keep sharp edges.
  */
-const NATURAL: ReadonlySet<number> = new Set([
+const TERRAIN: ReadonlySet<number> = new Set([
   Material.GRASS,
   Material.DIRT,
   Material.STONE,
   Material.ROCK,
   Material.SAND,
   Material.PATH,
-  Material.LEAVES,
 ])
 
-/** True for natural (smoothed) materials, see {@link NATURAL}. */
-export function isNaturalMaterial(id: number): boolean {
-  return NATURAL.has(id)
+/** True for terrain materials, see {@link TERRAIN}. */
+export function isTerrainMaterial(id: number): boolean {
+  return TERRAIN.has(id)
 }

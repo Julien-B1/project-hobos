@@ -38,12 +38,15 @@ export class ChunkRenderer {
   /**
    * Rebuild every dirty chunk. Call once per frame.
    *
-   * @returns Keys of the chunks that were rebuilt (or removed), for debug.
+   * @returns Keys of the chunks whose mesh was rebuilt or removed, for debug.
+   *   Dirty keys of chunks that have no voxels and had no mesh are skipped.
    */
   update(): string[] {
-    const keys = this.map.drainDirty()
-    for (const key of keys) this.rebuild(key)
-    return keys
+    const touched: string[] = []
+    for (const key of this.map.drainDirty()) {
+      if (this.rebuild(key)) touched.push(key)
+    }
+    return touched
   }
 
   /** Release GPU resources. */
@@ -54,8 +57,8 @@ export class ChunkRenderer {
     this.material.dispose()
   }
 
-  /** Rebuild one chunk: replace, create or remove its mesh. */
-  private rebuild(key: string): void {
+  /** Rebuild one chunk: replace, create or remove its mesh. Returns false when nothing existed. */
+  private rebuild(key: string): boolean {
     const chunk = this.map.getChunk(key)
     const existing = this.meshes.get(key)
     const data = chunk ? this.mesher.mesh(this.map, chunk) : null
@@ -67,20 +70,21 @@ export class ChunkRenderer {
         existing.geometry.dispose()
         this.meshes.delete(key)
       }
-      return
+      return Boolean(existing) || Boolean(chunk)
     }
 
     const geometry = toGeometry(data)
     if (existing) {
       existing.geometry.dispose()
       existing.geometry = geometry
-      return
+      return true
     }
     const mesh = new Mesh(geometry, this.material)
     mesh.name = `chunk ${key}`
     mesh.userData.chunkKey = key
     this.meshes.set(key, mesh)
     this.group.add(mesh)
+    return true
   }
 }
 

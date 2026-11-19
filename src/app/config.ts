@@ -50,7 +50,7 @@ export const config = {
  * - `?map=<id>` picks a test map (`reference` by default, `flat`, `organic`).
  * - `?seed=<integer>` changes the seed of procedural maps (`organic`).
  * - `?mesher=blocky` renders every voxel as its exact block shape instead of
- *   the default smooth terrain.
+ *   the default faceted terrain.
  */
 export function readUrlFlags(search: string = window.location.search): {
   forceWebGL: boolean
@@ -65,6 +65,6 @@ export function readUrlFlags(search: string = window.location.search): {
     forceWebGL: params.get('forceWebGL') === '1',
     map: isTestMapId(map) ? map : 'reference',
     seed: Number.isFinite(seed) ? seed : undefined,
-    mesher: params.get('mesher') === 'blocky' ? 'blocky' : 'smooth',
+    mesher: params.get('mesher') === 'blocky' ? 'blocky' : 'faceted',
   }
 }

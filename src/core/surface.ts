@@ -81,7 +81,7 @@ const MAX_COLUMN_WALK = 256
  * 1. Push the hit point slightly inside the mesh (against the normal) and
  *    floor it into voxel coordinates (y divided by the voxel height). This
  *    works for sloped faces too, whose normals are not axis-aligned. With
- *    the smooth terrain mesh the surface does not follow voxel faces
+ *    the faceted terrain mesh the surface does not follow voxel faces
  *    exactly, so if that voxel is air the point keeps moving inwards (up to
  *    {@link MAX_INWARD_SEARCH}) until it meets a solid voxel.
  * 2. Choose the surface in the same column:
@@ -124,6 +124,41 @@ export function resolveHit(
     surface: { x, y: surfaceY, z },
     surfaceValue: map.get(x, surfaceY, z),
   }
+}
+
+/**
+ * Resolve a hit on an upward-facing terrain facet by column instead of by
+ * normal: the faceted terrain surface can sit above or below the voxel tops
+ * (corners are averaged with the neighbours), so the voxel under the hit
+ * point is not reliable. Among the surfaces of the column under the point,
+ * pick the one whose top is closest in height to the hit.
+ *
+ * @param point Hit point, world units.
+ * @param searchLevels How far above and below the hit to look, in levels.
+ */
+export function resolveColumnHit(
+  map: VoxelMap,
+  point: { x: number; y: number; z: number },
+  searchLevels = 16,
+): SurfaceHit | null {
+  const x = Math.floor(point.x)
+  const z = Math.floor(point.z)
+  const level = point.y / VOXEL_HEIGHT
+  const surfaces = columnSurfaces(
+    map,
+    x,
+    z,
+    Math.floor(level) - searchLevels,
+    Math.floor(level) + searchLevels,
+  )
+  let best: number | null = null
+  for (const y of surfaces) {
+    if (best === null || Math.abs(y + 1 - level) < Math.abs(best + 1 - level)) best = y
+  }
+  if (best === null) return null
+  const value = map.get(x, best, z)
+  const voxel = { x, y: best, z }
+  return { voxel, voxelValue: value, facing: 'top', surface: voxel, surfaceValue: value }
 }
 
 /** First solid voxel met when moving from `point` against `normal`, or null. */

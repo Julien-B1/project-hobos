@@ -8,9 +8,9 @@
  */
 import { Raycaster, Vector2, Vector3, type Scene } from 'three/webgpu'
 import { VOXEL_HEIGHT, type VoxelCoord } from '@/core/coords'
-import { isNaturalMaterial, materialName } from '@/core/materials'
+import { isTerrainMaterial, materialName } from '@/core/materials'
 import { shapeDefinition, topHeightAt, voxelTopCorners } from '@/core/shapes'
-import { resolveHit, type HitFacing, type SurfaceHit } from '@/core/surface'
+import { resolveColumnHit, resolveHit, type HitFacing, type SurfaceHit } from '@/core/surface'
 import { materialOf, shapeOf } from '@/core/voxel'
 import type { VoxelMap } from '@/core/voxelMap'
 import { CameraRig, type CameraRigSettings } from './cameraRig'
@@ -70,7 +70,7 @@ export interface EngineOptions {
   /** Voxel terrain to display and pick on. The engine only reads it. */
   readonly map: VoxelMap
   /**
-   * Terrain rendering: `smooth` (natural terrain smoothed, structures and
+   * Terrain rendering: `faceted` (terrain as a low-poly height surface, structures and
    * water as blocks) or `blocky` (every voxel as its exact shape).
    */
   readonly mesher: TerrainMesherKind
@@ -79,7 +79,7 @@ export interface EngineOptions {
 }
 
 /** Available terrain rendering modes, see {@link EngineOptions.mesher}. */
-export type TerrainMesherKind = 'smooth' | 'blocky'
+export type TerrainMesherKind = 'faceted' | 'blocky'
 
 /** Length of the FPS measurement window, in milliseconds. */
 const FPS_WINDOW_MS = 500
@@ -105,7 +105,7 @@ export class Engine {
   /** Latest resolved hit under the cursor. */
   private hit: SurfaceHit | null = null
   private readonly raycaster = new Raycaster()
-  /** Short vertical rays used to drape the highlight on the smooth mesh. */
+  /** Short vertical rays used to drape the highlight on the faceted terrain. */
   private readonly probe = new Raycaster()
   /** Hover key and rebuild sequence the highlight was last draped for. */
   private highlightKey = ''
@@ -125,7 +125,7 @@ export class Engine {
     this.rig = new CameraRig(options.camera)
 
     const mesher =
-      options.mesher === 'smooth'
+      options.mesher === 'faceted'
         ? new HybridMesher(materialColor)
         : new CulledMesher(materialColor)
     this.chunks = new ChunkRenderer(options.map, mesher)
@@ -234,7 +234,14 @@ export class Engine {
       const hit = this.raycaster.intersectObjects(this.chunks.pickables, false)[0]
       // Chunk meshes have an identity transform: the face normal is already in
       // world space. It is the geometric normal of the hit triangle.
-      if (hit?.face) resolved = resolveHit(this.options.map, hit.point, hit.face.normal)
+      if (hit?.face) {
+        // Faceted terrain tops do not match voxel tops: resolve them by column.
+        const facetTop = this.options.mesher === 'faceted' && hit.face.normal.y > 0.3
+        resolved = facetTop
+          ? (resolveColumnHit(this.options.map, hit.point) ??
+            resolveHit(this.options.map, hit.point, hit.face.normal))
+          : resolveHit(this.options.map, hit.point, hit.face.normal)
+      }
     }
     this.hit = resolved
 
@@ -258,7 +265,7 @@ export class Engine {
   /**
    * Height function of the targeted surface cell, in world units.
    *
-   * Blocky tops follow the voxel's corner heights. Smooth terrain does not
+   * Blocky tops follow the voxel's corner heights. Faceted terrain does not
    * match voxel tops exactly, so its height is measured on the mesh with a
    * short downward ray per sample, starting just above the voxel surface
    * (below any bridge deck or tunnel ceiling above it). Falls back to the
@@ -268,9 +275,9 @@ export class Engine {
     const { x, y, z } = hit.surface
     const corners = voxelTopCorners(hit.surfaceValue)
     const voxelTop: SurfaceSampler = (fx, fz) => (y + topHeightAt(corners, fx, fz)) * VOXEL_HEIGHT
-    const smooth =
-      this.options.mesher === 'smooth' && isNaturalMaterial(materialOf(hit.surfaceValue))
-    if (!smooth) return voxelTop
+    const faceted =
+      this.options.mesher === 'faceted' && isTerrainMaterial(materialOf(hit.surfaceValue))
+    if (!faceted) return voxelTop
 
     const targets = this.chunks.pickables
     const startY = (y + 1) * VOXEL_HEIGHT + 0.75

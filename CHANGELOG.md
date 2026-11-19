@@ -20,13 +20,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (outer and inner corners, saddles), with a shared top triangulation rule
   (`topDiagonal`) for meshing, picking and the highlight;
   `shapeForCornerMask` picks FULL / SLOPE / CORNERS for a mask.
-- Smooth terrain rendering (default): `SurfaceNetsMesher` (surface nets on a
-  blurred density field) for natural materials, blocks for wood and water,
-  combined by `HybridMesher`; `?mesher=blocky` for exact blocks. Seamless
-  across chunks, rounded corners, smooth steep slopes and cliffs.
-- `isNaturalMaterial()` classification; hover highlight draped on the
-  smooth surface; organic map cliff zones with terraced plateaus and steep
-  rock faces.
+- Faceted low-poly terrain rendering (default): `TerrainMesher` draws terrain
+  materials as flat-shaded facets whose corner heights are shared averages
+  of connected neighbouring runs (`core/terrainSurface.ts`), with walls only
+  where needed, overhang undersides and shore water quads; wood, leaves and
+  water stay blocks (`HybridMesher`); `?mesher=blocky` for exact blocks.
+- `isTerrainMaterial()` classification; `resolveColumnHit()` for picking on
+  facets; hover highlight draped on the terrain; organic map cliff zones
+  with terraced plateaus and steep faces.
 
 ### Changed
 
@@ -39,10 +40,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   beaches near water.
 - Lighting: lower sun from the north-west, softer ambient, so gentle slopes
   read better.
-- Dirty tracking marks every neighbour chunk within 2 voxels (diagonals
-  included), as the smooth mesher reads that far.
+- Dirty tracking marks the chunks above and below plus side neighbours
+  within 2 voxels (diagonals included), as the faceted mesher reads whole
+  column runs.
 - `resolveHit` searches inwards along the normal when the hit point is in
-  front of the voxel (smooth surfaces).
+  front of the voxel (faceted surfaces).
+- `ChunkRenderer.update()` reports only chunks whose mesh actually changed.
 - Organic map step limit raised to 2 levels (8 in cliff zones).
 
 - Culled mesher reads in-chunk neighbours directly instead of through the

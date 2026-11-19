@@ -1,0 +1,132 @@
+import { describe, expect, it } from 'vitest'
+import { Material, isTerrainMaterial } from '@/core/materials'
+import { materialOf, packVoxel, type Voxel } from '@/core/voxel'
+import { VoxelMap } from '@/core/voxelMap'
+import type { MeshData } from './mesher'
+import { TerrainMesher, subtract } from './terrainMesher'
+
+const mesher = new TerrainMesher({
+  isTerrain: (v: Voxel) => isTerrainMaterial(materialOf(v)),
+  colorOf: () => [1, 1, 1],
+})
+const GRASS = packVoxel(Material.GRASS)
+
+const meshAll = (map: VoxelMap): MeshData[] => [...map.chunks()].map((c) => mesher.mesh(map, c))
+const at = (arr: Float32Array, v: number, c: number): number => arr[v * 3 + c] ?? NaN
+const key = (m: MeshData, v: number): string =>
+  [0, 1, 2].map((c) => at(m.positions, v, c).toFixed(4)).join(',')
+
+/** Every triangle edge (by position) is shared by exactly two triangles. */
+function expectClosed(meshes: MeshData[]): void {
+  const edges = new Map<string, number>()
+  for (const m of meshes) {
+    for (let t = 0; t < m.indices.length; t += 3) {
+      const tri = [0, 1, 2].map((o) => key(m, m.indices[t + o] ?? 0))
+      for (let e = 0; e < 3; e++) {
+        const a = tri[e] ?? ''
+        const b = tri[(e + 1) % 3] ?? ''
+        const k = a < b ? `${a}|${b}` : `${b}|${a}`
+        edges.set(k, (edges.get(k) ?? 0) + 1)
+      }
+    }
+  }
+  const open = [...edges.values()].filter((c) => c !== 2)
+  expect(open).toHaveLength(0)
+}
+
+/** Fill a box of grass, half-open ranges. */
+function box(
+  map: VoxelMap,
+  x0: number,
+  x1: number,
+  y0: number,
+  y1: number,
+  z0: number,
+  z1: number,
+): void {
+  for (let x = x0; x < x1; x++)
+    for (let y = y0; y < y1; y++) for (let z = z0; z < z1; z++) map.set(x, y, z, GRASS)
+}
+
+describe('subtract', () => {
+  it('removes covered parts of an interval', () => {
+    expect(subtract([0, 10], [[2, 4]])).toEqual([
+      [0, 2],
+      [4, 10],
+    ])
+    expect(subtract([0, 10], [[-Infinity, 12]])).toEqual([])
+    expect(subtract([5, 6], [[0, 2]])).toEqual([[5, 6]])
+  })
+})
+
+describe('TerrainMesher', () => {
+  it('meshes flat ground as flat triangles at the top level', () => {
+    const map = new VoxelMap()
+    box(map, 0, 8, 0, 4, 0, 8)
+    const [m] = meshAll(map)
+    if (!m) throw new Error('no mesh')
+    let tops = 0
+    for (let v = 0; v < m.positions.length / 3; v++) {
+      if (at(m.normals, v, 1) < 0.99) continue // walls
+      tops++
+      expect(at(m.positions, v, 1)).toBeCloseTo(2)
+    }
+    expect(tops).toBeGreaterThan(0)
+  })
+
+  it('builds a closed surface for a floating block', () => {
+    const map = new VoxelMap()
+    box(map, 2, 6, 3, 7, 2, 5)
+    expectClosed(meshAll(map))
+  })
+
+  it('builds a closed surface for a floating hill crossing chunk borders', () => {
+    const map = new VoxelMap()
+    box(map, 10, 22, 4, 8, 10, 22)
+    box(map, 13, 19, 8, 12, 13, 19)
+    box(map, 15, 17, 12, 15, 15, 17)
+    expectClosed(meshAll(map))
+  })
+
+  it('keeps a tunnel open: flat floor, roof underside and inner walls', () => {
+    const map = new VoxelMap()
+    box(map, 0, 10, 2, 12, 0, 10)
+    // Carve a tunnel along X: air at levels 4..6, cells z 4..5.
+    for (let x = 0; x < 10; x++)
+      for (let y = 4; y < 7; y++) for (let z = 4; z < 6; z++) map.set(x, y, z, 0)
+    const [m] = meshAll(map)
+    if (!m) throw new Error('no mesh')
+    let floor = 0
+    let roof = 0
+    let innerWall = 0
+    for (let v = 0; v < m.positions.length / 3; v++) {
+      const [x, y, z] = [0, 1, 2].map((c) => at(m.positions, v, c)) as [number, number, number]
+      const ny = at(m.normals, v, 1)
+      const inside = x > 0.5 && x < 9.5
+      if (inside && z > 4 && z < 6 && ny > 0.99 && Math.abs(y - 2) < 1e-6) floor++
+      if (inside && z >= 4 && z <= 6 && ny < -0.99 && Math.abs(y - 3.5) < 1e-6) roof++
+      const onWall = Math.abs(z - 4) < 1e-6 && Math.abs(ny) < 1e-6
+      if (inside && onWall && y >= 2 - 1e-6 && y <= 3.5 + 1e-6) innerWall++
+    }
+    expect(floor).toBeGreaterThan(0) // floor stays at level 4 (2.0 world units)
+    expect(roof).toBeGreaterThan(0) // roof underside at level 7 (3.5)
+    expect(innerWall).toBeGreaterThan(0) // side wall between floor and roof
+  })
+
+  it('turns a step into a slope (no vertical wall)', () => {
+    const map = new VoxelMap()
+    box(map, 0, 4, 0, 4, 0, 6)
+    box(map, 4, 8, 0, 6, 0, 6)
+    const [m] = meshAll(map)
+    if (!m) throw new Error('no mesh')
+    // No vertical face between x = 4 cells inside the map (z in (0, 6)).
+    for (let t = 0; t < m.indices.length; t += 3) {
+      const vs = [0, 1, 2].map((o) => m.indices[t + o] ?? 0)
+      const xs = vs.map((v) => at(m.positions, v, 0))
+      const zs = vs.map((v) => at(m.positions, v, 2))
+      const vertical = xs.every((x) => Math.abs(x - 4) < 1e-6)
+      const inside = zs.every((z) => z > 0 && z < 6)
+      expect(vertical && inside).toBe(false)
+    }
+  })
+})

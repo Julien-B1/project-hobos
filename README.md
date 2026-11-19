@@ -53,7 +53,7 @@ make sh          # shell inside the container
 URL switches: `?forceWebGL=1` forces the WebGL 2 backend; `?map=flat` or
 `?map=organic` (with optional `&seed=42`) loads another test map instead of
 the reference map; `?mesher=blocky` shows exact voxel blocks instead of the
-smooth terrain.
+faceted terrain.
 
 ### Controls
 

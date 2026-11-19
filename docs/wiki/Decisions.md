@@ -51,7 +51,7 @@ accepted record: add a new one that supersedes it.
 
 ## ADR-004: Smooth rendering for natural terrain
 
-- **Status:** accepted (2026-11-19)
+- **Status:** superseded by ADR-005 (2026-11-19)
 - **Context.** Per-voxel shapes rise at most one half-height level per
   cell, so steep or diagonal terrain shows stairs and saw teeth, and every
   corner seen from above stays square. The project owner wants smooth hills,
@@ -72,3 +72,25 @@ accepted record: add a new one that supersedes it.
     marks neighbour chunks within that margin, diagonals included.
   - Slopes and corner wedges still matter for logic (walkable ramps) and
     feed the density as partial volume.
+
+## ADR-005: Faceted low-poly terrain
+
+- **Status:** accepted (2026-11-19), supersedes ADR-004
+- **Context.** The surface-nets rendering of ADR-004 looked like modelling
+  clay: blobby shapes, soft shading, merged tree canopies, jagged shores and
+  material colours bleeding across cells. The project owner chose a
+  faceted low-poly look instead.
+- **Decision.** Terrain materials are drawn by `TerrainMesher`: per column
+  run, a top made of two flat-shaded triangles whose corners are shared,
+  averaged heights of connected neighbouring runs (`core/terrainSurface.ts`);
+  vertical walls only where neighbours do not cover; flat undersides for
+  overhangs; water quads over shore cells. Wood, leaves and water stay
+  blocks (`CulledMesher`). `?mesher=blocky` keeps exact blocks.
+- **Consequences.**
+  - Steps of any height become facets; corners seen from above are cut
+    diagonally; crisp low-poly look with flat shading and clear colours.
+  - Tunnels and overhangs keep flat roofs and vertical inner walls.
+  - Rendered tops differ from voxel tops: upward hits are resolved by column
+    (`resolveColumnHit`) and the highlight is draped on the mesh.
+  - Meshing reads whole column runs: dirty tracking always marks the chunks
+    above and below.

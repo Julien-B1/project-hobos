@@ -9,8 +9,8 @@ keep tests and docs in the same commit.
    existing ids.
 2. `src/render/materialPalette.ts`: give it an sRGB colour in `PALETTE`
    (TypeScript fails until you do).
-3. Decide whether it is natural (smooth) or built (blocky): add it to the
-   `NATURAL` set in `src/core/materials.ts` if it should be smoothed.
+3. Decide whether it is terrain (faceted) or blocky: add it to the
+   `TERRAIN` set in `src/core/materials.ts` if it is ground.
 4. Use it in a generator if needed.
 
 ## Add a height-field shape (half slab, corner slope, ...)
@@ -38,9 +38,9 @@ when present. Keep `profileFromCorners` for height-field shapes.
    chunk, output `MeshData` typed arrays. No Three.js import, so it stays
    unit-testable.
 2. Pass it to `ChunkRenderer` in `src/render/engine.ts` (see how
-   `HybridMesher` combines a smooth and a blocky mesher with
+   `HybridMesher` combines the faceted terrain mesher and the blocky mesher with
    `mergeMeshData`).
-3. Reuse the closedness test of `surfaceNetsMesher.test.ts` (every triangle
+3. Reuse the closedness test of `terrainMesher.test.ts` (every triangle
    edge shared by exactly two triangles, across chunk borders).
 4. If the mesher reads further than 2 voxels beyond its chunk, raise
    `DIRTY_MARGIN` in `src/core/voxelMap.ts`.

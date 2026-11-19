@@ -73,9 +73,9 @@ render/chunkRenderer.update()  ── drainDirty() ──> keys to rebuild
         │ for each key
         ▼
 ChunkMesher.mesh(map, chunk) ──> MeshData (typed arrays, no Three.js)
-        │   HybridMesher (default, `?mesher=smooth`):
-        │     natural materials -> SurfaceNetsMesher (smooth, rounded)
-        │     wood, water       -> CulledMesher (blocks, exact shapes)
+        │   HybridMesher (default, faceted):
+        │     terrain materials   -> TerrainMesher (low-poly facets)
+        │     wood, leaves, water -> CulledMesher (blocks, exact shapes)
         │   CulledMesher alone (`?mesher=blocky`)
         ▼
 BufferGeometry on one Mesh per chunk (shared vertex-colour material)
@@ -88,14 +88,19 @@ BufferGeometry on one Mesh per chunk (shared vertex-colour material)
 - Colours come from `render/materialPalette.ts` (sRGB authored, converted to
   linear once), multiplied by a small per-cell jitter; the blocky mesher also
   bakes a per-face shade.
-- **Smooth terrain** (`render/meshing/surfaceNetsMesher.ts`): naive surface
-  nets on a density field. Natural voxels give their solid volume fraction,
-  the field is box-blurred (3 x 3 x 3), one vertex is placed per crossed dual
-  cell and one quad per crossed voxel edge. Edges belong to the chunk of
-  their lower voxel, so chunk meshes join without seams. Normals come from
-  the density gradient (smooth shading). The voxel grid is unchanged: game
-  logic (surfaces, picking) still works on voxels; only the look is smooth.
-- Hover highlight: a 3 x 3 patch draped on the surface cell. On smooth
+- **Faceted terrain** (`render/meshing/terrainMesher.ts`, heights from
+  `core/terrainSurface.ts`): each column is cut into terrain runs; each run
+  top becomes two flat-shaded triangles whose corners are the mean of the
+  connected run tops around that lattice point (a tunnel floor never joins
+  the roof above it). Vertical walls only where the neighbour column does
+  not cover the run, flat undersides for overhangs, and a water quad over
+  shore cells whose facets dip below a neighbouring water surface. Steep
+  triangles use the layer under the top (dirt, rock). The voxel grid is
+  unchanged: game logic still works on voxels; only the look is faceted.
+- Picking on faceted terrain: hits on upward facets are resolved by column
+  (`resolveColumnHit`: surface of that column closest in height), other
+  hits by `resolveHit`.
+- Hover highlight: a 3 x 3 patch draped on the surface cell. On faceted
   terrain its heights are measured with short downward rays on the chunk
   meshes, started just above the voxel surface so a bridge deck or a tunnel
   ceiling above is ignored. Re-draped only when the target or the terrain
@@ -103,8 +108,9 @@ BufferGeometry on one Mesh per chunk (shared vertex-colour material)
 - **Edits** (debug): `src/app/editing/debugEdits.ts` writes to the map from
   the engine's `hoveredHit` (right click removes the touched voxel,
   `Shift` + click places a stone voxel on the surface). The map marks the
-  edited chunk dirty, plus every neighbour chunk within 2 voxels (the smooth
-  mesher reads that far); the next frame rebuilds only those. The HUD shows each rebuild batch (count, keys, time).
+  edited chunk dirty, plus the chunks above and below and the side
+  neighbours within 2 voxels (the faceted mesher reads whole column runs and
+  neighbour columns); the next frame rebuilds only those. The HUD shows each rebuild batch (count, keys, time).
 - How to add materials, shapes, meshers and maps: see [[Extending]].
 
 ## Documentation rules in code

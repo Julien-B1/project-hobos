@@ -18,11 +18,13 @@ function setup(): { map: VoxelMap; hit: SurfaceHit } {
 }
 
 describe('debug edits', () => {
-  it('removes the touched voxel and dirties only its chunk', () => {
+  it('removes the touched voxel and dirties only its chunk column', () => {
     const { map, hit } = setup()
     createDebugEdits(map, () => hit).remove()
     expect(map.get(5, 2, 5)).toBe(AIR)
-    expect(map.drainDirty()).toEqual([chunkKey(0, 0, 0)])
+    expect(map.drainDirty().sort()).toEqual(
+      [chunkKey(0, -1, 0), chunkKey(0, 0, 0), chunkKey(0, 1, 0)].sort(),
+    )
   })
 
   it('places a stone voxel on top of the surface', () => {

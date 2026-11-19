@@ -26,13 +26,13 @@ every platform.
 
 ## Numbers (seed 1337, 128 x 128)
 
-About 140 chunks and 120 k triangles with the culled mesher. Generation
-takes about 0.15 s and meshing about 0.5 s in Node. With the smooth terrain renderer (default) every step looks like a slope;
-cliff zones give steep, rounded faces. Meshing the whole map with the hybrid
-mesher takes about 0.3 to 0.45 s in Node (85 k to 95 k triangles).
+About 130 chunks. Generation takes about 0.15 s; meshing the whole map
+with the default faceted renderer takes about 0.6 to 0.75 s in Node
+(about 100 k triangles). Every step renders as a facet; cliff zones give
+steep faces with bare dirt or rock colours.
 
 ## Limits
 
-- The smooth look is a rendering of the voxels: walkable logic still uses
+- The faceted look is a rendering of the voxels: walkable logic still uses
   voxel surfaces (half-height levels).
 - Water is an opaque block.

@@ -10,11 +10,11 @@
  * a chunk that becomes all-air is removed.
  *
  * Dirty tracking: every effective change marks the voxel's chunk dirty, plus
- * every neighbouring chunk (faces, edges and corners) that lies within
- * {@link DIRTY_MARGIN} voxels of it, because their meshes read voxels across
- * the border: the blocky mesher looks one voxel away (face culling), the
- * smooth mesher two (density blur plus dual cells). The renderer consumes the
- * set with {@link VoxelMap.drainDirty}. A dirty key may name a chunk that does
+ * the neighbouring chunks whose meshes may read it: horizontally those
+ * within {@link DIRTY_MARGIN} voxels (faces, edges and corners), vertically
+ * always the chunk above and below, because the faceted terrain mesher scans
+ * whole column runs across chunk layers. The renderer consumes the set with
+ * {@link VoxelMap.drainDirty}. A dirty key may name a chunk that does
  * not exist (any more): its mesh must then be removed.
  */
 import { Chunk } from './chunk'
@@ -22,8 +22,8 @@ import { CHUNK_SIZE, chunkKey, voxelToChunk, voxelToLocal } from './coords'
 import { AIR, isAir, type Voxel } from './voxel'
 
 /**
- * How far (in voxels) a mesher may read beyond its chunk. A voxel closer than
- * this to a chunk border also dirties the chunk(s) across that border.
+ * How far (in voxels, horizontally) a mesher may read beyond its chunk. A
+ * voxel closer than this to a chunk's side also dirties the chunk(s) across.
  */
 export const DIRTY_MARGIN = 2
 
@@ -64,7 +64,7 @@ export class VoxelMap {
     if (previous === voxel) return false
 
     if (chunk.isEmpty) this.chunkMap.delete(key)
-    this.markDirty(cx, cy, cz, lx, ly, lz)
+    this.markDirty(cx, cy, cz, lx, lz)
     return true
   }
 
@@ -91,14 +91,14 @@ export class VoxelMap {
   }
 
   /**
-   * Mark the chunk and every neighbour chunk within {@link DIRTY_MARGIN}
-   * voxels: per axis the offsets are {0}, plus -1 near the low border and +1
-   * near the high border; all combinations are marked (up to 8 chunks for a
-   * voxel near a chunk corner).
+   * Mark the chunk and its neighbours: along X and Z the offsets are {0},
+   * plus -1 near the low side and +1 near the high side (within
+   * {@link DIRTY_MARGIN}); along Y always {-1, 0, +1}. All combinations are
+   * marked (3 chunks for an interior voxel, up to 12 near a column corner).
    */
-  private markDirty(cx: number, cy: number, cz: number, lx: number, ly: number, lz: number): void {
+  private markDirty(cx: number, cy: number, cz: number, lx: number, lz: number): void {
     const ox = axisOffsets(lx)
-    const oy = axisOffsets(ly)
+    const oy = [0, -1, 1]
     const oz = axisOffsets(lz)
     for (const dx of ox)
       for (const dy of oy)

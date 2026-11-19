@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { REFERENCE_LAYOUT as L, createReferenceMap } from './generators/referenceMap'
 import { Shape } from './shapes'
-import { columnSurfaces, resolveHit, surfaceShape } from './surface'
+import { columnSurfaces, resolveColumnHit, resolveHit, surfaceShape } from './surface'
 import { packVoxel } from './voxel'
 import { VoxelMap } from './voxelMap'
 
@@ -88,5 +88,23 @@ describe('resolveHit with negative coordinates', () => {
     map.set(-1, -1, -1, packVoxel(1))
     const hit = resolveHit(map, { x: -0.5, y: 0, z: -0.5 }, UP)
     expect(hit?.voxel).toEqual({ x: -1, y: -1, z: -1 })
+  })
+})
+
+describe('resolveColumnHit', () => {
+  const map = createReferenceMap()
+
+  it('picks the column surface closest to the hit height', () => {
+    // Bridge column over the path: near the deck -> deck; near the path -> path.
+    expect(resolveColumnHit(map, { x: 23.5, y: 5.3, z: 31.5 })?.surface.y).toBe(L.bridge.deckLevel)
+    expect(resolveColumnHit(map, { x: 23.5, y: 2.4, z: 31.5 })?.surface.y).toBe(L.path.top - 1)
+  })
+
+  it('tolerates a faceted surface drawn between voxel levels', () => {
+    expect(resolveColumnHit(map, { x: 5.5, y: 2.7, z: 5.5 })?.surface).toEqual({ x: 5, y: 5, z: 5 })
+  })
+
+  it('returns null over an empty column', () => {
+    expect(resolveColumnHit(map, { x: -10.5, y: 3, z: -10.5 })).toBeNull()
   })
 })

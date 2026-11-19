@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Material, isNaturalMaterial, materialName } from './materials'
+import { Material, isTerrainMaterial, materialName } from './materials'
 
 describe('materials', () => {
   it('reserves 0 for air', () => {
@@ -17,11 +17,12 @@ describe('materials', () => {
     expect(materialName(250)).toBe('unknown(250)')
   })
 
-  it('separates natural terrain from built and fluid materials', () => {
-    expect(isNaturalMaterial(Material.GRASS)).toBe(true)
-    expect(isNaturalMaterial(Material.ROCK)).toBe(true)
-    expect(isNaturalMaterial(Material.WOOD)).toBe(false)
-    expect(isNaturalMaterial(Material.WATER)).toBe(false)
-    expect(isNaturalMaterial(Material.AIR)).toBe(false)
+  it('separates terrain from built, vegetation and fluid materials', () => {
+    expect(isTerrainMaterial(Material.GRASS)).toBe(true)
+    expect(isTerrainMaterial(Material.ROCK)).toBe(true)
+    expect(isTerrainMaterial(Material.WOOD)).toBe(false)
+    expect(isTerrainMaterial(Material.WATER)).toBe(false)
+    expect(isTerrainMaterial(Material.LEAVES)).toBe(false)
+    expect(isTerrainMaterial(Material.AIR)).toBe(false)
   })
 })
