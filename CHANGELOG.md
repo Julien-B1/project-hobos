@@ -228,6 +228,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Character on decks: its feet stand on the structure's walking surface
+  (`surfaceAt` or the owned voxel's top), never between planks; on
+  stepping stones it hops from stone to stone (`StructureKind.hops`).
 - Hover on a bank under a bridge's end: the cursor lies on the deck (flat
   patch at the walking level) instead of the smoothed ground below it.
 - Ford: boulders rest on the gravel (no longer floating) in line with the

@@ -74,7 +74,12 @@ export interface WalkPoint {
   readonly x: number
   readonly y: number
   readonly z: number
+  /** Reach this point with a hop (stepping stones) instead of walking the ground. */
+  readonly hop?: boolean
 }
+
+/** Height of a hop's arc above the straight line, in world units. */
+const HOP_HEIGHT = 0.3
 
 /** Ground under a point: world height and unit normal, or null when none. */
 export type GroundProbe = (
@@ -103,6 +108,8 @@ export class Character {
   private yaw = 0
   private time = 0
   private selectedFlag = false
+  /** Hop in progress: start point and heights of both ends (world units). */
+  private hop: { x: number; z: number; fromY: number; toY: number } | null = null
 
   /**
    * @param scene The model (glTF scene), used as it is (not cloned).
@@ -176,6 +183,7 @@ export class Character {
   placeAt(p: WalkPoint): void {
     this.root.position.set(p.x, p.y, p.z)
     this.expectedY = p.y
+    this.hop = null
     this.path = []
     this.setWalking(false)
   }
@@ -183,6 +191,7 @@ export class Character {
   /** Walk through `points` (the first one is the next to reach). */
   walk(points: readonly WalkPoint[]): void {
     this.path = [...points]
+    // A hop in progress goes on: the new path starts where it was heading.
     this.setWalking(this.path.length > 0)
   }
 
@@ -214,11 +223,12 @@ export class Character {
     this.time += dt
     this.mixer.update(dt)
     this.ringOpacity.value = 0.65 + 0.25 * Math.sin(this.time * 4)
-    const moved = this.advance(dt)
+    const moved = this.advance(dt, ground)
     if (moved || !this.blob.userData.placed) {
       const p = this.root.position
       const hit = ground(p.x, p.z, this.expectedY)
-      if (hit) p.y = hit.y
+      // Mid-hop the feet follow the arc (set by advance), not the ground.
+      if (hit && !this.hop) p.y = hit.y
       const normal = hit?.normal ?? UP
       for (const d of [this.blob, this.ring]) {
         d.position.set(p.x, p.y, p.z).addScaledVector(normal, DECAL_LIFT)
@@ -241,10 +251,14 @@ export class Character {
   }
 
   /** Move along the path; returns whether the position changed. */
-  private advance(dt: number): boolean {
+  private advance(dt: number, ground: GroundProbe): boolean {
     const target = this.path[0]
     if (!target) return false
     const p = this.root.position
+    if (target.hop && !this.hop) {
+      const to = ground(target.x, target.z, target.y)
+      this.hop = { x: p.x, z: p.z, fromY: p.y, toY: to?.y ?? target.y }
+    }
     const dx = target.x - p.x
     const dz = target.z - p.z
     const distance = Math.hypot(dx, dz)
@@ -256,6 +270,8 @@ export class Character {
       p.x = target.x
       p.z = target.z
       this.expectedY = target.y
+      if (this.hop) p.y = this.hop.toY
+      this.hop = null
       this.path.shift()
       step -= distance
       if (this.path.length === 0) this.setWalking(false)
@@ -265,6 +281,13 @@ export class Character {
     p.x += dx * k
     p.z += dz * k
     this.expectedY += (target.y - this.expectedY) * Math.min(1, k)
+    const hop = this.hop
+    if (hop) {
+      // Parabolic arc over the straight line between both ends.
+      const total = Math.hypot(target.x - hop.x, target.z - hop.z)
+      const t = total > 1e-6 ? 1 - Math.hypot(target.x - p.x, target.z - p.z) / total : 1
+      p.y = hop.fromY + (hop.toY - hop.fromY) * t + 4 * HOP_HEIGHT * t * (1 - t)
+    }
     return true
   }
 

@@ -56,6 +56,11 @@ export interface StructureKind {
    * deck); undefined to use the voxels. Used to lay the hover cursor.
    */
   surfaceAt?(structure: Structure, x: number, z: number): number | undefined
+  /**
+   * True when its walking spots are apart (stepping stones): a character
+   * hops from one to the next instead of walking the ground between them.
+   */
+  readonly hops?: boolean
 }
 
 /** The typed half of a kind: what it does with its own parameters. */
@@ -67,6 +72,8 @@ export interface KindDefinition<P> {
   readonly stamp: (params: P, map: VoxelMap) => VoxelCoord[]
   /** See {@link StructureKind.surfaceAt}. */
   readonly surfaceAt?: (params: P, x: number, z: number) => number | undefined
+  /** See {@link StructureKind.hops}. */
+  readonly hops?: boolean
 }
 
 /**
@@ -77,6 +84,7 @@ export function defineKind<P>(definition: KindDefinition<P>): StructureKind {
   const surfaceAt = definition.surfaceAt
   return {
     id: definition.id,
+    ...(definition.hops ? { hops: true } : {}),
     bounds: (structure) => definition.bounds(paramsOf(definition, structure)),
     stamp: (structure, map) => definition.stamp(paramsOf(definition, structure), map),
     ...(surfaceAt

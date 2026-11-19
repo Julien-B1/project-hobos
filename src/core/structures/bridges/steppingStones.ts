@@ -19,6 +19,8 @@ export const STEPPING_STONES = 'stepping-stones'
 /** The stepping stones kind. */
 export const steppingStones = defineKind<BridgeSpan>({
   id: STEPPING_STONES,
+  // Stones stand apart in the water: one hops from stone to stone.
+  hops: true,
   isParams: isBridgeSpan,
   bounds: (span) => spanBox(span, span.bedLevel - 1, span.deckY + 1),
   stamp: (span, map) => {

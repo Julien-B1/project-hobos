@@ -465,7 +465,11 @@ export class Engine {
     const from = next ? standAt(next) : this.characterStand
     const path = area.findPath(from, target)
     if (!path) return
-    const points = path.map(walkPoint)
+    const points = path.map((s, i) => {
+      // Onto, off or between stepping stones: hop.
+      const before = i > 0 ? path[i - 1] : this.characterStand
+      return { ...walkPoint(s), hop: this.hopsOn(s) || (!!before && this.hopsOn(before)) }
+    })
     // When standing, the first stand is where the character already is.
     character.walk(next ? points : points.slice(1))
     this.characterStand = target
@@ -480,6 +484,40 @@ export class Engine {
     this.publish({ ...this.hud, character })
   }
 
+  /** Whether stand `s` belongs to a structure one hops on (see `StructureKind.hops`). */
+  private hopsOn(s: Stand): boolean {
+    const owner = this.options.structures?.ownerOf(s.x, s.y, s.z)
+    return owner ? this.structureKinds.get(owner.kind).hops === true : false
+  }
+
+  /**
+   * Walking height of a structure under (x, z) near height `nearY` (world
+   * units): its `surfaceAt`, else the top of its owned voxel. Decks are
+   * drawn as separate planks, slabs or stones: a ray could slip between
+   * them. Undefined when no built structure is walked there (terrain
+   * voxels a structure owns, like a ford's bed, are drawn as terrain).
+   */
+  private structureSurface(x: number, z: number, nearY: number): number | undefined {
+    const structures = this.options.structures
+    if (!structures) return undefined
+    const cx = Math.floor(x)
+    const cz = Math.floor(z)
+    const level = Math.round(nearY / VOXEL_HEIGHT) - 1
+    for (const y of [level, level - 1, level + 1]) {
+      const owner = structures.ownerOf(cx, y, cz)
+      const voxel = this.options.map.get(cx, y, cz)
+      if (!owner || isTerrainMaterial(materialOf(voxel))) continue
+      if (structures.ownerOf(cx, y + 1, cz)) continue // not the top
+      const kind = this.structureKinds.get(owner.kind)
+      if (kind.hops) return undefined // stones: the ray finds each stone's top
+      const corners = voxelTopCorners(voxel)
+      return (
+        kind.surfaceAt?.(owner, x, z) ?? (y + topHeightAt(corners, x - cx, z - cz)) * VOXEL_HEIGHT
+      )
+    }
+    return undefined
+  }
+
   /** The walk area, built on first use. */
   private walking(): WalkArea {
     this.walkArea ??= new WalkArea(this.options.map)
@@ -492,6 +530,8 @@ export class Engine {
    * bed). Null when nothing is found.
    */
   private groundAt(x: number, z: number, nearY: number): { y: number; normal: Vector3 } | null {
+    const deck = this.structureSurface(x, z, nearY)
+    if (deck !== undefined) return { y: deck, normal: UP }
     this.groundRay.set(GROUND_ORIGIN.set(x, nearY + GROUND_REACH, z), DOWN)
     this.groundRay.far = 2 * GROUND_REACH
     const meshes = this.chunks.pickables.filter((m: Mesh) => m.userData.layer !== 'water')
@@ -769,6 +809,8 @@ export class Engine {
 
 /** Straight down. */
 const DOWN = new Vector3(0, -1, 0)
+/** Straight up (normal of a flat deck). */
+const UP = new Vector3(0, 1, 0)
 /** Scratch origin of the ground ray. */
 const GROUND_ORIGIN = new Vector3()
 
