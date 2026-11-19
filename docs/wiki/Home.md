@@ -9,6 +9,7 @@ documentation; the repository README only covers setup and daily usage.
 
 ## Pages
 
+- [[Architecture]]: layers and import rules, tooling.
 - [[Development Environment|Development-Environment]]: Docker stack, `make`
   targets, dev container, troubleshooting.
 - [[Decisions]]: architecture decision records (engine, UI framework, Docker).
@@ -17,7 +18,7 @@ documentation; the repository README only covers setup and daily usage.
 
 See `CHANGELOG.md` in the repository. Roadmap source: `BOOTSTRAP.md`.
 
-| Step | Content | Status |
-| --- | --- | --- |
-| 1 | Foundation: scaffold, WebGPU scene, RO-style camera, grid picking | In progress |
-| 2 | Multi-level voxel map: chunks, reference map, meshing, surface picking, targeted rebuild | Planned |
+| Step | Content                                                                                  | Status      |
+| ---- | ---------------------------------------------------------------------------------------- | ----------- |
+| 1    | Foundation: scaffold, WebGPU scene, RO-style camera, grid picking                        | In progress |
+| 2    | Multi-level voxel map: chunks, reference map, meshing, surface picking, targeted rebuild | Planned     |

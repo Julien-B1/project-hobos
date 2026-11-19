@@ -15,11 +15,11 @@ services:
     # User that maps to the host user, so generated files are owned by them.
     # The Makefile computes it: host uid/gid with rootful Docker, 0:0 with
     # rootless Docker (where container root IS the host user).
-    user: "${CONTAINER_UID:-1000}:${CONTAINER_GID:-1000}"
+    user: '${CONTAINER_UID:-1000}:${CONTAINER_GID:-1000}'
     working_dir: /app
-    command: ["pnpm", "dev"]
+    command: ['pnpm', 'dev']
     ports:
-      - "5173:5173"
+      - '5173:5173'
     volumes:
       # Source tree, including node_modules, so IDE tooling on the host
       # (ESLint, TypeScript language server) sees installed packages.
@@ -29,7 +29,7 @@ services:
     environment:
       # Set to "true" if file changes are not detected (e.g. project stored on
       # a Windows drive mounted into WSL). See docs/wiki/Development-Environment.md.
-      VITE_USE_POLLING: "${VITE_USE_POLLING:-false}"
+      VITE_USE_POLLING: '${VITE_USE_POLLING:-false}'
     init: true
     tty: true
     stdin_open: true

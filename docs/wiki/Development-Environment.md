@@ -6,12 +6,12 @@ and a browser. This keeps the setup identical on every machine.
 
 ## Components
 
-| File | Role |
-| --- | --- |
-| `docker/Dockerfile.dev` | Dev image: Node 24 (Debian slim), pnpm pinned through Corepack. No source code copied in. |
-| `compose.yaml` | Service `app`: bind-mounts the repository at `/app`, publishes port 5173, runs as the host uid/gid. |
-| `Makefile` | Single entry point. Every target wraps `docker compose run --rm app ...`. |
-| `.devcontainer/devcontainer.json` | Optional VS Code "Reopen in Container" setup on the same service. |
+| File                              | Role                                                                                                |
+| --------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `docker/Dockerfile.dev`           | Dev image: Node 24 (Debian slim), pnpm pinned through Corepack. No source code copied in.           |
+| `compose.yaml`                    | Service `app`: bind-mounts the repository at `/app`, publishes port 5173, runs as the host uid/gid. |
+| `Makefile`                        | Single entry point. Every target wraps `docker compose run --rm app ...`.                           |
+| `.devcontainer/devcontainer.json` | Optional VS Code "Reopen in Container" setup on the same service.                                   |
 
 ## First run
 
@@ -23,16 +23,16 @@ make up        # dev server, open http://localhost:5173
 
 ## Daily targets
 
-| Target | What it does |
-| --- | --- |
-| `make up` / `make down` | Start / stop the Vite dev server (hot reload). |
-| `make test` / `make test-watch` | Vitest, once or in watch mode. |
-| `make lint` / `make format` | ESLint / Prettier. |
-| `make typecheck` | `vue-tsc --noEmit`. |
-| `make check` | Lint + typecheck + tests. Run before each commit. |
-| `make build` / `make preview` | Production build into `dist/` / serve it. |
-| `make sh` | Bash inside the container. |
-| `make wiki-publish` | Mirror `docs/wiki/` to the GitHub wiki (host-side git). |
+| Target                          | What it does                                            |
+| ------------------------------- | ------------------------------------------------------- |
+| `make up` / `make down`         | Start / stop the Vite dev server (hot reload).          |
+| `make test` / `make test-watch` | Vitest, once or in watch mode.                          |
+| `make lint` / `make format`     | ESLint / Prettier (`make format-check` only checks).    |
+| `make typecheck`                | `vue-tsc --build` (app and tooling tsconfigs).          |
+| `make check`                    | Lint, format check, typecheck, tests. Before commits.   |
+| `make build` / `make preview`   | Production build into `dist/` / serve it.               |
+| `make sh`                       | Bash inside the container.                              |
+| `make wiki-publish`             | Mirror `docs/wiki/` to the GitHub wiki (host-side git). |
 
 ## Design notes
 
@@ -46,6 +46,7 @@ make up        # dev server, open http://localhost:5173
 
   The image makes its shared folders writable by any uid, so this works
   whatever the uid.
+
 - **node_modules on the host.** It lives in the bind mount on purpose: editor
   extensions on the host (ESLint, Vue/TypeScript language server) can resolve
   packages without a dev container. Binaries inside it are built for

@@ -13,3 +13,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `compose.yaml`, `Makefile` entry point, optional VS Code dev container.
 - Project documentation skeleton: README, agent guide (`AGENTS.md`),
   wiki sources in `docs/wiki/` and `scripts/publish-wiki.sh`.
+- Project scaffold: Vite 8, Vue 3, TypeScript 6 (strict), Vitest, ESLint flat
+  config with layer import rules (`core` / `render` / `app`) and mandatory
+  TSDoc on `core` and `render` exports, Prettier.

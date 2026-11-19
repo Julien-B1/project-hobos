@@ -12,18 +12,18 @@ specification and [`CHANGELOG.md`](CHANGELOG.md) for progress.
 
 ## Stack
 
-| Concern | Choice |
-| --- | --- |
-| Language | TypeScript (strict) |
-| Rendering | Three.js `WebGPURenderer` (`three/webgpu`), automatic WebGL 2 fallback |
-| App shell / HUD | Vue 3 |
-| Build / dev server | Vite |
-| Tests | Vitest |
-| Lint / format | ESLint (flat config) + Prettier |
-| Package manager | pnpm (via Corepack) |
-| Dev environment | Docker + Docker Compose, driven by `make` |
+| Concern            | Choice                                                                 |
+| ------------------ | ---------------------------------------------------------------------- |
+| Language           | TypeScript (strict)                                                    |
+| Rendering          | Three.js `WebGPURenderer` (`three/webgpu`), automatic WebGL 2 fallback |
+| App shell / HUD    | Vue 3                                                                  |
+| Build / dev server | Vite                                                                   |
+| Tests              | Vitest                                                                 |
+| Lint / format      | ESLint (flat config) + Prettier                                        |
+| Package manager    | pnpm (via Corepack)                                                    |
+| Dev environment    | Docker + Docker Compose, driven by `make`                              |
 
-Why these choices: see the wiki page *Decisions*.
+Why these choices: see the wiki page _Decisions_.
 
 ## Setup
 

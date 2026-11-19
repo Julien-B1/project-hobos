@@ -28,7 +28,7 @@ Browser-first HD-2D voxel RPG prototype. Original specification:
 5. **Language**: English everywhere in the repository (code, comments, docs,
    wiki, changelog, commit messages).
 
-## Conventions (summary, details in the wiki *Conventions* page)
+## Conventions (summary, details in the wiki _Conventions_ page)
 
 - Three.js frame: Y up, horizontal plane is (x, z).
 - 1 horizontal cell = 1 world unit. 1 voxel is 0.5 world unit tall.

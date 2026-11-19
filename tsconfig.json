@@ -1,0 +1,7 @@
+// Solution-style root config: type-checking is split between the browser
+// application (tsconfig.app.json) and the Node-side tooling configs
+// (tsconfig.node.json). `vue-tsc --build` checks both.
+{
+  "files": [],
+  "references": [{ "path": "./tsconfig.app.json" }, { "path": "./tsconfig.node.json" }]
+}

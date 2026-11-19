@@ -1,0 +1,14 @@
+/* Global styles: full-viewport canvas application, no page scroll. */
+html,
+body,
+#app {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: #101418;
+  color: #e6e9ed;
+  font-family: system-ui, sans-serif;
+}
