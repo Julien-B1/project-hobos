@@ -41,7 +41,5 @@ export default defineConfig({
     // is ever needed.
     environment: 'node',
     include: ['src/**/*.test.ts'],
-    // Removed once the first core module lands with its tests.
-    passWithNoTests: true,
   },
 })

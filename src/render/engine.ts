@@ -5,7 +5,8 @@
  * HUD state through a callback. The engine never holds Vue objects, and the
  * app must not put engine objects into reactive state (use `markRaw`).
  */
-import { PerspectiveCamera, type Scene } from 'three/webgpu'
+import type { Scene } from 'three/webgpu'
+import { CameraRig, type CameraRigSettings } from './cameraRig'
 import { createRenderer, type RenderBackend, type RendererHandle } from './createRenderer'
 import { createScene } from './sceneSetup'
 
@@ -21,14 +22,20 @@ export interface EngineHudState {
 export interface EngineOptions {
   /** Force the WebGL 2 backend instead of WebGPU. */
   readonly forceWebGL: boolean
-  /** Vertical field of view of the camera, in degrees. */
-  readonly fovDeg: number
+  /** Orbit camera settings. */
+  readonly camera: CameraRigSettings
   /** Called when HUD-visible state changes (at most a few times per second). */
   readonly onHudChange: (state: EngineHudState) => void
 }
 
 /** Length of the FPS measurement window, in milliseconds. */
 const FPS_WINDOW_MS = 500
+
+/**
+ * Upper bound for one frame's time step, in seconds. Avoids big jumps in
+ * animations after the tab was in the background.
+ */
+const MAX_FRAME_DT = 0.1
 
 /**
  * Rendering engine bound to one canvas.
@@ -38,11 +45,12 @@ const FPS_WINDOW_MS = 500
  */
 export class Engine {
   private readonly scene: Scene
-  private readonly camera: PerspectiveCamera
+  private readonly rig: CameraRig
   private readonly resizeObserver: ResizeObserver
   private hud: EngineHudState
   private frameCount = 0
   private windowStart = 0
+  private lastFrameTime: number | null = null
 
   private constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -50,9 +58,7 @@ export class Engine {
     private readonly options: EngineOptions,
   ) {
     this.scene = createScene()
-    this.camera = new PerspectiveCamera(options.fovDeg, 1, 0.1, 500)
-    this.camera.position.set(16, 20, 40)
-    this.camera.lookAt(16, 0, 16)
+    this.rig = new CameraRig(options.camera)
 
     this.hud = { backend: handle.backend, fps: 0 }
 
@@ -68,6 +74,11 @@ export class Engine {
   static async create(canvas: HTMLCanvasElement, options: EngineOptions): Promise<Engine> {
     const handle = await createRenderer(canvas, { forceWebGL: options.forceWebGL })
     return new Engine(canvas, handle, options)
+  }
+
+  /** Orbit camera, driven by the app's input bindings. */
+  get cameraRig(): CameraRig {
+    return this.rig
   }
 
   /** Start the render loop and publish the initial HUD state. */
@@ -88,8 +99,11 @@ export class Engine {
 
   /** One frame: update stats and draw. `time` is in milliseconds. */
   private frame(time: number): void {
+    const dt = this.lastFrameTime === null ? 0 : (time - this.lastFrameTime) / 1000
+    this.lastFrameTime = time
+    this.rig.update(Math.min(dt, MAX_FRAME_DT))
     this.updateFps(time)
-    this.handle.renderer.render(this.scene, this.camera)
+    this.handle.renderer.render(this.scene, this.rig.camera)
   }
 
   /** Count frames and publish the FPS once per measurement window. */
@@ -121,7 +135,6 @@ export class Engine {
     const renderer = this.handle.renderer
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.setSize(width, height, false)
-    this.camera.aspect = width / height
-    this.camera.updateProjectionMatrix()
+    this.rig.setAspect(width / height)
   }
 }

@@ -42,6 +42,14 @@ App.vue
   `onBeforeUnmount`. It is kept in a plain variable, never in reactive state.
 - The engine pushes immutable HUD snapshots (`EngineHudState`) through a
   callback, at most a few times per second. Vue only stores the latest one.
+- Input: `src/app/input/bindings.ts` turns DOM events into calls on the
+  render-layer `CameraRig` (`rotateBy`, `snapRotate`, `zoomBy`,
+  `panByPixels`, `setMoveIntent`). The rig knows nothing about devices.
+  `Engine` calls `rig.update(dt)` every frame (dt capped at 0.1 s).
+- Camera geometry lives in `src/render/cameraMath.ts` (no Three.js import)
+  so it is unit-tested. Yaw convention: yaw 0 puts the camera on the +Z side
+  of its target looking towards -Z; positive yaw turns counter-clockwise seen
+  from above.
 - Debug URL flags are read by the app layer (`src/app/config.ts`):
   `?forceWebGL=1` forces the WebGL 2 backend.
 

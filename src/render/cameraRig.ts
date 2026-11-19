@@ -1,0 +1,195 @@
+/**
+ * RO-style orbit camera rig.
+ *
+ * Layer: render. Wraps a `PerspectiveCamera` orbiting a ground target with:
+ * - a locked pitch (set once from config),
+ * - free yaw rotation plus fixed-step snaps (e.g. 45 degrees), animated,
+ * - bounded, animated zoom (distance to the target),
+ * - target panning, by drag (instant) or by held keys (velocity, per frame).
+ *
+ * The rig knows nothing about input devices: `src/app/input/bindings.ts`
+ * translates mouse and keyboard events into calls on this API. Call
+ * `update(dt)` once per frame before rendering.
+ */
+import { PerspectiveCamera } from 'three/webgpu'
+import {
+  clamp,
+  dampTowards,
+  groundAxes,
+  nextSnapYaw,
+  orbitPosition,
+  worldPerPixel,
+  type Vec3Like,
+} from './cameraMath'
+
+/** Static settings of the rig. Angles in degrees, distances in world units. */
+export interface CameraRigSettings {
+  /** Vertical field of view. */
+  readonly fovDeg: number
+  /** Locked downward tilt of the view. */
+  readonly pitchDeg: number
+  /** Initial yaw (see `cameraMath.ts` for the angle convention). */
+  readonly initialYawDeg: number
+  /** Size of one rotation snap. */
+  readonly snapStepDeg: number
+  /** Initial distance to the target. */
+  readonly initialDistance: number
+  /** Closest allowed distance to the target. */
+  readonly minDistance: number
+  /** Farthest allowed distance to the target. */
+  readonly maxDistance: number
+  /** Keyboard pan speed, as a fraction of the current distance per second. */
+  readonly keyPanSpeed: number
+  /** Smoothing sharpness for yaw and zoom animations, in 1/second. */
+  readonly smoothing: number
+}
+
+/** Axis-aligned bounds for the target on the ground plane, in world units. */
+export interface TargetBounds {
+  readonly minX: number
+  readonly maxX: number
+  readonly minZ: number
+  readonly maxZ: number
+}
+
+/** Orbit camera with a locked pitch, used for the whole game view. */
+export class CameraRig {
+  /** The Three.js camera driven by this rig. Add it to nothing; just render with it. */
+  readonly camera: PerspectiveCamera
+
+  private readonly target: Vec3Like
+  private readonly pitch: number
+  private readonly snapStep: number
+  private yaw: number
+  private yawGoal: number
+  private distance: number
+  private distanceGoal: number
+  /** Keyboard pan intent in screen axes, each in [-1, 1]. */
+  private moveForward = 0
+  private moveRight = 0
+  private bounds: TargetBounds | null = null
+
+  constructor(private readonly settings: CameraRigSettings) {
+    const toRad = Math.PI / 180
+    this.camera = new PerspectiveCamera(settings.fovDeg, 1, 0.1, 1000)
+    this.target = { x: 0, y: 0, z: 0 }
+    this.pitch = settings.pitchDeg * toRad
+    this.snapStep = settings.snapStepDeg * toRad
+    this.yaw = this.yawGoal = settings.initialYawDeg * toRad
+    this.distance = this.distanceGoal = clamp(
+      settings.initialDistance,
+      settings.minDistance,
+      settings.maxDistance,
+    )
+    this.applyPose()
+  }
+
+  /** Current yaw in degrees (for debug display). */
+  get yawDeg(): number {
+    return (this.yaw * 180) / Math.PI
+  }
+
+  /** Move the target instantly to a world position. */
+  setTarget(x: number, y: number, z: number): void {
+    this.target.x = x
+    this.target.y = y
+    this.target.z = z
+    this.clampTarget()
+    this.applyPose()
+  }
+
+  /** Restrict where the target can go (e.g. the map footprint). `null` removes limits. */
+  setTargetBounds(bounds: TargetBounds | null): void {
+    this.bounds = bounds
+    this.clampTarget()
+  }
+
+  /** Free rotation: add `deltaRad` to the yaw immediately (no animation). */
+  rotateBy(deltaRad: number): void {
+    this.yaw += deltaRad
+    this.yawGoal = this.yaw
+  }
+
+  /** Animated rotation to the next snap angle. `direction` +1 = counter-clockwise from above. */
+  snapRotate(direction: 1 | -1): void {
+    this.yawGoal = nextSnapYaw(this.yawGoal, this.snapStep, direction)
+  }
+
+  /**
+   * Zoom by a multiplicative factor on the distance goal (> 1 zooms out).
+   * The result is clamped to the configured bounds and animated.
+   */
+  zoomBy(factor: number): void {
+    this.distanceGoal = clamp(
+      this.distanceGoal * factor,
+      this.settings.minDistance,
+      this.settings.maxDistance,
+    )
+  }
+
+  /**
+   * Drag-pan: move the target so the ground follows the cursor.
+   *
+   * @param dxPx Horizontal cursor movement, in CSS pixels (right = positive).
+   * @param dyPx Vertical cursor movement, in CSS pixels (down = positive).
+   * @param viewportHeight Height of the viewport, in CSS pixels.
+   */
+  panByPixels(dxPx: number, dyPx: number, viewportHeight: number): void {
+    const wpp = worldPerPixel(this.distance, this.settings.fovDeg, viewportHeight)
+    const { forward, right } = groundAxes(this.yaw)
+    // The ground is seen at an angle: a vertical pixel covers more ground.
+    const dForward = (dyPx * wpp) / Math.sin(this.pitch)
+    const dRight = -dxPx * wpp
+    this.target.x += right.x * dRight + forward.x * dForward
+    this.target.z += right.z * dRight + forward.z * dForward
+    this.clampTarget()
+  }
+
+  /**
+   * Keyboard pan intent, in screen axes. Each value in [-1, 1]; (0, 0) stops.
+   * Movement is integrated in `update()` so speed does not depend on key repeat.
+   */
+  setMoveIntent(forward: number, right: number): void {
+    this.moveForward = clamp(forward, -1, 1)
+    this.moveRight = clamp(right, -1, 1)
+  }
+
+  /** Update the projection aspect ratio (width / height). */
+  setAspect(aspect: number): void {
+    this.camera.aspect = aspect
+    this.camera.updateProjectionMatrix()
+  }
+
+  /** Advance animations and keyboard panning by `dt` seconds, then pose the camera. */
+  update(dt: number): void {
+    const { smoothing, keyPanSpeed } = this.settings
+    this.yaw = dampTowards(this.yaw, this.yawGoal, smoothing, dt)
+    this.distance = dampTowards(this.distance, this.distanceGoal, smoothing, dt)
+
+    if (this.moveForward !== 0 || this.moveRight !== 0) {
+      const { forward, right } = groundAxes(this.yaw)
+      // Normalise diagonals so they are not faster than straight moves.
+      const len = Math.hypot(this.moveForward, this.moveRight)
+      const speed = (keyPanSpeed * this.distance * dt) / Math.max(1, len)
+      this.target.x += (forward.x * this.moveForward + right.x * this.moveRight) * speed
+      this.target.z += (forward.z * this.moveForward + right.z * this.moveRight) * speed
+      this.clampTarget()
+    }
+
+    this.applyPose()
+  }
+
+  /** Place and orient the Three.js camera from the rig state. */
+  private applyPose(): void {
+    const p = orbitPosition(this.target, this.yaw, this.pitch, this.distance)
+    this.camera.position.set(p.x, p.y, p.z)
+    this.camera.lookAt(this.target.x, this.target.y, this.target.z)
+  }
+
+  /** Keep the target inside the optional bounds. */
+  private clampTarget(): void {
+    if (!this.bounds) return
+    this.target.x = clamp(this.target.x, this.bounds.minX, this.bounds.maxX)
+    this.target.z = clamp(this.target.z, this.bounds.minZ, this.bounds.maxZ)
+  }
+}

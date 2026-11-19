@@ -52,6 +52,20 @@ make sh          # shell inside the container
 
 Open `http://localhost:5173/?forceWebGL=1` to force the WebGL 2 backend.
 
+### Controls
+
+Keys are bound by physical position: the same keys work on AZERTY and QWERTY.
+
+| Action                 | Input                                              |
+| ---------------------- | -------------------------------------------------- |
+| Move the camera target | `Z` `Q` `S` `D` (AZERTY) / `W` `A` `S` `D`, arrows |
+| Rotate by 45° steps    | `A` / `E` (AZERTY) / `Q` / `E` (QWERTY)            |
+| Free rotation          | Left mouse drag                                    |
+| Pan                    | Middle mouse drag                                  |
+| Zoom                   | Mouse wheel                                        |
+
+Camera settings (pitch, FOV, zoom bounds, speeds) live in `src/app/config.ts`.
+
 ## Documentation
 
 - Wiki (architecture, conventions, extending the engine): the GitHub wiki of

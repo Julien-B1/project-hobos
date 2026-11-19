@@ -9,6 +9,7 @@
 import { onBeforeUnmount, onMounted, ref, useTemplateRef } from 'vue'
 import { Engine, type EngineHudState } from '@/render/engine'
 import { config, readUrlFlags } from '@/app/config'
+import { bindInputs } from '@/app/input/bindings'
 
 const emit = defineEmits<{
   /** Fired whenever the engine publishes a new HUD snapshot. */
@@ -19,6 +20,7 @@ const canvas = useTemplateRef<HTMLCanvasElement>('canvas')
 const error = ref<string | null>(null)
 
 let engine: Engine | null = null
+let unbindInputs: (() => void) | null = null
 let unmounted = false
 
 onMounted(async () => {
@@ -26,7 +28,7 @@ onMounted(async () => {
   try {
     const created = await Engine.create(canvas.value, {
       forceWebGL: readUrlFlags().forceWebGL,
-      fovDeg: config.camera.fovDeg,
+      camera: config.camera,
       onHudChange: (state) => {
         emit('hud', state)
       },
@@ -37,6 +39,9 @@ onMounted(async () => {
       return
     }
     engine = created
+    // Look at the middle of the 32 x 32 test grid.
+    engine.cameraRig.setTarget(16, 0, 16)
+    unbindInputs = bindInputs(canvas.value, engine.cameraRig, config.input)
     engine.start()
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
@@ -45,6 +50,8 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   unmounted = true
+  unbindInputs?.()
+  unbindInputs = null
   engine?.dispose()
   engine = null
 })

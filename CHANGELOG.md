@@ -19,3 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Rendering foundation: `WebGPURenderer` with automatic WebGL 2 fallback,
   backend detection shown in the debug HUD, `?forceWebGL=1` URL switch,
   resize handling, render loop with FPS counter, sun + ambient lighting.
+- RO-style orbit camera: locked pitch (40° by default), free rotation by
+  left drag, animated 45° snaps (`A`/`E` on AZERTY), bounded animated zoom,
+  target panning by middle drag or `ZQSD`/arrows (layout-independent key
+  codes). Camera maths unit-tested.

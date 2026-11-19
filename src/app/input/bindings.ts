@@ -1,0 +1,155 @@
+/**
+ * Mouse and keyboard bindings for the game view.
+ *
+ * Layer: app. Translates DOM events into calls on the render-layer camera rig.
+ * Keys use `KeyboardEvent.code` (physical position), so the same physical keys
+ * work on AZERTY and QWERTY layouts:
+ *
+ * | Physical key (QWERTY name) | AZERTY label | Action                     |
+ * | -------------------------- | ------------ | -------------------------- |
+ * | KeyW / KeyS                | Z / S        | Move target forward / back |
+ * | KeyA / KeyD                | Q / D        | Move target left / right   |
+ * | KeyQ / KeyE                | A / E        | Rotate 45 degrees (snap)   |
+ * | Arrow keys                 | Arrow keys   | Same as W/A/S/D            |
+ *
+ * Mouse: left drag = free rotation, middle drag = pan, wheel = zoom.
+ */
+import type { CameraRig } from '@/render/cameraRig'
+
+/** Sensitivity settings, see `config.input`. */
+export interface InputSettings {
+  readonly rotateRadPerPixel: number
+  readonly zoomPerWheelUnit: number
+  readonly dragThresholdPx: number
+}
+
+/** Key codes per movement direction. */
+const MOVE_KEYS = {
+  forward: ['KeyW', 'ArrowUp'],
+  back: ['KeyS', 'ArrowDown'],
+  left: ['KeyA', 'ArrowLeft'],
+  right: ['KeyD', 'ArrowRight'],
+} as const
+
+/** Ongoing pointer gesture. */
+type Drag =
+  | { kind: 'none' }
+  /** Left button pressed; becomes a rotation once past the drag threshold. */
+  | { kind: 'left'; startX: number; lastX: number; rotating: boolean }
+  | { kind: 'pan'; lastX: number; lastY: number }
+
+/**
+ * Attach input listeners. Returns a function that removes them all.
+ *
+ * Keyboard listeners go on `window` (the canvas is not focusable); pointer and
+ * wheel listeners go on the canvas.
+ */
+export function bindInputs(
+  canvas: HTMLCanvasElement,
+  rig: CameraRig,
+  settings: InputSettings,
+): () => void {
+  const pressed = new Set<string>()
+  let drag: Drag = { kind: 'none' }
+
+  const isPressed = (codes: readonly string[]): boolean => codes.some((c) => pressed.has(c))
+
+  /** Recompute the rig's move intent from the set of held keys. */
+  const updateMoveIntent = (): void => {
+    const forward = Number(isPressed(MOVE_KEYS.forward)) - Number(isPressed(MOVE_KEYS.back))
+    const right = Number(isPressed(MOVE_KEYS.right)) - Number(isPressed(MOVE_KEYS.left))
+    rig.setMoveIntent(forward, right)
+  }
+
+  const onKeyDown = (e: KeyboardEvent): void => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return
+    if (e.code === 'KeyQ' || e.code === 'KeyE') {
+      // Ignore auto-repeat: one press = one 45-degree step.
+      if (!e.repeat) rig.snapRotate(e.code === 'KeyQ' ? -1 : 1)
+      return
+    }
+    pressed.add(e.code)
+    updateMoveIntent()
+    if (e.code.startsWith('Arrow')) e.preventDefault()
+  }
+
+  const onKeyUp = (e: KeyboardEvent): void => {
+    pressed.delete(e.code)
+    updateMoveIntent()
+  }
+
+  /** Keys released while the window is unfocused never fire keyup: reset. */
+  const onBlur = (): void => {
+    pressed.clear()
+    updateMoveIntent()
+  }
+
+  const onPointerDown = (e: PointerEvent): void => {
+    if (e.button === 0) {
+      drag = { kind: 'left', startX: e.clientX, lastX: e.clientX, rotating: false }
+    } else if (e.button === 1) {
+      // Prevent the browser's middle-click auto-scroll.
+      e.preventDefault()
+      drag = { kind: 'pan', lastX: e.clientX, lastY: e.clientY }
+    } else {
+      return
+    }
+    canvas.setPointerCapture(e.pointerId)
+  }
+
+  const onPointerMove = (e: PointerEvent): void => {
+    if (drag.kind === 'left') {
+      if (!drag.rotating && Math.abs(e.clientX - drag.startX) >= settings.dragThresholdPx) {
+        drag.rotating = true
+      }
+      if (drag.rotating) {
+        // Dragging right turns the world right, i.e. the camera left.
+        rig.rotateBy(-(e.clientX - drag.lastX) * settings.rotateRadPerPixel)
+      }
+      drag.lastX = e.clientX
+    } else if (drag.kind === 'pan') {
+      rig.panByPixels(e.clientX - drag.lastX, e.clientY - drag.lastY, canvas.clientHeight)
+      drag.lastX = e.clientX
+      drag.lastY = e.clientY
+    }
+  }
+
+  const onPointerUp = (e: PointerEvent): void => {
+    if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId)
+    drag = { kind: 'none' }
+  }
+
+  const onWheel = (e: WheelEvent): void => {
+    e.preventDefault()
+    // deltaMode 1 = lines (Firefox): convert to an approximate pixel delta.
+    const delta = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY
+    rig.zoomBy(Math.exp(delta * settings.zoomPerWheelUnit))
+  }
+
+  /** Middle click must not open the auto-scroll or paste on some systems. */
+  const onAuxClick = (e: MouseEvent): void => {
+    if (e.button === 1) e.preventDefault()
+  }
+
+  window.addEventListener('keydown', onKeyDown)
+  window.addEventListener('keyup', onKeyUp)
+  window.addEventListener('blur', onBlur)
+  canvas.addEventListener('pointerdown', onPointerDown)
+  canvas.addEventListener('pointermove', onPointerMove)
+  canvas.addEventListener('pointerup', onPointerUp)
+  canvas.addEventListener('pointercancel', onPointerUp)
+  canvas.addEventListener('wheel', onWheel, { passive: false })
+  canvas.addEventListener('auxclick', onAuxClick)
+
+  return () => {
+    window.removeEventListener('keydown', onKeyDown)
+    window.removeEventListener('keyup', onKeyUp)
+    window.removeEventListener('blur', onBlur)
+    canvas.removeEventListener('pointerdown', onPointerDown)
+    canvas.removeEventListener('pointermove', onPointerMove)
+    canvas.removeEventListener('pointerup', onPointerUp)
+    canvas.removeEventListener('pointercancel', onPointerUp)
+    canvas.removeEventListener('wheel', onWheel)
+    canvas.removeEventListener('auxclick', onAuxClick)
+  }
+}
