@@ -195,7 +195,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the feet are locked on the idle clip's first-frame stance, so the idle
   clip's own foot shuffles no longer slide them.
 - Screenshots: views take `steps` (mouse clicks before the capture);
-  console warnings and errors of the page are printed.
+  console warnings and errors of the page are printed, with the bytes
+  the page transferred.
 
 ### Changed
 

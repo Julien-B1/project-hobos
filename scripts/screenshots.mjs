@@ -80,6 +80,14 @@ try {
       await page.mouse.click(x, y, { button: step.button ?? 'left' })
       await page.waitForTimeout(step.wait ?? 500)
     }
+    // Network weight of the page (what a remote tester downloads).
+    const transfer = await page.evaluate(() =>
+      performance
+        .getEntriesByType('resource')
+        .concat(performance.getEntriesByType('navigation'))
+        .reduce((sum, e) => sum + (e.transferSize ?? 0), 0),
+    )
+    console.log(`${view.name}: ${(transfer / 1024).toFixed(0)} kB transferred`)
     const file = `${OUT}/${view.name}.png`
     await page.screenshot({ path: file })
     console.log('saved', file)
