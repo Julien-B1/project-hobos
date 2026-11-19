@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { Material, isTerrainMaterial } from './materials'
 import { Shape } from './shapes'
 import {
+  TERRAIN_CHANNELS,
   TerrainField,
+  oneHotWeights,
+  terrainChannel,
   connects,
   facetDiagonal,
   facetHeightAt,
@@ -92,11 +95,42 @@ describe('corner heights', () => {
   })
 })
 
+describe('corner material weights', () => {
+  it('blends the top materials of connected runs around each corner', () => {
+    const map = new VoxelMap()
+    const sand = packVoxel(Material.SAND)
+    for (let z = 0; z < 3; z++) {
+      column(map, 0, z, 0, 6)
+      for (let y = 0; y < 6; y++) map.set(1, y, z, sand)
+    }
+    const f = field(map)
+    const grassRun = f.runsAt(0, 1)[0]
+    const sandRun = f.runsAt(1, 1)[0]
+    if (!grassRun || !sandRun) throw new Error('no run')
+    const g = TERRAIN_CHANNELS.indexOf(Material.GRASS)
+    const s = TERRAIN_CHANNELS.indexOf(Material.SAND)
+    const wGrass = f.cornerWeights(0, 1, grassRun)
+    const wSand = f.cornerWeights(1, 1, sandRun)
+    // Far corners stay pure, shared corners are half and half for both cells.
+    expect(wGrass[0]?.[g]).toBeCloseTo(1)
+    expect(wGrass[1]?.[g]).toBeCloseTo(0.5)
+    expect(wGrass[1]?.[s]).toBeCloseTo(0.5)
+    expect(wSand[0]).toEqual(wGrass[1])
+    expect(wSand[1]?.[s]).toBeCloseTo(1)
+  })
+
+  it('maps unknown materials to the dirt channel', () => {
+    expect(terrainChannel(Material.WOOD)).toBe(TERRAIN_CHANNELS.indexOf(Material.DIRT))
+    expect(oneHotWeights(Material.ROCK).reduce((a, b) => a + b, 0)).toBe(1)
+  })
+})
+
 describe('connects', () => {
   const run = (bottom: number, top: number): TerrainRun => ({
     bottom,
     top,
     topY: Math.ceil(top) - 1,
+    material: Material.GRASS,
   })
 
   it('connects equal tops and open steps', () => {

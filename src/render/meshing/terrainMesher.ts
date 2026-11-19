@@ -26,6 +26,7 @@ import { CHUNK_SIZE, VOXEL_HEIGHT } from '@/core/coords'
 import { Material } from '@/core/materials'
 import {
   TerrainField,
+  oneHotWeights,
   facetDiagonal,
   type FacetCorners,
   type TerrainRun,
@@ -108,8 +109,9 @@ export class TerrainMesher {
           const ownsTop = Number.isFinite(run.top) && run.topY >= oy && run.topY < oy + CHUNK_SIZE
           if (ownsTop) {
             const corners = field.cornerHeights(x, z, run)
-            this.top(out, map, x, z, run, corners)
-            this.walls(out, map, field, x, z, run, corners)
+            const weights = field.cornerWeights(x, z, run)
+            this.top(out, map, x, z, run, corners, weights)
+            this.walls(out, map, field, x, z, run, corners, weights)
             this.water(waterOut, map, x, z, run, corners)
           }
           const b = run.bottom
@@ -129,33 +131,35 @@ export class TerrainMesher {
     z: number,
     run: TerrainRun,
     h: FacetCorners,
+    weights: (readonly number[])[],
   ): void {
     const p = CORNER_XZ.map(([dx, dz], i): Vec3 => [
       x + dx,
       h[i as 0 | 1 | 2 | 3] * VOXEL_HEIGHT,
       z + dz,
     ])
-    const [p0, p1, p2, p3] = p as [Vec3, Vec3, Vec3, Vec3]
-    const triangles: Vec3[][] =
+    const triangles: number[][] =
       facetDiagonal(h) === 0
         ? [
-            [p0, p1, p2],
-            [p0, p2, p3],
+            [0, 1, 2],
+            [0, 2, 3],
           ]
         : [
-            [p1, p2, p3],
-            [p1, p3, p0],
+            [1, 2, 3],
+            [1, 3, 0],
           ]
     const topMaterial = materialOf(map.get(x, run.topY, z))
     const below = map.get(x, run.topY - 1, z)
     const bareMaterial = this.options.isTerrain(below) ? materialOf(below) : topMaterial
     const jitter = cellJitter(x, run.topY, z)
-    for (const tri of triangles) {
+    for (const corners of triangles) {
+      const tri = corners.map((i): Vec3 => p[i] ?? [0, 0, 0])
       const [a, b, c] = tri as [Vec3, Vec3, Vec3]
       const n = cross(sub(b, a), sub(c, a))
       const ny = Math.abs(n[1]) / (Math.hypot(n[0], n[1], n[2]) || 1)
       const material = ny < STEEP_NORMAL_Y ? bareMaterial : topMaterial
-      out.polygon(tri, [0, 1, 0], this.shade(material, jitter))
+      const w = corners.map((i) => weights[i] ?? oneHotWeights(run.material))
+      out.polygon(tri, [0, 1, 0], this.shade(material, jitter), w)
     }
   }
 
@@ -168,6 +172,7 @@ export class TerrainMesher {
     z: number,
     run: TerrainRun,
     h: FacetCorners,
+    weights: (readonly number[])[],
   ): void {
     const runBottom = Number.isFinite(run.bottom) ? run.bottom : run.topY - CHUNK_SIZE
     for (const edge of EDGES) {
@@ -191,16 +196,36 @@ export class TerrainMesher {
         y * VOXEL_HEIGHT,
         z + e0[1] + (e1[1] - e0[1]) * t,
       ]
+      // Vertex weights: on the run's top edge, the top's blended corner
+      // weights (so the wall's rim matches the facet above); lower down, the
+      // material of the voxel layer at that height (dirt, stone, rock).
+      const w0 = weights[edge.mine[0]] ?? oneHotWeights(run.material)
+      const w1 = weights[edge.mine[1]] ?? oneHotWeights(run.material)
+      const weightAt = (t: number, level: number): readonly number[] => {
+        if (level >= mine[1](t) - 1e-3) return w0.map((v, k) => v + ((w1[k] ?? 0) - v) * t)
+        return oneHotWeights(materialOf(map.get(x, Math.floor(level - 1e-3), z)))
+      }
       for (const { t0, t1, lo, hi } of uncoveredStrips(mine, covers)) {
-        const polygon = dedupe([at(t0, lo(t0)), at(t1, lo(t1)), at(t1, hi(t1)), at(t0, hi(t0))])
-        if (polygon.length < 3) continue
+        const corners = dedupe([
+          { p: at(t0, lo(t0)), w: weightAt(t0, lo(t0)) },
+          { p: at(t1, lo(t1)), w: weightAt(t1, lo(t1)) },
+          { p: at(t1, hi(t1)), w: weightAt(t1, hi(t1)) },
+          { p: at(t0, hi(t0)), w: weightAt(t0, hi(t0)) },
+        ])
+        if (corners.length < 3) continue
+        const polygon = corners.map((c) => c.p)
         const tm = (t0 + t1) / 2
         const mid = (lo(tm) + hi(tm)) / 2
         const voxel = map.get(x, Math.floor(mid), z)
         const material = this.options.isTerrain(voxel)
           ? materialOf(voxel)
           : materialOf(map.get(x, run.topY, z))
-        out.polygon(polygon, outward, this.shade(material, cellJitter(x, Math.floor(mid), z)))
+        out.polygon(
+          polygon,
+          outward,
+          this.shade(material, cellJitter(x, Math.floor(mid), z)),
+          corners.map((c) => c.w),
+        )
       }
     }
   }
@@ -211,6 +236,7 @@ export class TerrainMesher {
     if (!isAir(under) && materialOf(under) !== Material.WATER) return
     const y = run.bottom * VOXEL_HEIGHT
     const material = materialOf(map.get(x, run.bottom, z))
+    const w = oneHotWeights(material)
     out.polygon(
       [
         [x, y, z],
@@ -220,6 +246,7 @@ export class TerrainMesher {
       ],
       [0, -1, 0],
       this.shade(material, cellJitter(x, run.bottom, z)),
+      [w, w, w, w],
     )
   }
 
@@ -363,28 +390,24 @@ export function uncoveredStrips(a: Band, covers: readonly Band[]): Strip[] {
   return strips
 }
 
-/** Remove consecutive duplicate vertices (collapsed wall ends). */
-function dedupe(vertices: Vec3[]): Vec3[] {
-  const out: Vec3[] = []
+/** A polygon corner with its material weights. */
+interface WeightedVertex {
+  readonly p: Vec3
+  readonly w: readonly number[]
+}
+
+/** Remove consecutive duplicate corners (collapsed wall ends). */
+function dedupe(vertices: WeightedVertex[]): WeightedVertex[] {
+  const same = (a: Vec3, b: Vec3): boolean =>
+    Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]) < 1e-9
+  const out: WeightedVertex[] = []
   for (const v of vertices) {
     const last = out[out.length - 1]
-    if (
-      last &&
-      Math.abs(last[0] - v[0]) + Math.abs(last[1] - v[1]) + Math.abs(last[2] - v[2]) < 1e-9
-    ) {
-      continue
-    }
+    if (last && same(last.p, v.p)) continue
     out.push(v)
   }
   const first = out[0]
   const last = out[out.length - 1]
-  if (
-    out.length > 1 &&
-    first &&
-    last &&
-    first.every((c, i) => Math.abs(c - (last[i] ?? 0)) < 1e-9)
-  ) {
-    out.pop()
-  }
+  if (out.length > 1 && first && last && same(first.p, last.p)) out.pop()
   return out
 }

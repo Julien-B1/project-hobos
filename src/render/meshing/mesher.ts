@@ -23,6 +23,11 @@ export interface MeshData {
   readonly colors: Float32Array
   /** Triangle vertex indices, 3 per triangle. */
   readonly indices: Uint32Array
+  /**
+   * Optional terrain material weights, 8 per vertex (channels of
+   * `TERRAIN_CHANNELS`, zero-padded). Uploaded as two vec4 attributes.
+   */
+  readonly weights?: Float32Array
 }
 
 /** Builds the mesh of one chunk. Implementations must only read the map. */

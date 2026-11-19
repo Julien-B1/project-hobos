@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Terrain material (TSL): per-vertex blended material weights averaged per
+  lattice point (`TerrainField.cornerWeights`), shaded with 2 fetches of a
+  small precomputed tileable noise texture projected in world space; noisy,
+  sharpened material borders; dirt and rock on steep facets. No grid
+  pattern, no per-pixel noise evaluation. Blocks get a light noise variation.
+
 - Seeded noise utilities in core: lattice hash, smooth value noise, fBm,
   smoothstep. Deterministic across platforms.
 - Organic test map (`?map=organic`, `?seed=<n>`): 128 x 128 procedural

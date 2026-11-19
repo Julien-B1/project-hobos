@@ -14,18 +14,21 @@ export class MeshBuilder {
   private readonly normals: number[] = []
   private readonly colors: number[] = []
   private readonly indices: number[] = []
+  private readonly weights: number[] = []
+  private weighted = false
 
   /**
    * Add a convex polygon (3 or 4 vertices) as a triangle fan with one flat
    * normal. Vertices are reordered if needed so the front face points along
    * `outward`; the stored normal is the polygon's true normal.
    */
-  polygon(vertices: Vec3[], outward: Vec3, color: Vec3): void {
+  polygon(vertices: Vec3[], outward: Vec3, color: Vec3, weights?: (readonly number[])[]): void {
     if (vertices.length < 3) return
     const [a, b, c] = vertices as [Vec3, Vec3, Vec3]
     let n = cross(sub(b, a), sub(c, a))
     if (dot(n, outward) < 0) {
       vertices.reverse()
+      weights?.reverse()
       n = [-n[0], -n[1], -n[2]]
     }
     const len = Math.hypot(n[0], n[1], n[2])
@@ -35,6 +38,7 @@ export class MeshBuilder {
       vertices,
       vertices.map(() => normal),
       vertices.map(() => color),
+      weights,
     )
   }
 
@@ -54,14 +58,22 @@ export class MeshBuilder {
   }
 
   /** Append vertices and a triangle fan over them. */
-  private emit(vertices: readonly Vec3[], normals: readonly Vec3[], colors: readonly Vec3[]): void {
+  private emit(
+    vertices: readonly Vec3[],
+    normals: readonly Vec3[],
+    colors: readonly Vec3[],
+    weights?: (readonly number[])[],
+  ): void {
     const base = this.positions.length / 3
+    if (weights) this.weighted = true
     vertices.forEach((v, i) => {
       const n = normals[i] ?? [0, 1, 0]
       const c = colors[i] ?? [1, 0, 1]
       this.positions.push(v[0], v[1], v[2])
       this.normals.push(n[0], n[1], n[2])
       this.colors.push(c[0], c[1], c[2])
+      const w = weights?.[i] ?? []
+      for (let k = 0; k < WEIGHT_SIZE; k++) this.weights.push(w[k] ?? 0)
     })
     for (let i = 1; i < vertices.length - 1; i++) this.indices.push(base, base + i, base + i + 1)
   }
@@ -73,31 +85,13 @@ export class MeshBuilder {
       normals: new Float32Array(this.normals),
       colors: new Float32Array(this.colors),
       indices: new Uint32Array(this.indices),
+      ...(this.weighted ? { weights: new Float32Array(this.weights) } : {}),
     }
   }
 }
 
-/** Concatenate several meshes into one (indices are rebased). */
-export function mergeMeshData(parts: readonly MeshData[]): MeshData {
-  const total = (pick: (m: MeshData) => ArrayLike<number>): number =>
-    parts.reduce((n, m) => n + pick(m).length, 0)
-  const positions = new Float32Array(total((m) => m.positions))
-  const normals = new Float32Array(total((m) => m.normals))
-  const colors = new Float32Array(total((m) => m.colors))
-  const indices = new Uint32Array(total((m) => m.indices))
-  let v = 0
-  let i = 0
-  for (const m of parts) {
-    positions.set(m.positions, v)
-    normals.set(m.normals, v)
-    colors.set(m.colors, v)
-    const base = v / 3
-    for (let k = 0; k < m.indices.length; k++) indices[i + k] = (m.indices[k] ?? 0) + base
-    v += m.positions.length
-    i += m.indices.length
-  }
-  return { positions, normals, colors, indices }
-}
+/** Material weights stored per vertex (two vec4). */
+export const WEIGHT_SIZE = 8
 
 /** Integer hash to a brightness factor in about [0.96, 1.04]. */
 export function cellJitter(x: number, y: number, z: number): number {

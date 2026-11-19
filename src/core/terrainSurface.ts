@@ -24,6 +24,7 @@
  *   bank slopes on under the water and the shoreline is where the facets
  *   cross the flat water plane drawn by the mesher.
  */
+import { Material } from './materials'
 import { isAir, materialOf, type Voxel } from './voxel'
 import { voxelTopCorners } from './shapes'
 import type { VoxelMap } from './voxelMap'
@@ -39,6 +40,40 @@ export interface TerrainRun {
   readonly top: number
   /** Voxel y of the top voxel. */
   readonly topY: number
+  /** Material id of the top voxel (0 when the top is above the scanned window). */
+  readonly material: number
+}
+
+/**
+ * Terrain materials blended by the renderer, in channel order. A vertex
+ * carries one weight per channel (see {@link TerrainField.cornerWeights}).
+ */
+export const TERRAIN_CHANNELS: readonly number[] = [
+  Material.GRASS,
+  Material.DIRT,
+  Material.SAND,
+  Material.ROCK,
+  Material.STONE,
+  Material.PATH,
+]
+
+/** Channel of a material in {@link TERRAIN_CHANNELS}; unknown materials count as dirt. */
+export function terrainChannel(material: number): number {
+  const i = TERRAIN_CHANNELS.indexOf(material)
+  return i >= 0 ? i : 1
+}
+
+/** Weights (summing to 1) of every terrain channel for one material. */
+export function oneHotWeights(material: number): number[] {
+  const w: number[] = TERRAIN_CHANNELS.map(() => 0)
+  w[terrainChannel(material)] = 1
+  return w
+}
+
+/** Height and blended material weights of a run at one corner. */
+interface CornerValue {
+  readonly height: number
+  readonly weights: readonly number[]
 }
 
 /** Corner heights of a run's top, in levels: [c00, c10, c11, c01] (see `shapes.ts`). */
@@ -69,7 +104,7 @@ const CELL_CORNERS: readonly (readonly [number, number])[] = [
  */
 export class TerrainField {
   private readonly runsCache = new Map<string, TerrainRun[]>()
-  private readonly cornerCache = new Map<string, Map<TerrainRun, number>>()
+  private readonly cornerCache = new Map<string, Map<TerrainRun, CornerValue>>()
 
   /**
    * @param isTerrain Which voxels are terrain (others count as empty).
@@ -102,10 +137,23 @@ export class TerrainField {
       }
     }
     if (start !== null) {
-      runs.push({ bottom: this.bottomOf(start), top: Infinity, topY: this.yMax })
+      runs.push({ bottom: this.bottomOf(start), top: Infinity, topY: this.yMax, material: 0 })
     }
     this.runsCache.set(key, runs)
     return runs
+  }
+
+  /**
+   * Material weights of a run's top at its 4 corners, in `FacetCorners`
+   * order. Each corner averages the top materials of the connected runs
+   * around it (the same groups as the heights), so neighbouring cells agree
+   * and material transitions are continuous instead of following cells.
+   */
+  cornerWeights(x: number, z: number, run: TerrainRun): (readonly number[])[] {
+    return CELL_CORNERS.map(
+      ([dx, dz]) =>
+        this.cornerGroups(x + dx, z + dz).get(run)?.weights ?? oneHotWeights(run.material),
+    )
   }
 
   /** Corner heights (levels) of a run's top in cell (x, z). */
@@ -116,13 +164,13 @@ export class TerrainField {
 
   /** Height (levels) of `run` at lattice point (cx, cz); the run must belong to a cell around it. */
   private cornerHeight(cx: number, cz: number, run: TerrainRun): number {
-    const h = this.cornerGroups(cx, cz).get(run) ?? run.top
+    const h = this.cornerGroups(cx, cz).get(run)?.height ?? run.top
     // An overhanging run must not be pulled below its own bottom.
     return Number.isFinite(run.bottom) ? Math.max(h, run.bottom + 0.25) : h
   }
 
   /** Group heights of every run around lattice point (cx, cz), cached. */
-  private cornerGroups(cx: number, cz: number): Map<TerrainRun, number> {
+  private cornerGroups(cx: number, cz: number): Map<TerrainRun, CornerValue> {
     const key = `${cx},${cz}`
     const cached = this.cornerCache.get(key)
     if (cached) return cached
@@ -147,18 +195,25 @@ export class TerrainField {
         if (connects(a.run, a.runs, b.run, b.runs)) parent[find(i)] = find(j)
       }
     }
-    const sums = new Map<number, { sum: number; count: number }>()
+    const sums = new Map<number, { sum: number; count: number; weights: number[] }>()
     members.forEach((m, i) => {
       const root = find(i)
-      const s = sums.get(root) ?? { sum: 0, count: 0 }
+      const s = sums.get(root) ?? { sum: 0, count: 0, weights: TERRAIN_CHANNELS.map(() => 0) }
       s.sum += m.run.top
       s.count++
+      const channel = terrainChannel(m.run.material)
+      s.weights[channel] = (s.weights[channel] ?? 0) + 1
       sums.set(root, s)
     })
-    const result = new Map<TerrainRun, number>()
+    const result = new Map<TerrainRun, CornerValue>()
     members.forEach((m, i) => {
       const s = sums.get(find(i))
-      result.set(m.run, s ? s.sum / s.count : m.run.top)
+      result.set(
+        m.run,
+        s
+          ? { height: s.sum / s.count, weights: s.weights.map((w) => w / s.count) }
+          : { height: m.run.top, weights: oneHotWeights(m.run.material) },
+      )
     })
     this.cornerCache.set(key, result)
     return result
@@ -168,7 +223,12 @@ export class TerrainField {
   private makeRun(start: number, end: number, topVoxel: Voxel): TerrainRun {
     const c = voxelTopCorners(topVoxel)
     const topFraction = (c[0] + c[1] + c[2] + c[3]) / 4
-    return { bottom: this.bottomOf(start), top: end + topFraction, topY: end }
+    return {
+      bottom: this.bottomOf(start),
+      top: end + topFraction,
+      topY: end,
+      material: materialOf(topVoxel),
+    }
   }
 
   /** A run starting at the window's first voxel may continue below it. */

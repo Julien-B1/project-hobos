@@ -101,6 +101,13 @@ with its own shared material (render/materials.ts)
   the shoreline is where the facets cross the plane. Steep
   triangles use the layer under the top (dirt, rock). The voxel grid is
   unchanged: game logic still works on voxels; only the look is faceted.
+- **Terrain shading** (`render/terrainMaterial.ts`, `render/noiseTexture.ts`):
+  vertices carry 6 material weights (two vec4 attributes), averaged per
+  lattice point like the heights, so transitions are continuous. The shader
+  samples a 256 x 256 tileable noise texture (generated once on the CPU)
+  twice, projected on the facet's plane in world space, to vary colours and
+  wobble the material borders. Budget: 2 texture fetches and a few mixes per
+  pixel; no GPU noise functions.
 - Picking on faceted terrain: hits on upward facets are resolved by column
   (`resolveColumnHit`: surface of that column closest in height), other
   hits by `resolveHit`.

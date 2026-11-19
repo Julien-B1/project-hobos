@@ -122,6 +122,20 @@ function toGeometry(data: MeshData): BufferGeometry {
   geometry.setAttribute('normal', new BufferAttribute(data.normals, 3))
   geometry.setAttribute('color', new BufferAttribute(data.colors, 3))
   geometry.setIndex(new BufferAttribute(data.indices, 1))
+  if (data.weights) {
+    // Split the 8 weights per vertex into two vec4 attributes for the shader.
+    const count = data.positions.length / 3
+    const a = new Float32Array(count * 4)
+    const b = new Float32Array(count * 4)
+    for (let v = 0; v < count; v++) {
+      for (let k = 0; k < 4; k++) {
+        a[v * 4 + k] = data.weights[v * 8 + k] ?? 0
+        b[v * 4 + k] = data.weights[v * 8 + 4 + k] ?? 0
+      }
+    }
+    geometry.setAttribute('weightsA', new BufferAttribute(a, 4))
+    geometry.setAttribute('weightsB', new BufferAttribute(b, 4))
+  }
   // Needed by the raycaster's early-out test.
   geometry.computeBoundingSphere()
   geometry.computeBoundingBox()
