@@ -93,8 +93,9 @@ BufferGeometry on one Mesh per chunk (shared vertex-colour material)
   top becomes two flat-shaded triangles whose corners are the mean of the
   connected run tops around that lattice point (a tunnel floor never joins
   the roof above it). Vertical walls only where the neighbour column does
-  not cover the run, flat undersides for overhangs, and a water quad over
-  shore cells whose facets dip below a neighbouring water surface. Steep
+  not cover the run and flat undersides for overhangs. Beds under water
+  never blend with dry ground, and dry corners touching water sit exactly on
+  the water surface, so shores are clean lines. Steep
   triangles use the layer under the top (dirt, rock). The voxel grid is
   unchanged: game logic still works on voxels; only the look is faceted.
 - Picking on faceted terrain: hits on upward facets are resolved by column

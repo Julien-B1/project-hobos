@@ -13,9 +13,8 @@
  *   walls, map borders);
  * - **bottoms**: flat faces under overhangs (tunnel roofs), never under the
  *   map floor (level 0);
- * - **shore water**: a water quad over land cells whose facet dips below a
- *   neighbouring water surface, so the shoreline follows the slope instead
- *   of the cell grid.
+ * - **shores**: banks meet the water exactly at its surface (see
+ *   `core/terrainSurface.ts`); the water itself is drawn as blocks.
  * Steep triangles take the colour of the layer under the top voxel (dirt
  * under grass, rock under rock), so slopes and cliffs read as bare ground.
  */
@@ -93,6 +92,7 @@ export class TerrainMesher implements ChunkMesher {
       this.options.isTerrain,
       oy - CHUNK_SIZE,
       oy + 2 * CHUNK_SIZE - 1,
+      (v) => materialOf(v) === Material.WATER,
     )
     const out = new MeshBuilder()
 
@@ -104,7 +104,6 @@ export class TerrainMesher implements ChunkMesher {
             const corners = field.cornerHeights(x, z, run)
             this.top(out, map, x, z, run, corners)
             this.walls(out, map, field, x, z, run, corners)
-            this.shoreWater(out, map, x, z, run, corners)
           }
           const b = run.bottom
           const ownsBottom = Number.isFinite(b) && b > FLOOR_LEVEL && b >= oy && b < oy + CHUNK_SIZE
@@ -214,51 +213,6 @@ export class TerrainMesher implements ChunkMesher {
       [0, -1, 0],
       this.shade(material, cellJitter(x, run.bottom, z)),
     )
-  }
-
-  /**
-   * Water quad over a land cell whose facet dips below the surface of water
-   * in a neighbouring cell. The terrain above the water hides the rest.
-   */
-  private shoreWater(
-    out: MeshBuilder,
-    map: VoxelMap,
-    x: number,
-    z: number,
-    run: TerrainRun,
-    h: FacetCorners,
-  ): void {
-    if (materialOf(map.get(x, run.topY + 1, z)) === Material.WATER) return // a water cell
-    const lowest = Math.min(h[0], h[1], h[2], h[3])
-    for (let y = Math.floor(lowest); y <= run.topY; y++) {
-      if (!this.hasWaterSurfaceAround(map, x, y, z)) continue
-      const level = y + 1
-      if (lowest >= level) return
-      const wy = level * VOXEL_HEIGHT
-      out.polygon(
-        [
-          [x, wy, z],
-          [x + 1, wy, z],
-          [x + 1, wy, z + 1],
-          [x, wy, z + 1],
-        ],
-        [0, 1, 0],
-        this.shade(Material.WATER, 1),
-      )
-      return
-    }
-  }
-
-  /** True when a neighbouring column (8 around) has a water voxel at `y` with no water above. */
-  private hasWaterSurfaceAround(map: VoxelMap, x: number, y: number, z: number): boolean {
-    for (let dz = -1; dz <= 1; dz++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        if (dx === 0 && dz === 0) continue
-        if (materialOf(map.get(x + dx, y, z + dz)) !== Material.WATER) continue
-        if (materialOf(map.get(x + dx, y + 1, z + dz)) !== Material.WATER) return true
-      }
-    }
-    return false
   }
 
   /** Material colour times a brightness factor. */

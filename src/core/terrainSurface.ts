@@ -20,6 +20,9 @@
  *   a cliff joins the cliff top (the cliff becomes a steep facet).
  * - The group's height is the mean of its run tops. All cells sharing the
  *   corner read the same value, so facets join without gaps.
+ * - Water: runs under water (beds) only group with other beds. A dry corner
+ *   touching a water column is set to the water surface level, so shores
+ *   meet the water on a clean line instead of dipping under it.
  */
 import { isAir, materialOf, type Voxel } from './voxel'
 import { voxelTopCorners } from './shapes'
@@ -36,10 +39,18 @@ export interface TerrainRun {
   readonly top: number
   /** Voxel y of the top voxel. */
   readonly topY: number
+  /**
+   * Level of the water surface above the run when the voxel on top of it is
+   * water (river or lake bed), else null.
+   */
+  readonly waterLevel: number | null
 }
 
 /** Corner heights of a run's top, in levels: [c00, c10, c11, c01] (see `shapes.ts`). */
 export type FacetCorners = readonly [number, number, number, number]
+
+/** Safety bound when scanning a water column upwards, in voxels. */
+const CHUNK_LIMIT = 64
 
 /** Largest height difference (levels) that a facet may bridge between two runs. */
 export const MAX_FACET_RISE = 12
@@ -78,6 +89,7 @@ export class TerrainField {
     private readonly isTerrain: (voxel: Voxel) => boolean,
     private readonly yMin: number,
     private readonly yMax: number,
+    private readonly isWater: (voxel: Voxel) => boolean = () => false,
   ) {}
 
   /** Runs of column (x, z) inside the window, bottom to top. */
@@ -94,12 +106,12 @@ export class TerrainField {
       if (solid && start === null) start = y
       if (solid) lastVoxel = v
       if (!solid && start !== null) {
-        runs.push(this.makeRun(start, y - 1, lastVoxel))
+        runs.push(this.makeRun(start, y - 1, lastVoxel, this.waterSurfaceFrom(x, y, z)))
         start = null
       }
     }
     if (start !== null) {
-      runs.push({ bottom: this.bottomOf(start), top: Infinity, topY: this.yMax })
+      runs.push({ bottom: this.bottomOf(start), top: Infinity, topY: this.yMax, waterLevel: null })
     }
     this.runsCache.set(key, runs)
     return runs
@@ -141,6 +153,9 @@ export class TerrainField {
         const a = members[i]
         const b = members[j]
         if (!a || !b || a.cell === b.cell) continue
+        // Underwater beds and dry ground never blend: the bed is hidden by
+        // the water anyway, and blending would pull banks below the water.
+        if ((a.run.waterLevel === null) !== (b.run.waterLevel === null)) continue
         if (connects(a.run, a.runs, b.run, b.runs)) parent[find(i)] = find(j)
       }
     }
@@ -152,20 +167,41 @@ export class TerrainField {
       s.count++
       sums.set(root, s)
     })
+    // Shore: a dry corner next to water sits exactly on the water surface,
+    // so banks meet the water along a clean line.
+    let shoreLevel = Infinity
+    for (const m of members) {
+      if (m.run.waterLevel !== null) shoreLevel = Math.min(shoreLevel, m.run.waterLevel)
+    }
     const result = new Map<TerrainRun, number>()
     members.forEach((m, i) => {
       const s = sums.get(find(i))
-      result.set(m.run, s ? s.sum / s.count : m.run.top)
+      let h = s ? s.sum / s.count : m.run.top
+      if (m.run.waterLevel === null && m.run.top >= shoreLevel) h = Math.min(h, shoreLevel)
+      result.set(m.run, h)
     })
     this.cornerCache.set(key, result)
     return result
   }
 
   /** Run from voxel `start` to voxel `end` (inclusive); `top` counts a wedge's partial height. */
-  private makeRun(start: number, end: number, topVoxel: Voxel): TerrainRun {
+  private makeRun(
+    start: number,
+    end: number,
+    topVoxel: Voxel,
+    waterLevel: number | null,
+  ): TerrainRun {
     const c = voxelTopCorners(topVoxel)
     const topFraction = (c[0] + c[1] + c[2] + c[3]) / 4
-    return { bottom: this.bottomOf(start), top: end + topFraction, topY: end }
+    return { bottom: this.bottomOf(start), top: end + topFraction, topY: end, waterLevel }
+  }
+
+  /** Water surface level when voxel (x, y, z) starts a water column, else null. */
+  private waterSurfaceFrom(x: number, y: number, z: number): number | null {
+    if (!this.isWater(this.map.get(x, y, z))) return null
+    let top = y
+    while (top < this.yMax + CHUNK_LIMIT && this.isWater(this.map.get(x, top + 1, z))) top++
+    return top + 1
   }
 
   /** A run starting at the window's first voxel may continue below it. */

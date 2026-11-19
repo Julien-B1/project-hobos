@@ -84,7 +84,7 @@ accepted record: add a new one that supersedes it.
   run, a top made of two flat-shaded triangles whose corners are shared,
   averaged heights of connected neighbouring runs (`core/terrainSurface.ts`);
   vertical walls only where neighbours do not cover; flat undersides for
-  overhangs; water quads over shore cells. Wood, leaves and water stay
+  overhangs; shores pinned to the water surface. Wood, leaves and water stay
   blocks (`CulledMesher`). `?mesher=blocky` keeps exact blocks.
 - **Consequences.**
   - Steps of any height become facets; corners seen from above are cut

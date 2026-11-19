@@ -23,7 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Faceted low-poly terrain rendering (default): `TerrainMesher` draws terrain
   materials as flat-shaded facets whose corner heights are shared averages
   of connected neighbouring runs (`core/terrainSurface.ts`), with walls only
-  where needed, overhang undersides and shore water quads; wood, leaves and
+  where needed and overhang undersides; shores pinned to the water surface
+  (beds never blend with dry ground); wood, leaves and
   water stay blocks (`HybridMesher`); `?mesher=blocky` for exact blocks.
 - `isTerrainMaterial()` classification; `resolveColumnHit()` for picking on
   facets; hover highlight draped on the terrain; organic map cliff zones

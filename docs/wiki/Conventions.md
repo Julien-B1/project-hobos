@@ -120,6 +120,8 @@ stairs) keep sharp edges, leaves stay cubic, water is a flat block.
   column is solid down to the lower top and nothing covers the lower run
   below the higher top (max rise 12 levels). Connected runs share the mean
   of their tops as corner height.
+- **Shores**: runs under water (beds) only group with other beds; a dry
+  corner touching a water column is set to the water surface level.
 - Each top is split into two triangles along the diagonal whose ends are
   closest in height (`facetDiagonal`); `facetHeightAt` samples it.
 
