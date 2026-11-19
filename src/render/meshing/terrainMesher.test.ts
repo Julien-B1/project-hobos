@@ -3,7 +3,9 @@ import { Material, isTerrainMaterial } from '@/core/materials'
 import { materialOf, packVoxel, type Voxel } from '@/core/voxel'
 import { VoxelMap } from '@/core/voxelMap'
 import type { MeshData } from './mesher'
-import { TerrainMesher, subtract } from './terrainMesher'
+import { createOrganicMap } from '@/core/generators/organicMap'
+import { TerrainMesher, uncoveredStrips } from './terrainMesher'
+import { openStretches } from './watertight'
 
 const mesher = new TerrainMesher({
   isTerrain: (v: Voxel) => isTerrainMaterial(materialOf(v)),
@@ -48,14 +50,32 @@ function box(
     for (let y = y0; y < y1; y++) for (let z = z0; z < z1; z++) map.set(x, y, z, GRASS)
 }
 
-describe('subtract', () => {
-  it('removes covered parts of an interval', () => {
-    expect(subtract([0, 10], [[2, 4]])).toEqual([
-      [0, 2],
-      [4, 10],
-    ])
-    expect(subtract([0, 10], [[-Infinity, 12]])).toEqual([])
-    expect(subtract([5, 6], [[0, 2]])).toEqual([[5, 6]])
+describe('uncoveredStrips', () => {
+  const flat = (y: number) => (): number => y
+  const line =
+    (a: number, b: number) =>
+    (t: number): number =>
+      a + (b - a) * t
+
+  it('keeps the part of a run above a lower neighbour', () => {
+    const strips = uncoveredStrips([flat(0), flat(10)], [[flat(0), flat(4)]])
+    expect(strips).toHaveLength(1)
+    expect(strips[0]?.lo(0.5)).toBe(4)
+    expect(strips[0]?.hi(0.5)).toBe(10)
+  })
+
+  it('returns nothing when the neighbour covers everything', () => {
+    expect(uncoveredStrips([flat(0), flat(10)], [[flat(-Infinity), flat(12)]])).toEqual([])
+  })
+
+  it('cuts the wall where the two tops cross along the edge', () => {
+    // Mine goes 10 -> 6, neighbour 6 -> 10: uncovered only for t < 0.5.
+    const strips = uncoveredStrips([flat(0), line(10, 6)], [[flat(0), line(6, 10)]])
+    expect(strips).toHaveLength(1)
+    expect(strips[0]?.t0).toBe(0)
+    expect(strips[0]?.t1).toBeCloseTo(0.5)
+    expect(strips[0]?.hi(0.5)).toBeCloseTo(8)
+    expect(strips[0]?.lo(0.5)).toBeCloseTo(8)
   })
 })
 
@@ -128,5 +148,35 @@ describe('TerrainMesher', () => {
       const inside = zs.every((z) => z > 0 && z < 6)
       expect(vertical && inside).toBe(false)
     }
+  })
+})
+
+describe('TerrainMesher watertightness', () => {
+  const onFloorOrBorder =
+    (size: number) =>
+    (a: readonly number[], b: readonly number[]): boolean => {
+      const both = (f: (p: readonly number[]) => boolean): boolean => f(a) && f(b)
+      return (
+        both((p) => Math.abs(p[1] ?? 1) < 1e-6) ||
+        both((p) => Math.abs(p[0] ?? 1) < 1e-6) ||
+        both((p) => Math.abs((p[0] ?? 0) - size) < 1e-6) ||
+        both((p) => Math.abs(p[2] ?? 1) < 1e-6) ||
+        both((p) => Math.abs((p[2] ?? 0) - size) < 1e-6)
+      )
+    }
+
+  it('has no gap on a tunnel through a hill (T-junction tolerant)', () => {
+    const map = new VoxelMap()
+    box(map, 0, 10, 2, 12, 0, 10)
+    for (let x = 0; x < 10; x++)
+      for (let y = 4; y < 7; y++) for (let z = 4; z < 6; z++) map.set(x, y, z, 0)
+    expect(openStretches(meshAll(map))).toEqual([])
+  })
+
+  it('has no gap anywhere on an organic map except the map floor and borders', () => {
+    const size = 48
+    const { map } = createOrganicMap({ seed: 3, size })
+    const open = openStretches(meshAll(map), onFloorOrBorder(size))
+    expect(open.slice(0, 5)).toEqual([])
   })
 })

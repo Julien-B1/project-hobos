@@ -73,9 +73,6 @@ const EDGES: readonly {
   { dx: 0, dz: -1, mine: [0, 1], theirs: [3, 2] },
 ]
 
-/** Closed interval of levels. */
-type Interval = readonly [number, number]
-
 /** Mesher for terrain voxels; see the module comment. */
 export class TerrainMesher implements ChunkMesher {
   constructor(private readonly options: TerrainMesherOptions) {}
@@ -167,27 +164,28 @@ export class TerrainMesher implements ChunkMesher {
       const nx = x + edge.dx
       const nz = z + edge.dz
       const neighbourRuns = field.runsAt(nx, nz)
-      // Uncovered parts of this run at both ends of the edge.
-      const pieces = edge.mine.map((corner, e) => {
-        const covers: Interval[] = neighbourRuns.map((r) => [
-          r.bottom,
-          Number.isFinite(r.top) ? field.cornerHeights(nx, nz, r)[edge.theirs[e] ?? 0] : Infinity,
-        ])
-        return subtract([runBottom, h[corner]], covers)
-      }) as [Interval[], Interval[]]
+      // Boundaries along the edge (t = 0 at the first end, 1 at the second):
+      // tops are straight lines (facet edges), bottoms are constant.
+      const mine: Band = [flat(runBottom), line(h[edge.mine[0]], h[edge.mine[1]])]
+      const covers: Band[] = neighbourRuns.map((r) => {
+        if (!Number.isFinite(r.top)) return [flat(r.bottom), flat(Infinity)]
+        const c = field.cornerHeights(nx, nz, r)
+        return [flat(r.bottom), line(c[edge.theirs[0]], c[edge.theirs[1]])]
+      })
 
       const ends = edge.mine.map((corner) => CORNER_XZ[corner] ?? [0, 0])
       const [e0, e1] = ends as [readonly [number, number], readonly [number, number]]
       const outward: Vec3 = [edge.dx, 0, edge.dz]
-      for (const [a, b] of pairIntervals(pieces[0], pieces[1])) {
-        const polygon = dedupe([
-          [x + e0[0], a[0] * VOXEL_HEIGHT, z + e0[1]],
-          [x + e1[0], b[0] * VOXEL_HEIGHT, z + e1[1]],
-          [x + e1[0], b[1] * VOXEL_HEIGHT, z + e1[1]],
-          [x + e0[0], a[1] * VOXEL_HEIGHT, z + e0[1]],
-        ])
+      const at = (t: number, y: number): Vec3 => [
+        x + e0[0] + (e1[0] - e0[0]) * t,
+        y * VOXEL_HEIGHT,
+        z + e0[1] + (e1[1] - e0[1]) * t,
+      ]
+      for (const { t0, t1, lo, hi } of uncoveredStrips(mine, covers)) {
+        const polygon = dedupe([at(t0, lo(t0)), at(t1, lo(t1)), at(t1, hi(t1)), at(t0, hi(t0))])
         if (polygon.length < 3) continue
-        const mid = (a[0] + a[1] + b[0] + b[1]) / 4
+        const tm = (t0 + t1) / 2
+        const mid = (lo(tm) + hi(tm)) / 2
         const voxel = map.get(x, Math.floor(mid), z)
         const material = this.options.isTerrain(voxel)
           ? materialOf(voxel)
@@ -222,40 +220,80 @@ export class TerrainMesher implements ChunkMesher {
   }
 }
 
-/** `a` minus the union of `cuts` (all closed intervals), as sorted pieces. */
-export function subtract(a: Interval, cuts: readonly Interval[]): Interval[] {
-  let pieces: Interval[] = a[1] - a[0] > 1e-6 ? [a] : []
-  for (const [lo, hi] of cuts) {
-    const next: Interval[] = []
-    for (const [p, q] of pieces) {
-      if (hi <= p || lo >= q) {
-        next.push([p, q])
-        continue
-      }
-      if (lo > p) next.push([p, lo])
-      if (hi < q) next.push([hi, q])
-    }
-    pieces = next.filter(([p, q]) => q - p > 1e-6)
-  }
-  return pieces
+/** A boundary along an edge: height (levels) as a linear function of t in [0, 1]. */
+type Boundary = (t: number) => number
+
+/** Lower and upper boundary of a solid band along an edge. */
+type Band = readonly [Boundary, Boundary]
+
+/** Constant boundary. */
+function flat(y: number): Boundary {
+  return () => y
+}
+
+/** Straight boundary from `a` at t = 0 to `b` at t = 1. */
+function line(a: number, b: number): Boundary {
+  return (t) => a + (b - a) * t
+}
+
+/** A wall strip between t0 and t1, bounded below by `lo` and above by `hi`. */
+interface Strip {
+  readonly t0: number
+  readonly t1: number
+  readonly lo: Boundary
+  readonly hi: Boundary
 }
 
 /**
- * Pair the uncovered pieces found at the two ends of an edge into wall
- * strips. Same count: pair in order. Otherwise extra pieces close against a
- * zero-height point at the other end (the strip becomes a triangle).
+ * Parts of band `a` not covered by any band of `covers`, along an edge.
+ *
+ * Boundaries are linear in t, so the edge is cut at every t where two
+ * boundaries cross; inside each piece the vertical order of all boundaries
+ * is fixed, so the uncovered parts found at the piece's middle keep the
+ * same bounding boundaries over the whole piece. This yields exact wall
+ * polygons even when this run and a neighbour cross along the edge (one
+ * higher at one end, lower at the other).
  */
-function pairIntervals(a: Interval[], b: Interval[]): [Interval, Interval][] {
-  const pairs: [Interval, Interval][] = []
-  const n = Math.max(a.length, b.length)
-  for (let i = 0; i < n; i++) {
-    const pa = a[i]
-    const pb = b[i]
-    if (pa && pb) pairs.push([pa, pb])
-    else if (pa) pairs.push([pa, [(pa[0] + pa[1]) / 2, (pa[0] + pa[1]) / 2]])
-    else if (pb) pairs.push([[(pb[0] + pb[1]) / 2, (pb[0] + pb[1]) / 2], pb])
+export function uncoveredStrips(a: Band, covers: readonly Band[]): Strip[] {
+  const boundaries: Boundary[] = [a[0], a[1], ...covers.flatMap((c) => [c[0], c[1]])]
+  const cuts = new Set<number>([0, 1])
+  for (let i = 0; i < boundaries.length; i++) {
+    for (let j = i + 1; j < boundaries.length; j++) {
+      const f = boundaries[i]
+      const g = boundaries[j]
+      if (!f || !g) continue
+      const d0 = f(0) - g(0)
+      const d1 = f(1) - g(1)
+      if (!Number.isFinite(d0) || !Number.isFinite(d1)) continue
+      if ((d0 < 0 && d1 > 0) || (d0 > 0 && d1 < 0)) cuts.add(d0 / (d0 - d1))
+    }
   }
-  return pairs
+  const ts = [...cuts].sort((p, q) => p - q)
+  const strips: Strip[] = []
+  for (let k = 0; k < ts.length - 1; k++) {
+    const t0 = ts[k] ?? 0
+    const t1 = ts[k + 1] ?? 1
+    if (t1 - t0 < 1e-9) continue
+    const tm = (t0 + t1) / 2
+    // Uncovered pieces at the middle, tracked as boundary pairs.
+    let pieces: Band[] = a[1](tm) - a[0](tm) > 1e-9 ? [a] : []
+    for (const [cLo, cHi] of covers) {
+      const lo = cLo(tm)
+      const hi = cHi(tm)
+      const next: Band[] = []
+      for (const [pLo, pHi] of pieces) {
+        if (hi <= pLo(tm) || lo >= pHi(tm)) {
+          next.push([pLo, pHi])
+          continue
+        }
+        if (lo > pLo(tm)) next.push([pLo, cLo])
+        if (hi < pHi(tm)) next.push([cHi, pHi])
+      }
+      pieces = next.filter(([pLo, pHi]) => pHi(tm) - pLo(tm) > 1e-9)
+    }
+    for (const [lo, hi] of pieces) strips.push({ t0, t1, lo, hi })
+  }
+  return strips
 }
 
 /** Remove consecutive duplicate vertices (collapsed wall ends). */

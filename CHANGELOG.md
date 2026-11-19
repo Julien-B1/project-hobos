@@ -98,6 +98,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Faceted terrain walls are now exact when this cell's top and the
+  neighbour's top cross along an edge (the edge is split at the crossing);
+  before, such walls closed at the wrong place and left slits through which
+  the water behind the banks showed. T-junction tolerant watertightness test
+  on a full organic map.
+
 - `make wiki-publish` failed when the git identity was configured only in the
   repository (not globally): the temporary wiki clone now reuses it.
 

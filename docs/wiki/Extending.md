@@ -40,8 +40,8 @@ when present. Keep `profileFromCorners` for height-field shapes.
 2. Pass it to `ChunkRenderer` in `src/render/engine.ts` (see how
    `HybridMesher` combines the faceted terrain mesher and the blocky mesher with
    `mergeMeshData`).
-3. Reuse the closedness test of `terrainMesher.test.ts` (every triangle
-   edge shared by exactly two triangles, across chunk borders).
+3. Check watertightness with `openStretches()` (`render/meshing/watertight.ts`,
+   tolerant to T-junctions), as `terrainMesher.test.ts` does on a full map.
 4. If the mesher reads further than 2 voxels beyond its chunk, raise
    `DIRTY_MARGIN` in `src/core/voxelMap.ts`.
 

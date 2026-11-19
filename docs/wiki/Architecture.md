@@ -93,7 +93,8 @@ BufferGeometry on one Mesh per chunk (shared vertex-colour material)
   top becomes two flat-shaded triangles whose corners are the mean of the
   connected run tops around that lattice point (a tunnel floor never joins
   the roof above it). Vertical walls only where the neighbour column does
-  not cover the run and flat undersides for overhangs. Beds under water
+  not cover the run (exact even when the two tops cross along the edge:
+  the edge is split at each crossing) and flat undersides for overhangs. Beds under water
   never blend with dry ground, and dry corners touching water sit exactly on
   the water surface, so shores are clean lines. Steep
   triangles use the layer under the top (dirt, rock). The voxel grid is
