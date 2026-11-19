@@ -1,21 +1,28 @@
 /**
- * Engine: owns the renderer, scene, camera and render loop.
+ * Engine: owns the renderer, scene, camera, picking and render loop.
  *
  * Layer: render. The app layer creates one `Engine` per canvas and receives
  * HUD state through a callback. The engine never holds Vue objects, and the
- * app must not put engine objects into reactive state (use `markRaw`).
+ * app must keep the engine out of reactive state (plain variable or
+ * `markRaw`) so Three.js objects are never proxied.
  */
-import type { Scene } from 'three/webgpu'
+import { Raycaster, Vector2, type Mesh, type Scene } from 'three/webgpu'
+import { worldToCell, type CellCoord } from '@/core/coords'
+import type { FlatGrid } from '@/core/generators/flatGrid'
 import { CameraRig, type CameraRigSettings } from './cameraRig'
 import { createRenderer, type RenderBackend, type RendererHandle } from './createRenderer'
+import { createGridMesh } from './gridMesh'
+import { CellHighlight } from './highlight'
 import { createScene } from './sceneSetup'
 
-/** Snapshot of engine state shown by the debug HUD. */
+/** Snapshot of engine state shown by the debug HUD. Replaced, never mutated. */
 export interface EngineHudState {
   /** Backend selected by the renderer. */
   readonly backend: RenderBackend
   /** Frames per second, averaged over the last measurement window. */
   readonly fps: number
+  /** Cell under the mouse cursor, or null when the cursor is off the grid. */
+  readonly hoveredCell: CellCoord | null
 }
 
 /** Options for {@link Engine.create}. */
@@ -24,7 +31,9 @@ export interface EngineOptions {
   readonly forceWebGL: boolean
   /** Orbit camera settings. */
   readonly camera: CameraRigSettings
-  /** Called when HUD-visible state changes (at most a few times per second). */
+  /** Ground grid to display and pick on. */
+  readonly grid: FlatGrid
+  /** Called when HUD-visible state changes (at most a few times per second for FPS). */
   readonly onHudChange: (state: EngineHudState) => void
 }
 
@@ -47,6 +56,11 @@ export class Engine {
   private readonly scene: Scene
   private readonly rig: CameraRig
   private readonly resizeObserver: ResizeObserver
+  private readonly gridMesh: Mesh
+  private readonly highlight = new CellHighlight()
+  private readonly raycaster = new Raycaster()
+  /** Cursor in normalised device coordinates, or null when outside the canvas. */
+  private pointerNdc: Vector2 | null = null
   private hud: EngineHudState
   private frameCount = 0
   private windowStart = 0
@@ -60,7 +74,11 @@ export class Engine {
     this.scene = createScene()
     this.rig = new CameraRig(options.camera)
 
-    this.hud = { backend: handle.backend, fps: 0 }
+    this.gridMesh = createGridMesh(options.grid)
+    this.scene.add(this.gridMesh)
+    this.scene.add(this.highlight.mesh)
+
+    this.hud = { backend: handle.backend, fps: 0, hoveredCell: null }
 
     // Observe the canvas itself: it is sized by CSS, the renderer follows.
     this.resizeObserver = new ResizeObserver(() => {
@@ -81,6 +99,23 @@ export class Engine {
     return this.rig
   }
 
+  /**
+   * Update the cursor position, in CSS pixels relative to the canvas'
+   * top-left corner. Picking runs on the next frame.
+   */
+  setPointer(cssX: number, cssY: number): void {
+    const width = Math.max(1, this.canvas.clientWidth)
+    const height = Math.max(1, this.canvas.clientHeight)
+    // NDC: x and y in [-1, 1], y pointing up (screen y points down).
+    this.pointerNdc ??= new Vector2()
+    this.pointerNdc.set((cssX / width) * 2 - 1, -(cssY / height) * 2 + 1)
+  }
+
+  /** The cursor left the canvas: stop picking and hide the highlight. */
+  clearPointer(): void {
+    this.pointerNdc = null
+  }
+
   /** Start the render loop and publish the initial HUD state. */
   start(): void {
     this.options.onHudChange(this.hud)
@@ -97,13 +132,36 @@ export class Engine {
     void this.handle.renderer.dispose()
   }
 
-  /** One frame: update stats and draw. `time` is in milliseconds. */
+  /** One frame: camera, picking, stats, draw. `time` is in milliseconds. */
   private frame(time: number): void {
     const dt = this.lastFrameTime === null ? 0 : (time - this.lastFrameTime) / 1000
     this.lastFrameTime = time
     this.rig.update(Math.min(dt, MAX_FRAME_DT))
+    // Pick every frame: the camera may move under a still cursor.
+    this.updateHover()
     this.updateFps(time)
     this.handle.renderer.render(this.scene, this.rig.camera)
+  }
+
+  /** Raycast the cursor against the grid and update highlight and HUD. */
+  private updateHover(): void {
+    let cell: CellCoord | null = null
+    if (this.pointerNdc) {
+      this.raycaster.setFromCamera(this.pointerNdc, this.rig.camera)
+      const hit = this.raycaster.intersectObject(this.gridMesh, false)[0]
+      if (hit) {
+        const candidate = worldToCell(hit.point.x, hit.point.z)
+        // A hit exactly on the far border floors to a cell outside the grid.
+        if (this.options.grid.contains(candidate)) cell = candidate
+      }
+    }
+
+    if (cell) this.highlight.showCell(cell.x, cell.z, 0)
+    else this.highlight.hide()
+
+    const previous = this.hud.hoveredCell
+    const changed = cell?.x !== previous?.x || cell?.z !== previous?.z
+    if (changed) this.publish({ ...this.hud, hoveredCell: cell })
   }
 
   /** Count frames and publish the FPS once per measurement window. */

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Debug overlay: renderer backend and frame rate.
+ * Debug overlay: renderer backend, frame rate and hovered cell.
  *
  * Purely presentational: receives a HUD snapshot from the engine (through
  * App.vue) and renders it. Never reads engine objects directly.
@@ -20,6 +20,13 @@ defineProps<{
         Backend: <strong>{{ state.backend }}</strong>
       </div>
       <div>FPS: {{ state.fps }}</div>
+      <div>
+        Cell:
+        <template v-if="state.hoveredCell">
+          x {{ state.hoveredCell.x }}, z {{ state.hoveredCell.z }}
+        </template>
+        <template v-else>—</template>
+      </div>
     </template>
     <div v-else>Starting renderer…</div>
   </aside>

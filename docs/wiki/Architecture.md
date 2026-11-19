@@ -50,6 +50,12 @@ App.vue
   so it is unit-tested. Yaw convention: yaw 0 puts the camera on the +Z side
   of its target looking towards -Z; positive yaw turns counter-clockwise seen
   from above.
+- Hover picking: bindings forward the cursor to `Engine.setPointer()` (CSS
+  pixels, converted to NDC). Every frame the engine raycasts the ground
+  mesh, converts the hit point with `core/coords.worldToCell()`, moves the
+  `CellHighlight` quad and publishes `hoveredCell` in the HUD snapshot only
+  when it changes. Picking runs every frame because the camera can move
+  under a still cursor.
 - Debug URL flags are read by the app layer (`src/app/config.ts`):
   `?forceWebGL=1` forces the WebGL 2 backend.
 

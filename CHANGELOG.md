@@ -23,3 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   left drag, animated 45° snaps (`A`/`E` on AZERTY), bounded animated zoom,
   target panning by middle drag or `ZQSD`/arrows (layout-independent key
   codes). Camera maths unit-tested.
+- Flat 32 x 32 test grid (`core/generators/flatGrid.ts`) rendered as a
+  checker mesh; hover picking by raycast highlights the targeted cell and the
+  debug HUD shows its coordinates. Core coordinate helpers
+  (`core/coords.ts`: cell and half-height voxel level conversions) with tests.

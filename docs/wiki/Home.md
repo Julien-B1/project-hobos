@@ -10,6 +10,7 @@ documentation; the repository README only covers setup and daily usage.
 ## Pages
 
 - [[Architecture]]: layers and import rules, tooling.
+- [[Conventions]]: world frame, units, voxel levels, camera and input conventions.
 - [[Development Environment|Development-Environment]]: Docker stack, `make`
   targets, dev container, troubleshooting.
 - [[Decisions]]: architecture decision records (engine, UI framework, Docker).

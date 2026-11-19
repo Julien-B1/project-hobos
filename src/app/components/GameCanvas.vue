@@ -10,6 +10,7 @@ import { onBeforeUnmount, onMounted, ref, useTemplateRef } from 'vue'
 import { Engine, type EngineHudState } from '@/render/engine'
 import { config, readUrlFlags } from '@/app/config'
 import { bindInputs } from '@/app/input/bindings'
+import { createFlatGrid } from '@/core/generators/flatGrid'
 
 const emit = defineEmits<{
   /** Fired whenever the engine publishes a new HUD snapshot. */
@@ -25,10 +26,12 @@ let unmounted = false
 
 onMounted(async () => {
   if (!canvas.value) return
+  const grid = createFlatGrid(32, 32)
   try {
     const created = await Engine.create(canvas.value, {
       forceWebGL: readUrlFlags().forceWebGL,
       camera: config.camera,
+      grid,
       onHudChange: (state) => {
         emit('hud', state)
       },
@@ -39,9 +42,10 @@ onMounted(async () => {
       return
     }
     engine = created
-    // Look at the middle of the 32 x 32 test grid.
-    engine.cameraRig.setTarget(16, 0, 16)
-    unbindInputs = bindInputs(canvas.value, engine.cameraRig, config.input)
+    // Look at the middle of the grid and keep the target over it.
+    engine.cameraRig.setTarget(grid.width / 2, 0, grid.depth / 2)
+    engine.cameraRig.setTargetBounds({ minX: 0, maxX: grid.width, minZ: 0, maxZ: grid.depth })
+    unbindInputs = bindInputs(canvas.value, engine, config.input)
     engine.start()
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)

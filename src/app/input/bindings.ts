@@ -12,9 +12,19 @@
  * | KeyQ / KeyE                | A / E        | Rotate 45 degrees (snap)   |
  * | Arrow keys                 | Arrow keys   | Same as W/A/S/D            |
  *
- * Mouse: left drag = free rotation, middle drag = pan, wheel = zoom.
+ * Mouse: left drag = free rotation, middle drag = pan, wheel = zoom. The
+ * cursor position is forwarded for hover picking.
  */
 import type { CameraRig } from '@/render/cameraRig'
+
+/** What the bindings drive: the camera rig and the hover cursor. Implemented by `Engine`. */
+export interface InputTarget {
+  readonly cameraRig: CameraRig
+  /** Cursor position in CSS pixels relative to the canvas top-left corner. */
+  setPointer(cssX: number, cssY: number): void
+  /** Cursor left the canvas. */
+  clearPointer(): void
+}
 
 /** Sensitivity settings, see `config.input`. */
 export interface InputSettings {
@@ -46,9 +56,10 @@ type Drag =
  */
 export function bindInputs(
   canvas: HTMLCanvasElement,
-  rig: CameraRig,
+  target: InputTarget,
   settings: InputSettings,
 ): () => void {
+  const rig = target.cameraRig
   const pressed = new Set<string>()
   let drag: Drag = { kind: 'none' }
 
@@ -98,6 +109,8 @@ export function bindInputs(
   }
 
   const onPointerMove = (e: PointerEvent): void => {
+    const rect = canvas.getBoundingClientRect()
+    target.setPointer(e.clientX - rect.left, e.clientY - rect.top)
     if (drag.kind === 'left') {
       if (!drag.rotating && Math.abs(e.clientX - drag.startX) >= settings.dragThresholdPx) {
         drag.rotating = true
@@ -126,6 +139,10 @@ export function bindInputs(
     rig.zoomBy(Math.exp(delta * settings.zoomPerWheelUnit))
   }
 
+  const onPointerLeave = (): void => {
+    target.clearPointer()
+  }
+
   /** Middle click must not open the auto-scroll or paste on some systems. */
   const onAuxClick = (e: MouseEvent): void => {
     if (e.button === 1) e.preventDefault()
@@ -138,6 +155,7 @@ export function bindInputs(
   canvas.addEventListener('pointermove', onPointerMove)
   canvas.addEventListener('pointerup', onPointerUp)
   canvas.addEventListener('pointercancel', onPointerUp)
+  canvas.addEventListener('pointerleave', onPointerLeave)
   canvas.addEventListener('wheel', onWheel, { passive: false })
   canvas.addEventListener('auxclick', onAuxClick)
 
@@ -149,6 +167,7 @@ export function bindInputs(
     canvas.removeEventListener('pointermove', onPointerMove)
     canvas.removeEventListener('pointerup', onPointerUp)
     canvas.removeEventListener('pointercancel', onPointerUp)
+    canvas.removeEventListener('pointerleave', onPointerLeave)
     canvas.removeEventListener('wheel', onWheel)
     canvas.removeEventListener('auxclick', onAuxClick)
   }
