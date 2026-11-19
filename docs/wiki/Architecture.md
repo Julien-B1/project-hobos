@@ -78,7 +78,8 @@ ChunkMesher.mesh(map, chunk) ──> MeshData (typed arrays, no Three.js)
         │     wood, leaves, water -> CulledMesher (blocks, exact shapes)
         │   CulledMesher alone (`?mesher=blocky`)
         ▼
-BufferGeometry on one Mesh per chunk (shared vertex-colour material)
+One Mesh per chunk and render layer (terrain, blocks, water), each layer
+with its own shared material (render/materials.ts)
 ```
 
 - `ChunkRenderer.update()` runs every frame; after generation every chunk is

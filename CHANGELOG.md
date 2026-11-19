@@ -32,6 +32,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Chunks are drawn in three render layers (terrain, blocks, water), each
+  with its own shared material; maximum zoom-out distance raised to 240.
+
 - Organic map smoothing: wider relief, blurred height field and wider river
   banks (no height step above 2 levels), and corner-aware wedges instead of
   single-axis slopes, so diagonals and corners no longer show notches.

@@ -33,7 +33,7 @@ import {
 import { isAir, materialOf, type Voxel } from '@/core/voxel'
 import type { VoxelMap } from '@/core/voxelMap'
 import { MeshBuilder, cellJitter, cross, sub, type Vec3 } from './meshBuilder'
-import type { ChunkMesher, ColorLookup, MeshData } from './mesher'
+import type { ColorLookup, MeshData } from './mesher'
 
 /** Options for {@link TerrainMesher}. */
 export interface TerrainMesherOptions {
@@ -83,11 +83,11 @@ const EDGES: readonly {
 ]
 
 /** Mesher for terrain voxels; see the module comment. */
-export class TerrainMesher implements ChunkMesher {
+export class TerrainMesher {
   constructor(private readonly options: TerrainMesherOptions) {}
 
-  /** Mesh the terrain part of one chunk. */
-  mesh(map: VoxelMap, chunk: Chunk): MeshData {
+  /** Mesh the terrain and the water surface of one chunk (two separate meshes). */
+  mesh(map: VoxelMap, chunk: Chunk): { terrain: MeshData; water: MeshData } {
     const ox = chunk.cx * CHUNK_SIZE
     const oy = chunk.cy * CHUNK_SIZE
     const oz = chunk.cz * CHUNK_SIZE
@@ -100,6 +100,7 @@ export class TerrainMesher implements ChunkMesher {
       oy + 2 * CHUNK_SIZE - 1,
     )
     const out = new MeshBuilder()
+    const waterOut = new MeshBuilder()
 
     for (let z = oz; z < oz + CHUNK_SIZE; z++) {
       for (let x = ox; x < ox + CHUNK_SIZE; x++) {
@@ -109,7 +110,7 @@ export class TerrainMesher implements ChunkMesher {
             const corners = field.cornerHeights(x, z, run)
             this.top(out, map, x, z, run, corners)
             this.walls(out, map, field, x, z, run, corners)
-            this.water(out, map, x, z, run, corners)
+            this.water(waterOut, map, x, z, run, corners)
           }
           const b = run.bottom
           const ownsBottom = Number.isFinite(b) && b > FLOOR_LEVEL && b >= oy && b < oy + CHUNK_SIZE
@@ -117,7 +118,7 @@ export class TerrainMesher implements ChunkMesher {
         }
       }
     }
-    return out.toMeshData()
+    return { terrain: out.toMeshData(), water: waterOut.toMeshData() }
   }
 
   /** Two flat triangles over the cell, split along the facet diagonal. */

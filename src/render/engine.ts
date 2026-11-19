@@ -14,12 +14,12 @@ import { resolveColumnHit, resolveHit, type HitFacing, type SurfaceHit } from '@
 import { materialOf, shapeOf } from '@/core/voxel'
 import type { VoxelMap } from '@/core/voxelMap'
 import { CameraRig, type CameraRigSettings } from './cameraRig'
-import { ChunkRenderer } from './chunkRenderer'
+import { ChunkRenderer, type LayerMaterials } from './chunkRenderer'
+import { createLayerMaterials } from './materials'
 import { createRenderer, type RenderBackend, type RendererHandle } from './createRenderer'
 import { SurfaceHighlight, type SurfaceSampler } from './highlight'
 import { materialColor } from './materialPalette'
-import { CulledMesher } from './meshing/culledMesher'
-import { HybridMesher } from './meshing/hybridMesher'
+import { BlockyMesher, HybridMesher } from './meshing/hybridMesher'
 import { createScene } from './sceneSetup'
 
 /** What the cursor points at, for the HUD. Voxel coordinates. */
@@ -101,6 +101,8 @@ export class Engine {
   private readonly rig: CameraRig
   private readonly resizeObserver: ResizeObserver
   private readonly chunks: ChunkRenderer
+  /** One material per render layer, shared by all chunks. */
+  private readonly layerMaterials: LayerMaterials = createLayerMaterials()
   private readonly highlight = new SurfaceHighlight()
   /** Latest resolved hit under the cursor. */
   private hit: SurfaceHit | null = null
@@ -127,8 +129,8 @@ export class Engine {
     const mesher =
       options.mesher === 'faceted'
         ? new HybridMesher(materialColor)
-        : new CulledMesher(materialColor)
-    this.chunks = new ChunkRenderer(options.map, mesher)
+        : new BlockyMesher(materialColor)
+    this.chunks = new ChunkRenderer(options.map, mesher, this.layerMaterials)
     this.scene.add(this.chunks.group)
     this.scene.add(this.highlight.mesh)
 
@@ -196,6 +198,7 @@ export class Engine {
     void this.handle.renderer.setAnimationLoop(null)
     this.resizeObserver.disconnect()
     this.chunks.dispose()
+    for (const material of Object.values(this.layerMaterials)) material.dispose()
     // dispose() is async in WebGPURenderer; nothing to wait for on teardown.
     void this.handle.renderer.dispose()
   }

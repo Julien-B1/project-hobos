@@ -23,7 +23,7 @@ export const config = {
     snapStepDeg: 45,
     initialDistance: 60,
     minDistance: 10,
-    maxDistance: 110,
+    maxDistance: 240,
     /** Keyboard pan speed, as a fraction of the camera distance per second. */
     keyPanSpeed: 0.9,
     /** Keyboard zoom speed (distance multiplied by e^speed per second). */

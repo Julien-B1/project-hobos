@@ -13,7 +13,8 @@ const mesher = new TerrainMesher({
 })
 const GRASS = packVoxel(Material.GRASS)
 
-const meshAll = (map: VoxelMap): MeshData[] => [...map.chunks()].map((c) => mesher.mesh(map, c))
+const meshAll = (map: VoxelMap): MeshData[] =>
+  [...map.chunks()].map((c) => mesher.mesh(map, c).terrain)
 const at = (arr: Float32Array, v: number, c: number): number => arr[v * 3 + c] ?? NaN
 const key = (m: MeshData, v: number): string =>
   [0, 1, 2].map((c) => at(m.positions, v, c).toFixed(4)).join(',')
@@ -156,13 +157,7 @@ describe('TerrainMesher watertightness', () => {
     (size: number) =>
     (a: readonly number[], b: readonly number[]): boolean => {
       const both = (f: (p: readonly number[]) => boolean): boolean => f(a) && f(b)
-      // Water planes are open surfaces drawn 0.02 below a level boundary.
-      const onWaterPlane = (p: readonly number[]): boolean => {
-        const y = (p[1] ?? 0) + 0.02
-        return Math.abs(y / 0.5 - Math.round(y / 0.5)) < 1e-4
-      }
       return (
-        both(onWaterPlane) ||
         both((p) => Math.abs(p[1] ?? 1) < 1e-6) ||
         both((p) => Math.abs(p[0] ?? 1) < 1e-6) ||
         both((p) => Math.abs((p[0] ?? 0) - size) < 1e-6) ||

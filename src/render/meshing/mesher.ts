@@ -41,3 +41,29 @@ export type ColorLookup = (materialId: number) => readonly [number, number, numb
 export function isEmptyMesh(data: MeshData): boolean {
   return data.indices.length === 0
 }
+
+/** Render layers of a chunk, each drawn with its own material. */
+export const MESH_LAYERS = ['terrain', 'blocks', 'water'] as const
+
+/**
+ * One render layer: `terrain` (faceted ground), `blocks` (wood, leaves, or
+ * everything in blocky mode) and `water` (transparent surface).
+ */
+export type MeshLayer = (typeof MESH_LAYERS)[number]
+
+/** Meshes of one chunk, one per layer (possibly empty). */
+export type LayeredMeshData = Readonly<Record<MeshLayer, MeshData>>
+
+/** Builds every render layer of a chunk. Implementations must only read the map. */
+export interface LayeredMesher {
+  /** Mesh `chunk`; `map` gives access to neighbours across chunk borders. */
+  mesh(map: VoxelMap, chunk: Chunk): LayeredMeshData
+}
+
+/** A mesh without any triangle. */
+export const EMPTY_MESH: MeshData = {
+  positions: new Float32Array(0),
+  normals: new Float32Array(0),
+  colors: new Float32Array(0),
+  indices: new Uint32Array(0),
+}
