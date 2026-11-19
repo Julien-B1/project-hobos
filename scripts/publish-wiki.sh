@@ -41,6 +41,11 @@ if git diff --cached --quiet; then
 fi
 
 main_sha="$(git -C "${repo_root}" rev-parse --short HEAD)"
-git commit --quiet -m "docs: sync wiki from ${main_sha}"
+# The temporary clone has no local config: reuse the main repository's
+# identity (which may be set only locally there, not globally).
+author_name="$(git -C "${repo_root}" config user.name)"
+author_email="$(git -C "${repo_root}" config user.email)"
+git -c user.name="${author_name}" -c user.email="${author_email}" \
+  commit --quiet -m "docs: sync wiki from ${main_sha}"
 git push --quiet
 echo "Wiki published from ${main_sha}."

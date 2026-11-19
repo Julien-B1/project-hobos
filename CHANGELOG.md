@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Branch model: `master` holds only the README, work happens on `dev`.
 
+### Fixed
+
+- `make wiki-publish` failed when the git identity was configured only in the
+  repository (not globally): the temporary wiki clone now reuses it.
+
 ## [0.1.0] - 2026-11-19
 
 ### Added
