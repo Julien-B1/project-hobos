@@ -105,9 +105,11 @@ onMounted(async () => {
     unbindInputs = bindInputs(canvas.value, engine, config.input, edits)
     engine.start()
     // The character loads in the background: the map shows meanwhile.
-    engine.spawnCharacter(fighterUrl, FIGHTER_CLIPS, world.home).catch((e: unknown) => {
-      console.warn('Character failed to load:', e)
-    })
+    engine
+      .spawnCharacter(fighterUrl, FIGHTER_CLIPS, flags.spawn ?? world.home)
+      .catch((e: unknown) => {
+        console.warn('Character failed to load:', e)
+      })
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
   }

@@ -179,6 +179,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tinted shade, rim light, outline about 1 pixel wide at any zoom in a
   darker shade of the texture (inverted hull of the skinned mesh).
   Character height 1.6 units (stands need 4 free levels).
+- `?spawn=x,z` puts the character near a cell (screenshots, debugging).
 - `H` shows or hides all the overlays (HUD, pickers, cut slider).
 - Walk area (`core/navigation/walkArea.ts`): stands (solid, not water or
   foliage, 4 free levels above, shallow water allowed), 8-way moves of at
@@ -238,6 +239,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Character feet no longer sink into the ground: foot IK keeps the toe
+  base above the ground too, and planted feet are turned along the slope
+  (the planted test compared the ankle with the ground instead of its
+  standing height). The selection ring is draped on the ground (16
+  probes), across a slope and a step alike.
 - Character on a bank cell under a deck's end: feet on the deck level,
   not on the ground drawn lower between the planks.
 - Character on decks: its feet stand on the structure's walking surface

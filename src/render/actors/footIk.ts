@@ -34,7 +34,10 @@ const DROP_RATE = 12
 /** How fast the feet lock onto the stance when the character stops (1/s). */
 const LOCK_RATE = 6
 
-/** Ankle height above which a foot counts as lifted (not turned to the slope), world units. */
+/**
+ * Rise of the ankle above its standing height beyond which a foot counts as
+ * lifted (not turned to the slope), world units.
+ */
 const PLANTED_LIFT = 0.12
 
 /** One leg's bones, hip to ankle. */
@@ -42,6 +45,8 @@ interface Leg {
   readonly thigh: Object3D
   readonly shin: Object3D
   readonly foot: Object3D
+  /** Ball of the foot (toe base), to keep the front of the foot above ground. */
+  readonly toe: Object3D | null
 }
 
 const A = new Vector3()
@@ -68,6 +73,9 @@ export class FootIk {
   private lock = 0
   /** Standing stance, per leg: foot position and rotation in body space. */
   private stance: { position: Vector3; rotation: Quaternion }[] | null = null
+  /** Standing heights above the ground of the ankle and of the toe base, world units. */
+  private ankleRest = 0
+  private toeRest = 0
 
   /**
    * @param model The skinned model (its bones are found by name).
@@ -88,7 +96,7 @@ export class FootIk {
       const thigh = bone(`${side}UpLeg`)
       const shin = bone(`${side}Leg`)
       const foot = bone(`${side}Foot`)
-      if (thigh && shin && foot) legs.push({ thigh, shin, foot })
+      if (thigh && shin && foot) legs.push({ thigh, shin, foot, toe: bone(`${side}ToeBase`) })
     }
     this.legs = legs
   }
@@ -111,6 +119,13 @@ export class FootIk {
       position: this.body.worldToLocal(leg.foot.getWorldPosition(new Vector3())),
       rotation: BODY.clone().multiply(leg.foot.getWorldQuaternion(new Quaternion())),
     }))
+    // The body's origin is on the ground: heights above it are rest heights.
+    const ground = this.body.getWorldPosition(S).y
+    const leg = this.legs[0]
+    if (leg) {
+      this.ankleRest = leg.foot.getWorldPosition(A).y - ground
+      this.toeRest = leg.toe ? leg.toe.getWorldPosition(A).y - ground : 0
+    }
   }
 
   /**
@@ -166,14 +181,37 @@ export class FootIk {
     this.body.updateMatrixWorld(true)
 
     for (const { leg, target, rotation, normal, lift } of needs) {
-      this.solve(leg, target)
-      // The foot keeps its own orientation (animated or locked), not the
-      // one the bent leg would give it; a planted foot lies along the slope.
-      const planted = Math.max(0, 1 - lift / PLANTED_LIFT) * this.weight
-      Q.setFromUnitVectors(UP, normal).slerp(WORLD.identity(), 1 - planted)
-      setWorldQuaternion(leg.foot, Q.multiply(rotation))
-      leg.foot.updateMatrixWorld(true)
+      const planted = Math.max(0, 1 - (lift - this.ankleRest) / PLANTED_LIFT) * this.weight
+      this.place(leg, target, rotation, normal, planted)
+      // The front of the foot must not sink: raise the ankle when the toe
+      // base is below its standing height over the ground under it.
+      if (!leg.toe || this.weight < 0.5) continue
+      const toe = leg.toe.getWorldPosition(C)
+      const hit = ground(toe.x, toe.z, target.y)
+      if (!hit) continue
+      const deficit = hit.y + this.toeRest - toe.y
+      if (deficit <= 1e-3) continue
+      target.y += deficit
+      this.place(leg, target, rotation, normal, planted)
     }
+  }
+
+  /**
+   * Put a leg's ankle on `target` and orient its foot: its own orientation
+   * (animated or locked), not the one the bent leg would give it, turned
+   * along the slope (`normal`) by the `planted` weight.
+   */
+  private place(
+    leg: Leg,
+    target: Vector3,
+    rotation: Quaternion,
+    normal: Vector3,
+    planted: number,
+  ): void {
+    this.solve(leg, target)
+    Q.setFromUnitVectors(UP, normal).slerp(WORLD.identity(), 1 - planted)
+    setWorldQuaternion(leg.foot, Q.multiply(rotation))
+    leg.foot.updateMatrixWorld(true)
   }
 
   /**

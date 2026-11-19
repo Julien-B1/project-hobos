@@ -6,7 +6,8 @@
  * end with the scene's output encoding and honour the cut height, like the
  * terrain: toon shading with an ink outline (`toonMaterial.ts`). It casts
  * and receives sun shadows (the engine redraws the shadow map every frame
- * while a character is on the map). A ring at the feet shows the selection.
+ * while a character is on the map). A ring at the feet shows the selection,
+ * draped on the ground around them.
  *
  * Model conventions (Mixamo rig, see `tooling/compress_glb.py`): Y up,
  * facing +Z, feet at the origin, about 1 unit tall, walk clip in place.
@@ -57,6 +58,9 @@ const TURN_SPEED = 10
 /** Cross-fade between idle and walk, in seconds. */
 const FADE = 0.25
 
+/** Ground probes around the ring when it is draped. */
+const RING_SAMPLES = 16
+
 /** Lift of the ring over the ground, in world units. */
 const DECAL_LIFT = 0.04
 
@@ -97,6 +101,8 @@ export class Character {
   private readonly idle: AnimationAction
   private readonly walkAction: AnimationAction
   private readonly ring: Mesh
+  /** Ring vertices on the ground plane (x, z pairs), around the origin. */
+  private readonly ringBase: Float32Array
   /** Whether the ring has been laid at least once. */
   private placed = false
   /** Ring opacity: pulses while selected. */
@@ -153,6 +159,13 @@ export class Character {
       this.ringMaterial(cutHeight),
     )
     this.ring.name = 'character-ring'
+    // The ring is draped in world space (see drapeRing): keep its flat shape.
+    const flat = this.ring.geometry.getAttribute('position')
+    this.ringBase = new Float32Array(flat.count * 2)
+    for (let v = 0; v < flat.count; v++) {
+      this.ringBase[v * 2] = flat.getX(v)
+      this.ringBase[v * 2 + 1] = flat.getZ(v)
+    }
     this.ring.visible = false
   }
 
@@ -170,6 +183,8 @@ export class Character {
   set selected(on: boolean) {
     this.selectedFlag = on
     this.ring.visible = on
+    // Laid on the ground on the next update.
+    if (on) this.placed = false
   }
 
   /** Whether the character is walking. */
@@ -232,14 +247,41 @@ export class Character {
       const hit = ground(p.x, p.z, this.expectedY)
       // Mid-hop the feet follow the arc (set by advance), not the ground.
       if (hit && !this.hop) p.y = hit.y
-      const normal = hit?.normal ?? UP
-      this.ring.position.set(p.x, p.y, p.z).addScaledVector(normal, DECAL_LIFT)
-      this.ring.quaternion.setFromUnitVectors(UP, normal)
+      if (this.ring.visible) this.drapeRing(ground)
       this.placed = true
     }
     this.root.updateMatrixWorld(true)
     this.feet.update(dt, this.root.position.y, ground, !this.hop, !this.walking)
     return moved
+  }
+
+  /**
+   * Lay the ring on the ground around the feet: heights probed at
+   * {@link RING_SAMPLES} points around it, interpolated between them, so it
+   * follows a slope and a step between two surfaces alike.
+   */
+  private drapeRing(ground: GroundProbe): void {
+    const p = this.root.position
+    const heights: number[] = []
+    for (let k = 0; k < RING_SAMPLES; k++) {
+      const a = (k / RING_SAMPLES) * 2 * Math.PI
+      const r = RING_RADIUS * 0.91
+      heights.push(ground(p.x + Math.cos(a) * r, p.z + Math.sin(a) * r, p.y)?.y ?? p.y)
+    }
+    const position = this.ring.geometry.getAttribute('position')
+    const base = this.ringBase
+    for (let v = 0; v < position.count; v++) {
+      const x = base[v * 2] ?? 0
+      const z = base[v * 2 + 1] ?? 0
+      let t = ((Math.atan2(z, x) / (2 * Math.PI)) * RING_SAMPLES + RING_SAMPLES) % RING_SAMPLES
+      const k = Math.floor(t)
+      t -= k
+      const h0 = heights[k] ?? p.y
+      const h1 = heights[(k + 1) % RING_SAMPLES] ?? p.y
+      position.setXYZ(v, p.x + x, h0 + (h1 - h0) * t + DECAL_LIFT, p.z + z)
+    }
+    position.needsUpdate = true
+    this.ring.geometry.computeBoundingSphere()
   }
 
   /** Release geometries and materials (textures included). */

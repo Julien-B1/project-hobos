@@ -63,6 +63,8 @@ export const config = {
  * - `?cam=x,z[,distance[,yaw]]` starts the camera on cell (x, z), at that
  *   distance (world units) and yaw (degrees): reproducible views,
  *   screenshots.
+ * - `?spawn=x,z` puts the character near cell (x, z) instead of near the
+ *   map's home point (screenshots, debugging a spot).
  */
 export function readUrlFlags(search: string = window.location.search): {
   forceWebGL: boolean
@@ -74,6 +76,7 @@ export function readUrlFlags(search: string = window.location.search): {
   grid: boolean
   timeOfDay: TimeOfDay
   camera: CameraView | undefined
+  spawn: { readonly x: number; readonly z: number } | undefined
 } {
   const params = new URLSearchParams(search)
   const map = params.get('map') ?? 'reference'
@@ -89,6 +92,7 @@ export function readUrlFlags(search: string = window.location.search): {
     grid: params.get('grid') !== 'off',
     timeOfDay: parseTimeOfDay(params.get('time')),
     camera: parseCameraView(params.get('cam')),
+    spawn: parseCameraView(params.get('spawn')),
   }
 }
 
