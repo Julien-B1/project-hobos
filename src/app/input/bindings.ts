@@ -20,8 +20,12 @@
  * Mouse: left drag = free rotation, middle drag = pan, wheel = zoom. The
  * cursor position is forwarded for hover picking.
  *
- * Debug edits: right click = remove the voxel under the cursor,
- * Shift + left click (without dragging) = place a voxel on the surface.
+ * Character: left click (without dragging) = select the character under
+ * the cursor (or clear the selection), right click = send the selected
+ * character there.
+ *
+ * Debug edit: Shift + left click (without dragging) = place a voxel on the
+ * surface.
  */
 import type { CameraRig } from '@/render/cameraRig'
 import type { EditActions } from '@/app/editing/debugEdits'
@@ -40,6 +44,10 @@ export interface InputTarget {
   setGridVisible(visible: boolean): void
   /** Flip a performance probe (debug). */
   toggleProbe(id: ProbeId): void
+  /** Select the character under the cursor, or clear the selection. */
+  select(): void
+  /** Send the selected character to the surface under the cursor. */
+  command(): void
 }
 
 /** Sensitivity settings, see `config.input`. */
@@ -163,7 +171,7 @@ export function bindInputs(
       e.preventDefault()
       drag = { kind: 'pan', lastX: e.clientX, lastY: e.clientY }
     } else {
-      if (e.button === 2) edits.remove()
+      if (e.button === 2) target.command()
       return
     }
     canvas.setPointerCapture(e.pointerId)
@@ -192,7 +200,10 @@ export function bindInputs(
     if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId)
     // A left press that never turned into a rotation is a click.
     const isClick = e.type === 'pointerup' && drag.kind === 'left' && !drag.rotating
-    if (isClick && e.button === 0 && e.shiftKey) edits.place()
+    if (isClick && e.button === 0) {
+      if (e.shiftKey) edits.place()
+      else target.select()
+    }
     drag = { kind: 'none' }
   }
 
@@ -207,7 +218,7 @@ export function bindInputs(
     target.clearPointer()
   }
 
-  /** Right click is a debug edit, not the browser menu. */
+  /** Right click gives orders, it does not open the browser menu. */
   const onContextMenu = (e: MouseEvent): void => {
     e.preventDefault()
   }

@@ -9,8 +9,10 @@
  *
  * Usage: node scripts/screenshots.mjs [views.json]
  * A views file is an array of { "name", "query" } (query string after `?`,
- * e.g. "map=bridges&cam=47,12,14,35"). Without one, the default views show
- * every crossing of the bridges map.
+ * e.g. "map=bridges&cam=47,12,14,35"), with optional "steps": mouse
+ * clicks played before the capture, each { "click": [x, y], "button":
+ * "left" | "right", "wait": ms } in viewport pixels (1280 x 800). Without a
+ * views file, the default views show every crossing of the bridges map.
  */
 import { mkdir, readFile } from 'node:fs/promises'
 import { chromium } from 'playwright'
@@ -49,6 +51,11 @@ await mkdir(OUT, { recursive: true })
 try {
   const page = await browser.newPage({ viewport: SIZE })
   page.on('pageerror', (error) => console.error('page error:', error.message))
+  page.on('console', (message) => {
+    if (message.type() === 'error' || message.type() === 'warning') {
+      console.error(`console ${message.type()}:`, message.text())
+    }
+  })
   for (const view of views) {
     const url = `http://127.0.0.1:${PORT}/?forceWebGL=1&${view.query}`
     await page.goto(url, { waitUntil: 'load' })
@@ -56,6 +63,13 @@ try {
     // camera settle and the shadows render.
     await page.getByText('Backend:').waitFor({ timeout: 120_000 })
     await page.waitForTimeout(6000)
+    for (const step of view.steps ?? []) {
+      const [x, y] = step.click
+      await page.mouse.move(x, y)
+      await page.waitForTimeout(500) // hover picking runs in the next frames
+      await page.mouse.click(x, y, { button: step.button ?? 'left' })
+      await page.waitForTimeout(step.wait ?? 500)
+    }
     const file = `${OUT}/${view.name}.png`
     await page.screenshot({ path: file })
     console.log('saved', file)

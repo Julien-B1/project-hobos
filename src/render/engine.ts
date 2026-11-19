@@ -6,7 +6,8 @@
  * app must keep the engine out of reactive state (plain variable or
  * `markRaw`) so Three.js objects are never proxied.
  */
-import { Raycaster, Vector2, type Scene } from 'three/webgpu'
+import { Raycaster, Vector2, Vector3, type Mesh, type Scene } from 'three/webgpu'
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { CHUNK_SIZE, VOXEL_HEIGHT, type VoxelCoord } from '@/core/coords'
 import { TerrainField } from '@/core/terrainSurface'
 import { isTerrainMaterial, materialName } from '@/core/materials'
@@ -22,6 +23,8 @@ import { materialOf, shapeOf } from '@/core/voxel'
 import { defaultStructureKinds } from '@/core/structures/kinds'
 import type { StructureSet } from '@/core/structures/structureSet'
 import type { VoxelMap } from '@/core/voxelMap'
+import { WalkArea, type Stand } from '@/core/navigation/walkArea'
+import { Character, type CharacterClips, type WalkPoint } from './actors/character'
 import { CameraRig, type CameraRigSettings } from './cameraRig'
 import { ChunkRenderer } from './chunkRenderer'
 import { NO_CUT, createLayerMaterials, type LayerMaterialSet } from './materials'
@@ -81,6 +84,13 @@ const ALL_ON: Readonly<Record<ProbeId, boolean>> = {
   halfRes: false,
 }
 
+/**
+ * How far above and below the expected feet height the ground under a
+ * character is looked for, in world units (more than a step, less than the
+ * gap between a bridge deck and the path under it).
+ */
+const GROUND_REACH = 0.9
+
 /** Snapshot of engine state shown by the debug HUD. Replaced, never mutated. */
 export interface EngineHudState {
   /** Backend selected by the renderer. */
@@ -107,6 +117,16 @@ export interface EngineHudState {
   readonly lastRebuild: RebuildInfo | null
   /** Performance probes: what is switched off to measure its cost. */
   readonly probes: Readonly<Record<ProbeId, boolean>>
+  /** The character: the stand it is at or walks to, and its state; null before it loads. */
+  readonly character: CharacterInfo | null
+}
+
+/** Character state for the HUD. */
+export interface CharacterInfo {
+  /** Stand it is at, or the end of its walk. Voxel coordinates. */
+  readonly stand: VoxelCoord
+  readonly selected: boolean
+  readonly walking: boolean
 }
 
 /** Rendering cost of the last measurement window (see `frameStats.ts`). */
@@ -225,6 +245,14 @@ export class Engine {
   private lastDrawCalls = 0
   private lastTriangles = 0
   private lastFrameTime: number | null = null
+  /** Where characters can stand and walk (built on first use). */
+  private walkArea: WalkArea | null = null
+  /** The player's character, once loaded. */
+  private character: Character | null = null
+  /** Stand the character is at, or will reach at the end of its walk. */
+  private characterStand: Stand | null = null
+  /** Downward ray finding the ground under the character. */
+  private readonly groundRay = new Raycaster()
 
   private constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -269,6 +297,7 @@ export class Engine {
       hover: null,
       chunkMeshes: 0,
       lastRebuild: null,
+      character: null,
       probes: { ...ALL_ON },
     }
     // Every chunk of a freshly generated map is dirty: the first update builds them all.
@@ -372,6 +401,107 @@ export class Engine {
     setLightUniforms(this.layerMaterials.light, preset)
   }
 
+  /**
+   * Load a character model and put it on grass, in the largest walkable
+   * region of the map, as close as possible to (x, z) (world units).
+   * Resolves to false when the map has no such spot.
+   */
+  async spawnCharacter(
+    url: string,
+    clips: CharacterClips,
+    near: { readonly x: number; readonly z: number },
+  ): Promise<boolean> {
+    const stand = this.walking().spawnPoint(near.x, near.z)
+    if (!stand) return false
+    const gltf = await new GLTFLoader().loadAsync(url)
+    const character = new Character(
+      gltf.scene,
+      gltf.animations,
+      clips,
+      this.layerMaterials.cutHeight,
+    )
+    character.placeAt(walkPoint(stand))
+    this.character?.dispose()
+    this.character = character
+    this.characterStand = stand
+    this.scene.add(character.root, ...character.decals)
+    this.publishCharacter()
+    return true
+  }
+
+  /**
+   * Left click: select the character when the cursor is on it (its body or
+   * its cell), else clear the selection.
+   */
+  select(): void {
+    const character = this.character
+    if (!character) return
+    let on = false
+    if (this.pointerNdc) {
+      this.raycaster.setFromCamera(this.pointerNdc, this.rig.camera)
+      on = character.hitBy(this.raycaster.ray.origin, this.raycaster.ray.direction)
+    }
+    const stand = this.characterStand
+    const cell = this.hit?.surface
+    if (!on && cell && stand && !character.walking) on = cell.x === stand.x && cell.z === stand.z
+    character.selected = on
+    this.publishCharacter()
+  }
+
+  /**
+   * Right click: send the selected character to the surface under the
+   * cursor, along the shortest walkable path. Nothing happens when nothing
+   * is selected or the spot cannot be reached.
+   */
+  command(): void {
+    const character = this.character
+    const hit = this.hit
+    if (!character?.selected || !hit || !this.characterStand) return
+    const area = this.walking()
+    const target = area.nearestStand(hit.surface.x, hit.surface.y, hit.surface.z)
+    if (!target) return
+    // A walking character turns back from the cell it is heading to.
+    const next = character.nextPoint
+    const from = next ? standAt(next) : this.characterStand
+    const path = area.findPath(from, target)
+    if (!path) return
+    const points = path.map(walkPoint)
+    // When standing, the first stand is where the character already is.
+    character.walk(next ? points : points.slice(1))
+    this.characterStand = target
+    this.publishCharacter()
+  }
+
+  /** Publish the character's state to the HUD. */
+  private publishCharacter(): void {
+    const c = this.character
+    const stand = this.characterStand
+    const character = c && stand ? { stand, selected: c.selected, walking: c.walking } : null
+    this.publish({ ...this.hud, character })
+  }
+
+  /** The walk area, built on first use. */
+  private walking(): WalkArea {
+    this.walkArea ??= new WalkArea(this.options.map)
+    return this.walkArea
+  }
+
+  /**
+   * Drawn ground under (x, z) near height `nearY` (world units): a short
+   * downward ray on the chunk meshes, water left out (one wades to the
+   * bed). Null when nothing is found.
+   */
+  private groundAt(x: number, z: number, nearY: number): { y: number; normal: Vector3 } | null {
+    this.groundRay.set(GROUND_ORIGIN.set(x, nearY + GROUND_REACH, z), DOWN)
+    this.groundRay.far = 2 * GROUND_REACH
+    const meshes = this.chunks.pickables.filter((m: Mesh) => m.userData.layer !== 'water')
+    const hit = this.groundRay
+      .intersectObjects(meshes, false)
+      .find((h) => (h.face?.normal.y ?? 0) > 0)
+    if (!hit?.face) return null
+    return { y: hit.point.y, normal: hit.face.normal }
+  }
+
   /** Latest hit under the cursor (voxel and surface), or null. */
   get hoveredHit(): SurfaceHit | null {
     return this.hit
@@ -395,6 +525,7 @@ export class Engine {
     void this.handle.renderer.setAnimationLoop(null)
     this.resizeObserver.disconnect()
     this.chunks.dispose()
+    this.character?.dispose()
     this.cutCap.dispose()
     this.sectionPlane.dispose()
     this.stencilMaterials.back.dispose()
@@ -409,6 +540,12 @@ export class Engine {
     const dt = this.lastFrameTime === null ? 0 : (time - this.lastFrameTime) / 1000
     this.lastFrameTime = time
     this.rig.update(Math.min(dt, MAX_FRAME_DT))
+    const character = this.character
+    if (character) {
+      const walking = character.walking
+      character.update(Math.min(dt, MAX_FRAME_DT), (x, z, nearY) => this.groundAt(x, z, nearY))
+      if (walking !== character.walking) this.publishCharacter()
+    }
     const rebuilt = this.rebuildDirtyChunks()
     if (this.capDirty || (rebuilt && this.hud.cutHeight !== null)) {
       this.capDirty = false
@@ -436,6 +573,8 @@ export class Engine {
     const keys = this.chunks.update()
     if (keys.length === 0) return false
     const ms = performance.now() - start
+    // Edited voxels may change where characters stand.
+    this.walkArea?.invalidate()
     const seq = (this.hud.lastRebuild?.seq ?? 0) + 1
     this.publish({
       ...this.hud,
@@ -626,6 +765,21 @@ export class Engine {
     renderer.setSize(width, height, false)
     this.rig.setAspect(width / height)
   }
+}
+
+/** Straight down. */
+const DOWN = new Vector3(0, -1, 0)
+/** Scratch origin of the ground ray. */
+const GROUND_ORIGIN = new Vector3()
+
+/** Walk point of a stand: centre of its cell, at feet height. */
+function walkPoint(s: Stand): WalkPoint {
+  return { x: s.x + 0.5, y: (s.y + 1) * VOXEL_HEIGHT, z: s.z + 0.5 }
+}
+
+/** Stand of a walk point (inverse of {@link walkPoint}). */
+function standAt(p: WalkPoint): Stand {
+  return { x: Math.floor(p.x), y: Math.round(p.y / VOXEL_HEIGHT) - 1, z: Math.floor(p.z) }
 }
 
 /** Describe a hit for the HUD. */

@@ -82,7 +82,8 @@ Keys are bound by physical position: the same keys work on AZERTY and QWERTY.
 | Reset view             | `C` or `Home`                                                           |
 | Show / hide the grid   | `G`                                                                     |
 | Performance probes     | `1` to `6` (shadows, foliage, scatter, water, terrain, half resolution) |
-| Remove voxel (debug)   | Right click                                                             |
+| Select the character   | Left click on it (left click elsewhere clears the selection)            |
+| Move the character     | Right click on the destination (character selected)                     |
 | Place voxel (debug)    | `Shift` + left click                                                    |
 
 Camera settings (pitch, FOV, zoom bounds, speeds) live in `src/app/config.ts`.

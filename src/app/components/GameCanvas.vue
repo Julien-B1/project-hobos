@@ -21,6 +21,10 @@ import { bindInputs } from '@/app/input/bindings'
 import { createDebugEdits } from '@/app/editing/debugEdits'
 import { createTestMap } from '@/core/generators/catalog'
 import type { SessionInfo } from '@/app/session'
+import fighterUrl from '@/assets/models/fighter.glb?url'
+
+/** Clips of the fighter model: idle (looking around) and walk. */
+const FIGHTER_CLIPS = { idle: 'look_around.001', walk: 'walk.001' } as const
 
 const props = defineProps<{
   /** Lighting of the scene; changes are applied live. */
@@ -100,6 +104,10 @@ onMounted(async () => {
     const edits = createDebugEdits(world.map, () => engineRef.hoveredHit)
     unbindInputs = bindInputs(canvas.value, engine, config.input, edits)
     engine.start()
+    // The character loads in the background: the map shows meanwhile.
+    engine.spawnCharacter(fighterUrl, FIGHTER_CLIPS, world.home).catch((e: unknown) => {
+      console.warn('Character failed to load:', e)
+    })
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
   }

@@ -2,7 +2,7 @@
 /**
  * Debug overlay: session settings, renderer and cost figures (GPU time and
  * load, estimated VRAM, draw calls), camera pose, chunks, hovered voxel and
- * surface. Meant to make screenshots self-describing.
+ * surface, character. Meant to make screenshots self-describing.
  *
  * Purely presentational: receives a HUD snapshot from the engine (through
  * App.vue) and renders it. Never reads engine objects directly.
@@ -108,6 +108,11 @@ function count(n: number): string {
         </div>
       </template>
       <div v-else>Voxel: —</div>
+      <div v-if="state.character">
+        Character: column ({{ state.character.stand.x }}, {{ state.character.stand.z }}), voxel y
+        {{ state.character.stand.y }}{{ state.character.selected ? ' · selected' : ''
+        }}{{ state.character.walking ? ' · walking' : '' }}
+      </div>
     </template>
     <div v-else>Starting renderer…</div>
   </aside>

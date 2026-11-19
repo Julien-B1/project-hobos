@@ -166,6 +166,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   facets; hover highlight draped on the terrain; organic map cliff zones
   with terraced plateaus and steep faces.
 
+- A playable character (`src/assets/models/fighter.glb`, a Tripo /
+  Mixamo rig with an idle and a walk clip): spawned on grass in the
+  largest walkable region, near the map's home point; left click selects
+  it (ring at its feet), right click sends it there along the shortest
+  path, walking and turning with the walk clip matched to its speed, feet
+  on the drawn ground (short downward raycast; bridges and rope decks
+  included, water waded). Soft blob shadow instead of shadow-map shadows
+  (the shadow map is only redrawn when the scene changes). HUD line
+  `Character`.
+- Walk area (`core/navigation/walkArea.ts`): stands (solid, not water or
+  foliage, 3 free levels above, shallow water allowed), 8-way moves of at
+  most 2 levels without corner cutting, A* paths, connected regions, spawn
+  point.
+- `tooling/compress_glb.py`: shrinks skinned glTF models without a
+  decoder to ship (key reduction, quantized rotations, weights, UVs and
+  normals, WebP texture): the fighter went from 1060 kB to 522 kB (259 kB
+  gzipped; the dev server now gzips `model/gltf-binary`).
+- Screenshots: views take `steps` (mouse clicks before the capture);
+  console warnings and errors of the page are printed.
+
 ### Changed
 
 - Maps are sized for one encounter (battle map, 1 cell = one 5 ft square):
@@ -242,6 +262,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   grain instead of the ripples); far grass tufts no longer blur into blobs.
 - The map sides end on a flat bottom instead of following the terrain one
   chunk below its top.
+
+### Removed
+
+- Right click no longer removes the voxel under the cursor (it orders the
+  character); `Shift` + left click still places one.
 
 ## [0.2.0] - 2026-11-19
 

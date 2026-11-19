@@ -17,8 +17,8 @@ import type { ServerResponse } from 'node:http'
 import { gzipSync } from 'node:zlib'
 import type { Connect, Plugin } from 'vite'
 
-/** Content types worth compressing. */
-const COMPRESSIBLE = /javascript|css|json|html|svg|text|xml|wasm/
+/** Content types worth compressing (`gltf`: glTF models, `model/gltf-binary`). */
+const COMPRESSIBLE = /javascript|css|json|html|svg|text|xml|wasm|gltf/
 /** Smaller bodies are sent as they are. */
 const MIN_BYTES = 1024
 

@@ -16,11 +16,11 @@ src/core     Pure TypeScript: map data,         no three, no vue,
              pure geometry maths
 ```
 
-| Layer         | Owns                                                                                                                                                        | Must not                                                        |
-| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| `src/core/`   | Voxel encoding, chunked map, coordinates, shapes, map generators, hit-to-surface resolution, structures (`core/structures`: kinds, stamps, crossing choice) | Import Three.js, Vue, render or app. Touch the DOM.             |
-| `src/render/` | Renderer, scene, camera rig, chunk meshing, structure meshers (`render/structures`), geometric primitives (`render/geometry`), raycasting, highlight        | Import Vue or app. Mutate map data (it only reads `core`).      |
-| `src/app/`    | Vue components, HUD state, input bindings, config                                                                                                           | Hold rendering logic. Store Three.js objects in reactive state. |
+| Layer         | Owns                                                                                                                                                                                                 | Must not                                                        |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `src/core/`   | Voxel encoding, chunked map, coordinates, shapes, map generators, hit-to-surface resolution, structures (`core/structures`: kinds, stamps, crossing choice), walk area and paths (`core/navigation`) | Import Three.js, Vue, render or app. Touch the DOM.             |
+| `src/render/` | Renderer, scene, camera rig, chunk meshing, structure meshers (`render/structures`), geometric primitives (`render/geometry`), raycasting, highlight, characters (`render/actors`)                   | Import Vue or app. Mutate map data (it only reads `core`).      |
+| `src/app/`    | Vue components, HUD state, input bindings, config                                                                                                                                                    | Hold rendering logic. Store Three.js objects in reactive state. |
 
 Why `core` is strict: it is the part that will be reused by the native
 builds, the future navigation graph and tests. Keeping it free of rendering
@@ -323,9 +323,30 @@ trees and grid. Shadow quality barely changes GPU time; `high` costs about
   translucent 3 x 3 patch on the voxel's top corners (20 % opacity, cut
   like the scene). On blocks, a 3 x 3 patch on the voxel's top corners. Rebuilt
   only when the target or the terrain changes.
+- **Character** (`render/actors/character.ts`, `Engine.spawnCharacter`):
+  a skinned glTF model loaded with Three's `GLTFLoader` (materials swapped
+  for node materials with the output encoding and the cut mask), animated
+  by an `AnimationMixer` (idle and walk, cross-faded). The engine puts it
+  on `WalkArea.spawnPoint` (grass, largest walkable region, nearest to the
+  map's home point). Left click (`Engine.select`) selects it when the ray
+  passes through its body or the hovered cell is its cell; right click
+  (`Engine.command`) runs `WalkArea.findPath` from its stand (or the cell
+  it is heading to) to the stand nearest the hovered surface. Each frame
+  it walks towards the next cell centre at the walk clip's ground speed
+  and a short downward ray on the chunk meshes (water left out) puts its
+  feet on the drawn ground. It casts no shadow-map shadow (the map is only
+  redrawn when the scene changes; a moving character would redraw it
+  every frame): a soft blob decal instead, plus the selection ring, both
+  laid along the ground normal.
+- **Walk area** (`core/navigation/walkArea.ts`): a stand is a solid voxel,
+  not water or foliage, with 3 free levels above (shallow water, at most
+  `WADING_DEPTH`, counts as free). Moves go to the 8 neighbour columns, at
+  most 2 levels up or down; diagonals need both orthogonal moves (no
+  corner cutting). A* with the octile distance; columns are cached and
+  dropped on any chunk rebuild.
 - **Edits** (debug): `src/app/editing/debugEdits.ts` writes to the map from
-  the engine's `hoveredHit` (right click removes the touched voxel,
-  `Shift` + click places a stone voxel on the surface). The map marks the
+  the engine's `hoveredHit` (`Shift` + click places a stone voxel on the
+  surface). The map marks the
   edited chunk dirty, plus the chunks above and below and the side
   neighbours within 2 voxels (the faceted mesher reads whole column runs and
   neighbour columns); the next frame rebuilds only those. The HUD shows each rebuild batch (count, keys, time).
@@ -341,13 +362,14 @@ trees and grid. Shadow quality barely changes GPU time; `high` costs about
 
 ## Tooling
 
-| Concern      | Tool and config                                                                                     |
-| ------------ | --------------------------------------------------------------------------------------------------- |
-| Type-check   | `vue-tsc --build`: `tsconfig.app.json` (src, browser) + `tsconfig.node.json` (`vite.config.ts`).    |
-| Strictness   | `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride`, `noUnused*`.                            |
-| Lint         | ESLint flat config, `typescript-eslint` strict + stylistic type-checked, `eslint-plugin-vue`.       |
-| Format       | Prettier (`.prettierrc.json`); ESLint formatting rules disabled via `eslint-config-prettier`.       |
-| Tests        | Vitest, Node environment, files `src/**/*.test.ts` next to the module under test.                   |
-| Import alias | `@/` maps to `src/` (Vite `resolve.alias` and tsconfig `paths`).                                    |
-| Dev server   | `tooling/gzip.ts`: gzip for dev and preview; pre-bundled deps minified, inline maps stripped.       |
-| Screenshots  | `make screenshots` (`scripts/screenshots.mjs`): headless Chromium (Playwright) into `screenshots/`. |
+| Concern      | Tool and config                                                                                       |
+| ------------ | ----------------------------------------------------------------------------------------------------- |
+| Type-check   | `vue-tsc --build`: `tsconfig.app.json` (src, browser) + `tsconfig.node.json` (`vite.config.ts`).      |
+| Strictness   | `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride`, `noUnused*`.                              |
+| Lint         | ESLint flat config, `typescript-eslint` strict + stylistic type-checked, `eslint-plugin-vue`.         |
+| Format       | Prettier (`.prettierrc.json`); ESLint formatting rules disabled via `eslint-config-prettier`.         |
+| Tests        | Vitest, Node environment, files `src/**/*.test.ts` next to the module under test.                     |
+| Import alias | `@/` maps to `src/` (Vite `resolve.alias` and tsconfig `paths`).                                      |
+| Dev server   | `tooling/gzip.ts`: gzip for dev and preview; pre-bundled deps minified, inline maps stripped.         |
+| Screenshots  | `make screenshots` (`scripts/screenshots.mjs`): headless Chromium (Playwright) into `screenshots/`.   |
+| Models       | `tooling/compress_glb.py` (host: Python 3, numpy, ffmpeg): shrinks skinned glTF models, stock loader. |

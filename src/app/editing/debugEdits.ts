@@ -5,18 +5,15 @@
  * input). Uses the engine's latest hover hit and writes to the `VoxelMap`;
  * the map marks dirty chunks and the render layer rebuilds only those.
  *
- * - remove: clear the voxel under the cursor;
  * - place: put a full stone voxel on top of the targeted surface.
  */
 import { Material } from '@/core/materials'
 import type { SurfaceHit } from '@/core/surface'
-import { AIR, packVoxel } from '@/core/voxel'
+import { packVoxel } from '@/core/voxel'
 import type { VoxelMap } from '@/core/voxelMap'
 
 /** Edit actions the input bindings can trigger. */
 export interface EditActions {
-  /** Remove the voxel under the cursor, if any. */
-  remove(): void
   /** Place a voxel on top of the surface under the cursor, if any. */
   place(): void
 }
@@ -31,11 +28,6 @@ const PLACED_VOXEL = packVoxel(Material.STONE)
  */
 export function createDebugEdits(map: VoxelMap, currentHit: () => SurfaceHit | null): EditActions {
   return {
-    remove: () => {
-      const hit = currentHit()
-      if (!hit) return
-      map.set(hit.voxel.x, hit.voxel.y, hit.voxel.z, AIR)
-    },
     place: () => {
       const hit = currentHit()
       if (!hit) return

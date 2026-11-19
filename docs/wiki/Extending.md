@@ -68,3 +68,18 @@ generators do not change.
    lists it automatically.
 3. Open it with `?map=<id>`; frame a view with `&cam=x,z,distance,yaw`
    and capture it with `make screenshots VIEWS=...`.
+
+## Add a character model
+
+1. Export a skinned glTF binary (Y up, facing +Z, feet at the origin,
+   clips in place: no root motion).
+2. Shrink it on the host: `python3 -I tooling/compress_glb.py in.glb
+src/assets/models/name.glb` (needs numpy and ffmpeg). The output loads
+   with the stock `GLTFLoader` (`KHR_mesh_quantization`,
+   `EXT_texture_webp`).
+3. Import it with `?url` and pass the idle and walk clip names to
+   `Engine.spawnCharacter` (see `GameCanvas.vue`). If the model is not
+   about 1 unit tall, or its walk is faster or slower, adjust
+   `MODEL_HEIGHT` and `CLIP_STRIDE_SPEED` in `render/actors/character.ts`
+   (the stride speed is how fast a planted foot slides back in the walk
+   clip, in model units per second).
