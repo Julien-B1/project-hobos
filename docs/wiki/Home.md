@@ -13,6 +13,7 @@ documentation; the repository README only covers setup and daily usage.
 - [[Reference Map|Reference-Map]]: layout of the deterministic test map and key columns to check.
 - [[Extending]]: add materials, shapes, meshers, test maps.
 - [[Organic Map|Organic-Map]]: procedural natural-looking test map (`?map=organic&seed=n`).
+- [[Kitchen Sink Map|Kitchen-Sink-Map]]: hand-made map holding every element (`?map=kitchen-sink`).
 - [[Conventions]]: world frame, units, voxel levels, camera and input conventions.
 - [[Development Environment|Development-Environment]]: Docker stack, `make`
   targets, dev container, troubleshooting.

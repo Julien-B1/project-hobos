@@ -24,8 +24,8 @@ import { hash01 } from '@/core/noise'
 /** Texture edge length, in texels. */
 const SIZE = 256
 
-/** Periodic value noise: lattice of `period` cells over the texture, wrapping. */
-function periodicNoise(u: number, v: number, period: number, seed: number): number {
+/** Periodic value noise in [0, 1]: lattice of `period` cells over the unit square, wrapping. */
+export function periodicNoise(u: number, v: number, period: number, seed: number): number {
   const x = u * period
   const y = v * period
   const x0 = Math.floor(x)
@@ -44,7 +44,7 @@ function periodicNoise(u: number, v: number, period: number, seed: number): numb
 }
 
 /** Periodic fractal noise, normalised to [0, 1]. */
-function periodicFbm(
+export function periodicFbm(
   u: number,
   v: number,
   basePeriod: number,

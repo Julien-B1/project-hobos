@@ -1,5 +1,12 @@
 /**
- * Organic test map: procedural, natural-looking terrain.
+ * Organic test map: procedural, natural-looking terrain sized for one
+ * encounter (a battle map), not a journey.
+ *
+ * Scale: one cell is one battle-map square (5 ft, 1.5 m). The default
+ * 32 x 32 map (160 ft square) is in the range of usual tabletop battle maps
+ * (20 x 30 to 30 x 30 squares, 24 x 36 posters). Feature sizes are set in
+ * cells for that scale: a stream a few squares wide, a hill or a rocky
+ * outcrop, a copse of trees.
  *
  * Layer: core (pure TypeScript). Deterministic for a given seed (see
  * `noise.ts`), so a seed reproduces exactly the same map.
@@ -19,20 +26,23 @@
  *    whose raised corners follow the surrounding cells (slopes, outer and
  *    inner corners). They give one-level steps a walkable slope; the smooth
  *    terrain renderer rounds everything else.
- * 5. Trees: trunks and leaf canopies on flat grass, denser in forest patches.
+ * 5. Trees: oaks, pines (on hills) and birches with their canopies on flat
+ *    grass, denser in forest patches, plus bushes.
  */
 import { CHUNK_SIZE } from '../coords'
 import { Material } from '../materials'
 import { fbm2, hash01, smoothstep } from '../noise'
 import { ORIENTATION_OFFSETS, shapeForCornerMask } from '../shapes'
 import { isAir, materialOf, packVoxel } from '../voxel'
+import type { TreeKind } from '../trees'
 import { VoxelMap } from '../voxelMap'
+import { growTree } from './treeGrowth'
 
 /** Options for {@link createOrganicMap}. */
 export interface OrganicMapOptions {
   /** Noise seed (any 32-bit integer). Default 1337. */
   readonly seed?: number
-  /** Edge length of the square map, in cells. Default 128. */
+  /** Edge length of the square map, in cells. Default {@link DEFAULT_ORGANIC_SIZE}. */
   readonly size?: number
 }
 
@@ -46,6 +56,18 @@ export interface OrganicMap {
   /** Terrain surface level of a column before slopes and trees (no water). */
   heightAt(x: number, z: number): number
 }
+
+/** Default edge length of the map, in cells (battle-map squares). */
+export const DEFAULT_ORGANIC_SIZE = 32
+
+/** Horizontal scale of the hills, in cells (about the width of one hill). */
+const RELIEF_SCALE = 26
+/** Height range of the hills, in levels (half-height voxels). */
+const RELIEF_HEIGHT = 14
+/** Width over which the river banks blend back into the terrain, in cells. */
+const BANK_WIDTH = 6
+/** Horizontal scale of the cliff zones, in cells. */
+const CLIFF_SCALE = 24
 
 /** Water surface level: terrain below it is flooded. */
 const WATER_LEVEL = 10
@@ -72,7 +94,7 @@ const STEEP_STEP = 3
 /** Build the organic map. Deterministic for a given seed and size. */
 export function createOrganicMap(options: OrganicMapOptions = {}): OrganicMap {
   const seed = options.seed ?? 1337
-  const size = options.size ?? 128
+  const size = options.size ?? DEFAULT_ORGANIC_SIZE
   const heights = buildHeightField(size, seed)
   const heightAt = (x: number, z: number): number =>
     heights[clampIndex(x, size) + clampIndex(z, size) * size] ?? MIN_LEVEL
@@ -93,23 +115,24 @@ function buildHeightField(size: number, seed: number): Int32Array {
     // River centre line along Z: a slow sine for the main bends, plus noise so
     // no two bends look alike.
     const meander =
-      Math.sin(z * 0.045 + seed * 0.1) * size * 0.16 +
-      (fbm2(z / 28, 0.5, seed + 77, { octaves: 3 }) - 0.5) * size * 0.3
+      Math.sin(z * 0.09 + seed * 0.1) * size * 0.12 +
+      (fbm2(z / 14, 0.5, seed + 77, { octaves: 3 }) - 0.5) * size * 0.25
     const riverX = size * 0.5 + meander
-    const riverHalfWidth = 2 + fbm2(z / 20, 3.5, seed + 91, { octaves: 2 }) * 2.5
+    // A stream 2.5 to 6 squares wide.
+    const riverHalfWidth = 1.25 + fbm2(z / 10, 3.5, seed + 91, { octaves: 2 }) * 1.75
 
     for (let x = 0; x < size; x++) {
       // Large-scale relief: plains where the noise is low, hills where high.
-      const n = fbm2(x / 72, z / 72, seed, { octaves: 4 })
+      const n = fbm2(x / RELIEF_SCALE, z / RELIEF_SCALE, seed, { octaves: 3 })
       const relief = Math.pow(smoothstep(0.2, 0.9, n), 1.4)
       // Gentle undulation so plains are not perfectly flat.
-      const detail = (fbm2(x / 14, z / 14, seed + 31, { octaves: 2 }) - 0.5) * 1.2
-      let h = 9 + relief * 20 + detail
+      const detail = (fbm2(x / 8, z / 8, seed + 31, { octaves: 2 }) - 0.5) * 1.2
+      let h = 9 + relief * RELIEF_HEIGHT + detail
 
       // Carve the river: bed below water, banks blending back to the terrain.
       const dist = Math.abs(x - riverX)
       const bed = WATER_LEVEL - 3
-      const t = smoothstep(riverHalfWidth, riverHalfWidth + 16, dist)
+      const t = smoothstep(riverHalfWidth, riverHalfWidth + BANK_WIDTH, dist)
       h = bed + (h - bed) * t
 
       raw[x + z * size] = h
@@ -126,7 +149,11 @@ function buildHeightField(size: number, seed: number): Int32Array {
       const i = x + z * size
       let h = smooth[i] ?? MIN_LEVEL
       // Cliff zones: hills become plateaus separated by steep risers.
-      const cliff = smoothstep(0.52, 0.6, fbm2(x / 60, z / 60, seed + 300, { octaves: 2 }))
+      const cliff = smoothstep(
+        0.52,
+        0.6,
+        fbm2(x / CLIFF_SCALE, z / CLIFF_SCALE, seed + 300, { octaves: 2 }),
+      )
       // Terraces count from just above the water: a plateau never sinks below
       // it (otherwise water would flood the terrace and draw contour channels).
       const shore = WATER_LEVEL + 2
@@ -214,7 +241,7 @@ function fillColumns(
       const h = heightAt(x, z)
       // Rocky patches: low-frequency noise, so rock comes in coherent areas
       // instead of speckles.
-      const rocky = fbm2(x / 11, z / 11, seed + 200, { octaves: 2 }) > 0.58
+      const rocky = fbm2(x / 8, z / 8, seed + 200, { octaves: 2 }) > 0.58
       const steep = maxNeighbourDrop(x, z, size, heightAt) >= STEEP_STEP
       const top = topMaterial(h, rocky || steep, nearWater(x, z, size, heightAt))
       const under = top === Material.ROCK || top === Material.STONE ? packVoxel(top) : dirt
@@ -334,7 +361,9 @@ function placeWedges(
 /**
  * Step 5: trees on a jittered grid (at most one candidate per 5 x 5 block),
  * kept where the ground is flat grass. A low-frequency noise mask makes
- * forests; elsewhere trees are sparse.
+ * forests; elsewhere trees are sparse. The kind depends on the height:
+ * mostly pines on hills, oaks and birches below. Bushes are sown on a finer
+ * grid on the remaining free grass.
  */
 function placeTrees(
   map: VoxelMap,
@@ -344,8 +373,12 @@ function placeTrees(
   wedgeColumns: Set<number>,
 ): void {
   const BLOCK = 5
-  const trunk = packVoxel(Material.WOOD)
-  const leaves = packVoxel(Material.LEAVES)
+  const flatGrass = (x: number, z: number): boolean => {
+    const h = heightAt(x, z)
+    const ground = materialOf(map.get(x, h - 1, z))
+    if (ground !== Material.GRASS || wedgeColumns.has(x + z * size)) return false
+    return maxNeighbourDrop(x, z, size, heightAt) <= 1
+  }
 
   for (let bz = 0; bz < size; bz += BLOCK) {
     for (let bx = 0; bx < size; bx += BLOCK) {
@@ -353,31 +386,36 @@ function placeTrees(
       const z = bz + Math.floor(hash01(bx, bz, seed + 2) * BLOCK)
       if (x < 2 || z < 2 || x >= size - 2 || z >= size - 2) continue
 
-      const forest = fbm2(x / 38, z / 38, seed + 500, { octaves: 3 }) > 0.55
-      if (hash01(x, z, seed + 3) > (forest ? 0.85 : 0.12)) continue
-
+      const forest = fbm2(x / 14, z / 14, seed + 500, { octaves: 3 }) > 0.55
+      if (hash01(x, z, seed + 3) > (forest ? 0.85 : 0.2)) continue
+      if (!flatGrass(x, z)) continue
       const h = heightAt(x, z)
-      const ground = materialOf(map.get(x, h - 1, z))
-      if (ground !== Material.GRASS || wedgeColumns.has(x + z * size)) continue
-      if (maxNeighbourDrop(x, z, size, heightAt) > 1) continue
-
-      // Trunk of 4 to 6 voxels (2 to 3 world units).
-      const trunkHeight = 4 + Math.floor(hash01(x, z, seed + 4) * 3)
-      for (let y = h; y < h + trunkHeight; y++) map.set(x, y, z, trunk)
-
-      // Canopy: ellipsoid of leaves around the trunk top, only into air.
-      const cy = h + trunkHeight
-      for (let dy = -2; dy <= 3; dy++) {
-        for (let dz = -2; dz <= 2; dz++) {
-          for (let dx = -2; dx <= 2; dx++) {
-            const r = (dx * dx + dz * dz) / 5.5 + ((dy - 0.5) * (dy - 0.5)) / 7
-            if (r > 1) continue
-            if (isAir(map.get(x + dx, cy + dy, z + dz))) map.set(x + dx, cy + dy, z + dz, leaves)
-          }
-        }
-      }
+      growTree(map, x, h, z, treeKindAt(h, hash01(x, z, seed + 5)), hash01(x, z, seed + 4))
     }
   }
+
+  const BUSH_BLOCK = 3
+  for (let bz = 0; bz < size; bz += BUSH_BLOCK) {
+    for (let bx = 0; bx < size; bx += BUSH_BLOCK) {
+      const x = bx + Math.floor(hash01(bx, bz, seed + 11) * BUSH_BLOCK)
+      const z = bz + Math.floor(hash01(bx, bz, seed + 12) * BUSH_BLOCK)
+      if (x < 1 || z < 1 || x >= size - 1 || z >= size - 1) continue
+      if (hash01(x, z, seed + 13) > 0.14 || !flatGrass(x, z)) continue
+      const h = heightAt(x, z)
+      // Keep bushes out of tree canopies and trunks.
+      let free = true
+      for (let dz = -1; dz <= 1 && free; dz++)
+        for (let dx = -1; dx <= 1 && free; dx++)
+          for (let y = h; y <= h + 2 && free; y++) free = isAir(map.get(x + dx, y, z + dz))
+      if (free) growTree(map, x, h, z, 'bush', hash01(x, z, seed + 14))
+    }
+  }
+}
+
+/** Kind of a tree standing at surface level `h`, from a random value in [0, 1). */
+function treeKindAt(h: number, r: number): TreeKind {
+  if (h >= 15) return r < 0.7 ? 'pine' : r < 0.85 ? 'birch' : 'oak'
+  return r < 0.55 ? 'oak' : r < 0.8 ? 'birch' : 'pine'
 }
 
 /** Clamp a coordinate into [0, size). */

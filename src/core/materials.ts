@@ -19,7 +19,14 @@ export const Material = {
   WATER: 6,
   WOOD: 7,
   PATH: 8,
+  /** Broad leaves (oaks, bushes). */
   LEAVES: 9,
+  /** Conifer needles (pines). */
+  NEEDLES: 10,
+  /** Small pale leaves (birches). */
+  BIRCH_LEAVES: 11,
+  /** Dressed stone for built structures (walls, arches, stairs): drawn as blocks. */
+  STONE_BRICK: 12,
 } as const
 
 /** A material id from {@link Material}. */
@@ -51,4 +58,16 @@ const TERRAIN: ReadonlySet<number> = new Set([
 /** True for terrain materials, see {@link TERRAIN}. */
 export function isTerrainMaterial(id: number): boolean {
   return TERRAIN.has(id)
+}
+
+/** Foliage materials: what tree canopies and bushes are made of. */
+const FOLIAGE: ReadonlySet<number> = new Set([
+  Material.LEAVES,
+  Material.NEEDLES,
+  Material.BIRCH_LEAVES,
+])
+
+/** True for foliage materials (leaves of any kind), see {@link FOLIAGE}. */
+export function isFoliageMaterial(id: number): boolean {
+  return FOLIAGE.has(id)
 }

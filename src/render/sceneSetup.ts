@@ -1,34 +1,65 @@
 /**
- * Scene creation: background and lights.
+ * Scene creation and lighting: background, main light, ambient.
  *
- * Layer: render. Lighting is deliberately simple (one directional "sun" plus
- * a hemisphere ambient) until the HD-2D look is tuned in a later step.
+ * Layer: render. One directional light (the sun by day, the moon at night;
+ * it may cast shadows, see `sunShadow.ts`) plus a hemisphere ambient. The
+ * time of day (`timeOfDay.ts`) sets their direction, colours and
+ * intensities and the background; the ambient is fairly strong so shadowed
+ * ground stays readable, as in HD-2D scenes.
  */
 import { Color, DirectionalLight, HemisphereLight, Scene } from 'three/webgpu'
+import { lightDirection, type LightingPreset } from './timeOfDay'
 
-/** Background colour of the scene (dark blue-grey). */
-const BACKGROUND = 0x1b232c
+/** Share of the sky colour mixed into the ambient light coming from below. */
+const GROUND_LIFT = 0.4
+
+/** Distance of the light from its target, in world units (only the direction matters). */
+const LIGHT_DISTANCE = 50
+
+/** The scene and its lights. */
+export interface SceneHandle {
+  readonly scene: Scene
+  /** Main light; its position relative to its target sets the light direction. */
+  readonly sun: DirectionalLight
+  /** Sky / ground ambient. */
+  readonly ambient: HemisphereLight
+}
+
+/** Create the scene with its background and lights, lit by `preset`. */
+export function createScene(preset: LightingPreset): SceneHandle {
+  const scene = new Scene()
+  const ambient = new HemisphereLight()
+  scene.add(ambient)
+  const sun = new DirectionalLight()
+  scene.add(sun)
+  // The shadow framing moves the target; it must be in the scene graph.
+  scene.add(sun.target)
+  const handle = { scene, sun, ambient }
+  applyLighting(handle, preset)
+  return handle
+}
 
 /**
- * Create the scene with its background and lights.
- *
- * The sun shines from above and slightly from the side, so the vertical faces
- * of blocks get different shades and the relief stays readable.
+ * Light the scene with `preset`. The light is placed relative to its
+ * current target; callers that frame shadows (`SunShadow`) must be told the
+ * new direction.
  */
-export function createScene(): Scene {
-  const scene = new Scene()
-  scene.background = new Color(BACKGROUND)
-
-  // Ambient term: sky colour from above, ground colour from below.
-  // Kept moderate so the sun's direction still reads on gentle slopes.
-  const ambient = new HemisphereLight(0xdfe8f2, 0x3a3328, 0.6)
-  scene.add(ambient)
-
-  // Lowish sun (about 45 degrees) from the north-west: slopes facing it are
-  // clearly brighter than slopes facing away.
-  const sun = new DirectionalLight(0xfff4e0, 2.8)
-  sun.position.set(-30, 32, -14)
-  scene.add(sun)
-
-  return scene
+export function applyLighting(handle: SceneHandle, preset: LightingPreset): void {
+  const { scene, sun, ambient } = handle
+  scene.background = new Color(preset.background)
+  ambient.color.setHex(preset.skyColor)
+  // Light from below is lifted towards the sky colour: with the preset's
+  // dark ground colour alone, vertical faces away from the sun (walls,
+  // rock sides) went almost black.
+  ambient.groundColor.setHex(preset.groundColor).lerp(ambient.color, GROUND_LIFT)
+  ambient.intensity = preset.ambientIntensity
+  sun.color.setHex(preset.lightColor)
+  sun.intensity = preset.lightIntensity
+  const d = lightDirection(preset.azimuthDeg, preset.elevationDeg)
+  const t = sun.target.position
+  sun.position.set(
+    t.x + d.x * LIGHT_DISTANCE,
+    t.y + d.y * LIGHT_DISTANCE,
+    t.z + d.z * LIGHT_DISTANCE,
+  )
 }

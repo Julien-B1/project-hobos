@@ -33,7 +33,8 @@ App.vue
  ├─ GameCanvas.vue ── creates ──> Engine (src/render/engine.ts)
  │        ▲                         ├─ createRenderer(): WebGPURenderer, await init(),
  │        │ onHudChange(snapshot)   │   backend detection (WebGPU / WebGL 2)
- │        └─────────────────────────├─ createScene(): background + lights
+ │        └─────────────────────────├─ createScene(): background, sun + hemisphere
+ │                                  ├─ SunShadow: shadow map framed on the camera
  │                                  └─ render loop (setAnimationLoop), resize observer
  └─ DebugHud.vue <── snapshot (shallowRef in App.vue)
 ```
@@ -42,6 +43,16 @@ App.vue
   `onBeforeUnmount`. It is kept in a plain variable, never in reactive state.
 - The engine pushes immutable HUD snapshots (`EngineHudState`) through a
   callback, at most a few times per second. Vue only stores the latest one.
+  `GameCanvas.vue` also emits a `SessionInfo` once (map, resolved seed,
+  mesher), so screenshots of the HUD are self-describing.
+- **Debug figures** (`render/frameStats.ts`, averaged over 0.5 s): FPS; GPU
+  time per frame from timestamp queries (`trackTimestamp`, one readback in
+  flight) and the derived GPU load (GPU time / frame interval: the page's
+  own share, not the OS-wide figure); estimated VRAM (Three.js tracked
+  buffers and textures, plus untracked MSAA samples and the canvas; no
+  browser API reports a page's real VRAM); draw calls, triangles, shadow
+  passes; camera target, distance and yaw. GPU figures show `n/a` when the
+  browser has no GPU timer.
 - Input: `src/app/input/bindings.ts` turns DOM events into calls on the
   render-layer `CameraRig` (`rotateBy`, `snapRotate`, `zoomBy`,
   `panByPixels`, `setMoveIntent`). The rig knows nothing about devices.
@@ -61,7 +72,11 @@ App.vue
   under a still cursor.
 - Debug URL flags are read by the app layer (`src/app/config.ts`):
   `?forceWebGL=1` forces the WebGL 2 backend, `?map=<id>` selects a test map
-  (`reference` by default, `flat`).
+  (`reference` by default, `flat`, `organic`, `kitchen-sink`; all battle-map
+  sized, `?size=<cells>` for procedural maps), `?time=<id>` sets the time of
+  day, `?mesher=blocky` shows exact
+  blocks, `?shadows=off|low|high` sets the sun shadow quality (`high` by
+  default).
 
 ## Terrain pipeline
 
@@ -74,12 +89,15 @@ render/chunkRenderer.update()  ── drainDirty() ──> keys to rebuild
         ▼
 ChunkMesher.mesh(map, chunk) ──> MeshData (typed arrays, no Three.js)
         │   HybridMesher (default, faceted):
-        │     terrain materials   -> TerrainMesher (low-poly facets)
-        │     wood, leaves, water -> CulledMesher (blocks, exact shapes)
+        │     terrain materials, water -> TerrainMesher (low-poly facets, water plane)
+        │     trees (trunk + foliage)  -> TreeMesher (round trunks, leaf cards)
+        │     ground decoration        -> ScatterMesher (cards, small rocks)
+        │     other wood               -> CulledMesher (blocks, exact shapes)
         │   CulledMesher alone (`?mesher=blocky`)
         ▼
-One Mesh per chunk and render layer (terrain, blocks, water), each layer
-with its own shared material (render/materials.ts)
+One Mesh per chunk and render layer (terrain, blocks, water, foliage,
+scatter, props), each layer with its own shared material
+(render/materials.ts)
 ```
 
 - `ChunkRenderer.update()` runs every frame; after generation every chunk is
@@ -91,23 +109,145 @@ with its own shared material (render/materials.ts)
   bakes a per-face shade.
 - **Faceted terrain** (`render/meshing/terrainMesher.ts`, heights from
   `core/terrainSurface.ts`): each column is cut into terrain runs; each run
-  top becomes two flat-shaded triangles whose corners are the mean of the
-  connected run tops around that lattice point (a tunnel floor never joins
-  the roof above it). Vertical walls only where the neighbour column does
+  top becomes two triangles whose corners are the mean of the connected run
+  tops around that lattice point (a tunnel floor never joins the roof above
+  it). Tops are smooth-shaded: each corner normal averages the facets of the
+  same connected group around the lattice point
+  (`TerrainField.cornerNormals`), so neighbouring cells and chunks agree and
+  the facets do not show in the lighting; walls keep flat normals. Vertical walls only where the neighbour column does
   not cover the run (exact even when the two tops cross along the edge:
   the edge is split at each crossing) and flat undersides for overhangs. Water is a flat
   plane drawn by the same mesher (a hair below its level) over every cell
   whose facet dips under a nearby water surface; beds blend with banks, so
-  the shoreline is where the facets cross the plane. Steep
+  the shoreline is where the facets cross the plane. Water vertices carry
+  their depth above the bed (split along the bed's diagonal). Steep
   triangles use the layer under the top (dirt, rock). The voxel grid is
   unchanged: game logic still works on voxels; only the look is faceted.
-- **Terrain shading** (`render/terrainMaterial.ts`, `render/noiseTexture.ts`):
-  vertices carry 6 material weights (two vec4 attributes), averaged per
-  lattice point like the heights, so transitions are continuous. The shader
-  samples a 256 x 256 tileable noise texture (generated once on the CPU)
-  twice, projected on the facet's plane in world space, to vary colours and
-  wobble the material borders. Budget: 2 texture fetches and a few mixes per
-  pixel; no GPU noise functions.
+- **Terrain shading** (`render/terrainMaterial.ts`, `render/noiseTexture.ts`,
+  `render/detailTexture.ts`): vertices carry 6 material weights (two vec4
+  attributes), averaged per lattice point like the heights. Textures are
+  projected in world space on the plane facing the facet (chosen from the
+  geometric normal, from screen derivatives). A 256 x 256 noise texture
+  (sampled twice) gives large-scale colour variation and random shifts; a
+  512 x 512 detail texture (one channel per material family: grass clumps,
+  pebbles, rock cracks, sand ripples; rotated against the cell grid) gives
+  the fine definition and serves as each material's _height_: where
+  materials meet, the highest within a narrow band wins (height blending),
+  so borders are crisp, irregular and follow the patterns. Steep ground
+  shifts weight to dirt and rock before the blend. Budget: 3 texture fetches
+  and a few dozen ALU per pixel; no GPU noise functions. All textures are
+  generated once on the CPU at start-up.
+- **Trees** (`core/trees.ts`, `render/meshing/treeMesher.ts`): a WOOD column
+  topped by foliage (`LEAVES`, `NEEDLES`, `BIRCH_LEAVES`) is a trunk;
+  foliage belongs to the closest trunk within 4 cells. The kind (oak, pine,
+  birch, bush) comes from the foliage material and the trunk height and
+  sets the bark style (radius, taper, lean, branches, colour, birch marks)
+  and the canopy centre; each foliage material picks its card size and
+  atlas row. Generators grow them with `core/generators/treeGrowth.ts`
+  (round oaks, pine cones, narrow birches, low bushes). Trunk voxels become
+  segments of a round, tapered, leaning tube (root flare, branches into the
+  canopy) in the blocks layer. Each foliage voxel with an exposed face
+  becomes one alpha-tested leaf card (`render/leafTexture.ts` 4 x 4 atlas:
+  broad leaves, needles, birch leaves, scatter; `render/foliageMaterial.ts`)
+  in the foliage layer, jittered and mostly facing out of the canopy, with
+  normals taken from the canopy ellipsoid (lit as one volume) and vertex
+  colours carrying a per-card tint and fake occlusion. Cards face the
+  camera: their 4 vertices sit at the card centre and the shader spreads
+  them along the camera's right and up axes (in the shadow pass, the sun's),
+  so canopies are full and never show cards edge-on; normals are computed
+  per pixel from the canopy centre. Cards use alpha to coverage, an alpha
+  boost per mip level (far canopies do not vanish) and cast alpha-tested
+  shadows. Cards sway with the wind (`render/wind.ts`: gust wave plus
+  per-tree phase, flutter of the corners); the shadow pass uses the still
+  cards, so the shadow map is not re-rendered every frame. Foliage is not
+  pickable. Data stays voxels:
+  see ADR-006 on the _Decisions_ page.
+- **Scatter** (`render/meshing/scatterMesher.ts`, `render/scatterMaterial.ts`):
+  decoration only, derived deterministically from the voxels (cell hash),
+  never seen by game logic or picking. Deliberately light: one candidate
+  point per run top (not covered by a block), most left empty. Items come
+  from the ground material there, the water depth and nearby trees: sparse
+  grass tufts and flowers on grass, stones on rocky ground only, fallen
+  leaves only under a tree canopy, a few reeds on shores and algae under
+  deep water. Cards (scatter layer, foliage atlas row 3
+  in colour) turn around the vertical to face the camera, sway at the top,
+  lie flat for fallen leaves, and cast no shadow; rocks (props layer) are
+  jittered, smooth-shaded icosahedra.
+- **Blocks shading** (`render/blocksMaterial.ts`): a per-vertex look
+  (`BlockLook`) picks a world-space pattern: wood planks (seams, joints,
+  grain), stone bricks (staggered courses, mortar), bark streaks, or plain.
+  1 noise fetch per pixel. Built structures use block materials (`WOOD`,
+  `STONE_BRICK`); terrain materials are always faceted.
+- **Cut** (`materials.ts` `cutHeight`, `Engine.setCutHeight`, `cutCap.ts`,
+  `meshing/capMesher.ts`, `CutSlider.vue`): every layer material has a mask
+  discarding what lies above a world height (any value, also in the shadow
+  pass, re-rendered on change); picking skips hits above it. Chunk meshes
+  are hollow shells, so a cap fills the section: for terrain, the part of
+  each faceted top above the cut and of each vaulted underside below it,
+  clipped per triangle from the mesh's own corner heights and laid flat at
+  the cut height (exact outline, cave interiors stay open); for built voxels, a square. The cap
+  is hatched, rebuilt when the height or the terrain changes. Display only,
+  the map is untouched.
+- **Openings** (`core/terrainSurface.ts`): around a corner touched by a
+  covered run (cave or arch floor), runs only join when they agree on it,
+  so the ground stays level in front of a mouth and the hill keeps a
+  vertical face there; undersides are vaulted (`cornerBottoms`: corners
+  against the side walls drop by half the opening's height, plus a random
+  offset), so openings are irregular arches.
+- **Rock dressing**: the terrain geometry is never distorted (the ground,
+  the cut cap and the hover highlight all come from the same corner
+  heights and match exactly). Rocky relief is decoration: faceted boulders
+  (props layer) rest at the foot of rock faces rising 4 levels or more
+  (cliffs, sides of cave mouths and arches), fewer and smaller under roofs.
+- **Battle-map grid** (`render/gridOverlay.ts`): the terrain, blocks and
+  water shaders darken the cell borders (integer x, z) with thin,
+  translucent lines. The line pattern is box-filtered over the pixel
+  footprint (screen derivatives): anti-aliased at every zoom, no moiré,
+  never hidden by the zoom. Only near-vertical faces drop it. Toggled with
+  `G` (a uniform, no rebuild); `?grid=off` starts hidden.
+- **Water shading** (`render/waterMaterial.ts`): transparent physical
+  material (IOR 1.33, no transmission or other extension), no depth write.
+  Colour and opacity follow the interpolated depth (nearly clear in the
+  shallows, dark blue and nearly opaque when deep, faded out at the shore),
+  with a thin noisy foam band. Two scrolling samples of the noise texture
+  tilt the normal (ripples). The material's specular is off: a real
+  highlight depends on the camera and showed as a spot moving with the
+  view. Instead a view-independent sun sheen (sun half-vector with the
+  vertical) and sparse ripple glints are added as emission, identical from
+  every side. No refraction pass.
+- **Lighting**: one directional light and a hemisphere ambient
+  (`render/sceneSetup.ts`), set by the **time of day** (`render/timeOfDay.ts`:
+  dawn, morning, noon, afternoon, dusk, evening, midnight, late night; sun
+  by day, moon at night, with direction, colours, intensities and
+  background). The picker in the app (`TimeOfDayPicker.vue`) and
+  `?time=<id>` choose it; the engine relights live, reframes the shadow and
+  updates the water sheen uniforms (`render/lightUniforms.ts`); Khronos PBR Neutral tone mapping (rolls off
+  highlights, keeps the palette). Sun shadows (`render/sunShadow.ts`,
+  framing maths in `render/shadowMath.ts`): one orthographic shadow map
+  centred on the camera target, sized from the camera distance in
+  2^(1/4) steps and snapped to its texel grid (no shimmering while
+  panning). It is re-rendered only when that framing changes or chunks are
+  rebuilt. Terrain, blocks and foliage cast and receive, water only
+  receives. Default quality `high` (4096²).
+
+### Rendering budget
+
+Measured reference: Intel Arc integrated GPU (Core Ultra 7 165H), organic
+map at 1368 x 911: about 3.1 ms of GPU time per frame (19 % at 60 FPS, HUD
+figure) with shadows and the depth-based water, before the detail texture,
+trees and grid. Shadow quality barely changes GPU time; `high` costs about
+95 MB of extra VRAM.
+
+| Effect           | Per-pixel cost                        | Other cost                                 | Switch                    |
+| ---------------- | ------------------------------------- | ------------------------------------------ | ------------------------- |
+| Terrain material | 3 texture fetches, a few dozen ALU    | none                                       | always                    |
+| Foliage material | 1 texture fetch, overdraw of cards    | alpha to coverage, a few vertex ALU (wind) | always                    |
+| Scatter cards    | 1 texture fetch, small cards          | alpha to coverage, no shadow cast          | always                    |
+| Grid             | a few ALU, derivatives                | none                                       | `G`, `?grid=off`          |
+| Water material   | 2 texture fetches (water pixels only) | blending (transparent)                     | always                    |
+| Tone mapping     | a few ALU                             | none                                       | always                    |
+| Sun shadows      | 5 filtered depth fetches (PCF)        | depth pass, only on framing change         | `?shadows=off\|low\|high` |
+
 - Picking on faceted terrain: hits on upward facets are resolved by column
   (`resolveColumnHit`: surface of that column closest in height), other
   hits by `resolveHit`.

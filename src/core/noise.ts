@@ -52,6 +52,32 @@ export function valueNoise2(x: number, z: number, seed: number): number {
   return top + (bottom - top) * tz
 }
 
+/**
+ * Value noise at a real 3D position, in [0, 1]. Continuous and smooth
+ * (trilinear interpolation of lattice hashes with the quintic fade).
+ */
+export function valueNoise3(x: number, y: number, z: number, seed: number): number {
+  const x0 = Math.floor(x)
+  const y0 = Math.floor(y)
+  const z0 = Math.floor(z)
+  const tx = fade(x - x0)
+  const ty = fade(y - y0)
+  const tz = fade(z - z0)
+  // Lattice hash of (i, j, k): the y layer is folded into the seed.
+  const at = (i: number, j: number, k: number): number => hash01(i, k, hash2(j, seed, 0x51ed))
+  const plane = (j: number): number => {
+    const a = at(x0, j, z0)
+    const b = at(x0 + 1, j, z0)
+    const c = at(x0, j, z0 + 1)
+    const d = at(x0 + 1, j, z0 + 1)
+    const near = a + (b - a) * tx
+    const far = c + (d - c) * tx
+    return near + (far - near) * tz
+  }
+  const low = plane(y0)
+  return low + (plane(y0 + 1) - low) * ty
+}
+
 /** Options for {@link fbm2}. */
 export interface FbmOptions {
   /** Number of noise layers (default 5). */

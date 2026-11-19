@@ -43,18 +43,48 @@ export class MeshBuilder {
   }
 
   /**
-   * Add a quad with per-vertex normals and colours (smooth shading), as two
-   * triangles. The vertex order is reversed when the quad faces away from
-   * `outward`.
+   * Add a convex polygon (3 or 4 vertices) as a triangle fan with per-vertex
+   * normals (smooth shading). The vertex order is reversed when the polygon
+   * faces away from `outward`; the given normals are kept as they are.
    */
-  smoothQuad(vertices: Vec3[], normals: Vec3[], colors: Vec3[], outward: Vec3): void {
+  smoothPolygon(
+    vertices: Vec3[],
+    normals: Vec3[],
+    outward: Vec3,
+    color: Vec3,
+    weights?: (readonly number[])[],
+  ): void {
+    if (vertices.length < 3) return
     const [a, b, c] = vertices as [Vec3, Vec3, Vec3]
-    if (dot(cross(sub(b, a), sub(c, a)), outward) < 0) {
+    const n = cross(sub(b, a), sub(c, a))
+    if (Math.hypot(n[0], n[1], n[2]) === 0) return // degenerate polygon
+    if (dot(n, outward) < 0) {
       vertices.reverse()
       normals.reverse()
-      colors.reverse()
+      weights?.reverse()
     }
-    this.emit(vertices, normals, colors)
+    this.emit(
+      vertices,
+      normals,
+      vertices.map(() => color),
+      weights,
+    )
+  }
+
+  /**
+   * Add a convex polygon exactly as given (per-vertex normals and colours,
+   * optional weights), without any winding check: for double-sided geometry
+   * such as foliage cards, or when the caller already orders the vertices
+   * counter-clockwise seen from the front.
+   */
+  rawPolygon(
+    vertices: readonly Vec3[],
+    normals: readonly Vec3[],
+    colors: readonly Vec3[],
+    weights?: (readonly number[])[],
+  ): void {
+    if (vertices.length < 3) return
+    this.emit(vertices, normals, colors, weights)
   }
 
   /** Append vertices and a triangle fan over them. */
@@ -115,4 +145,19 @@ export function cross(a: Vec3, b: Vec3): Vec3 {
 /** Dot product. */
 export function dot(a: Vec3, b: Vec3): number {
   return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+
+/** Unit-length copy of `v` (zero vector unchanged). */
+export function normalize(v: Vec3): Vec3 {
+  const len = Math.hypot(v[0], v[1], v[2])
+  return len > 0 ? [v[0] / len, v[1] / len, v[2] / len] : v
+}
+
+/** Linear RGB of an sRGB hex colour (exact sRGB transfer, as Three.js `Color.setHex`). */
+export function srgbHexToLinear(hex: number): Vec3 {
+  const channel = (v: number): number => {
+    const c = v / 255
+    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+  }
+  return [channel((hex >> 16) & 255), channel((hex >> 8) & 255), channel(hex & 255)]
 }

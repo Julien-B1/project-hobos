@@ -20,16 +20,20 @@ describe('reference map', () => {
     expect(other.chunkCount).toBe(map.chunkCount)
   })
 
+  it('is battle-map sized: 32 x 32 cells', () => {
+    expect(L.size).toEqual({ width: 32, depth: 32 })
+  })
+
   it('has a flat base ground at level 6', () => {
     expect(surfaceLevels(5, 5)).toEqual([L.groundTop])
-    expect(surfaceLevels(60, 10)).toEqual([L.groundTop])
+    expect(surfaceLevels(28, 5)).toEqual([L.groundTop])
   })
 
   it('has a river trench with water and a low bank path', () => {
-    expect(surfaceLevels(30, 5)).toEqual([L.river.waterTop])
-    expect(materialOf(map.get(30, L.river.waterTop - 1, 5))).toBe(Material.WATER)
-    expect(surfaceLevels(23, 5)).toEqual([L.path.top])
-    expect(materialOf(map.get(23, L.path.top - 1, 5))).toBe(Material.PATH)
+    expect(surfaceLevels(16, 5)).toEqual([L.river.waterTop])
+    expect(materialOf(map.get(16, L.river.waterTop - 1, 5))).toBe(Material.WATER)
+    expect(surfaceLevels(13, 5)).toEqual([L.path.top])
+    expect(materialOf(map.get(13, L.path.top - 1, 5))).toBe(Material.PATH)
   })
 
   it('has exactly two walkable surfaces where the bridge crosses the path', () => {
@@ -41,21 +45,21 @@ describe('reference map', () => {
   })
 
   it('also stacks the bridge over the river', () => {
-    expect(surfaceLevels(30, 31)).toEqual([L.river.waterTop, L.bridge.deckLevel + 1])
+    expect(surfaceLevels(16, L.bridge.z.min)).toEqual([L.river.waterTop, L.bridge.deckLevel + 1])
   })
 
   it('reaches the bridge deck with slope ramps facing the bridge', () => {
     const west = L.bridgeRampWest.x
     for (let x = west.min; x <= west.max; x++) {
       const y = L.groundTop + (x - west.min)
-      const voxel = map.get(x, y, 31)
+      const voxel = map.get(x, y, L.bridge.z.min)
       expect(shapeOf(voxel)).toBe(Shape.SLOPE)
       expect(orientationOf(voxel)).toBe(Orientation.EAST)
     }
     const east = L.bridgeRampEast.x
     for (let x = east.min; x <= east.max; x++) {
       const y = L.groundTop + (east.max - x)
-      const voxel = map.get(x, y, 31)
+      const voxel = map.get(x, y, L.bridge.z.min)
       expect(shapeOf(voxel)).toBe(Shape.SLOPE)
       expect(orientationOf(voxel)).toBe(Orientation.WEST)
     }

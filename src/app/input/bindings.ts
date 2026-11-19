@@ -13,6 +13,7 @@
  * | KeyR / KeyF                | R / F        | Zoom in / out (held)       |
  * | NumpadAdd / NumpadSubtract | + / - (pad)  | Zoom in / out (held)       |
  * | KeyC or Home               | C or Home    | Reset view (animated)      |
+ * | KeyG                       | G            | Show / hide the grid       |
  * | Arrow keys                 | Arrow keys   | Same as W/A/S/D            |
  *
  * Mouse: left drag = free rotation, middle drag = pan, wheel = zoom. The
@@ -31,6 +32,10 @@ export interface InputTarget {
   setPointer(cssX: number, cssY: number): void
   /** Cursor left the canvas. */
   clearPointer(): void
+  /** Whether the battle-map grid is shown. */
+  readonly gridVisible: boolean
+  /** Show or hide the battle-map grid. */
+  setGridVisible(visible: boolean): void
 }
 
 /** Sensitivity settings, see `config.input`. */
@@ -96,6 +101,10 @@ export function bindInputs(
     if (e.code === 'KeyQ' || e.code === 'KeyE') {
       // Ignore auto-repeat: one press = one 45-degree step.
       if (!e.repeat) rig.snapRotate(e.code === 'KeyQ' ? -1 : 1)
+      return
+    }
+    if (e.code === 'KeyG') {
+      if (!e.repeat) target.setGridVisible(!target.gridVisible)
       return
     }
     if (RESET_KEYS.includes(e.code)) {

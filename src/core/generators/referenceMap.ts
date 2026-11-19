@@ -5,21 +5,20 @@
  * Layer: core (pure TypeScript). No randomness: the same call always builds
  * the same voxels, so tests and manual checks can use fixed coordinates.
  *
- * Top view, 64 x 64 cells (x right, z down), heights as *surface levels*
- * (level L = standing on top of voxel L-1, world height L * 0.5):
+ * Top view, 32 x 32 cells (x right, z down; a battle-map sized encounter
+ * area), heights as *surface levels* (level L = standing on top of voxel
+ * L-1, world height L * 0.5):
  *
  * ```
- *  x: 0    2      18  22 26     34    44          63
- *  z:0 +------------------+-------+------------------+
- *      | ground (6)       |P|river| ground (6)       |
- *      |                  |a| (3) |                  |
- *   30 | ramp>> =========== bridge deck (11) ===<< ramp |  z 30..32
- *   32 |                  |t|     |      ramp ^^ x50..51, z32..39
- *   40 |                  |h|     |      +-----------+
- *   44 | +-hill (14)--+   |(4)    |      | cliff (14)|
- *   50 | = tunnel ===== (6)|      |      |           |  z 50..52
- *   58 | +------------+   | |     |      |           |
- *   63 +------------------+-------+------+-----------+
+ *  x: 0 1  6     11 12 15  18 19 20   24 27 28  31
+ *  z:0 +-----------+P+-----+-----------------------+
+ *      | ground (6)|a|river| ground (6)            |
+ *    9 | ramp>> ===|t|= bridge deck (11) ==<< ramp |  z 9..10
+ *   12 |           |h| (3) |       ramp ^^ x27..28, z12..19
+ *   20 | +-hill (14)-+|    |    +-----------------+
+ *   24 | = tunnel =(6)|    |    | cliff (14)      |  tunnel z 24..26
+ *   30 | +---------+ |(4)  |    |                 |
+ *   31 +-----------+-+-----+----+-----------------+
  * ```
  *
  * See {@link REFERENCE_LAYOUT} for exact coordinates, and the wiki page
@@ -62,24 +61,24 @@ export interface ReferenceLayout {
  * the top solid voxel is at `top - 1`.
  */
 export const REFERENCE_LAYOUT: ReferenceLayout = {
-  size: { width: 64, depth: 64 },
+  size: { width: 32, depth: 32 },
   /** Base ground: solid voxels 0..5, surface level 6. */
   groundTop: 6,
   /** Trench of the river and its low bank path. */
-  river: { x: { min: 26, max: 33 }, bedTop: 2, waterTop: 3 },
-  path: { x: { min: 22, max: 25 }, top: 4 },
+  river: { x: { min: 15, max: 18 }, bedTop: 2, waterTop: 3 },
+  path: { x: { min: 12, max: 14 }, top: 4 },
   /** Bridge deck spanning the path and the river along X. */
-  bridge: { x: { min: 20, max: 35 }, z: { min: 30, max: 32 }, deckLevel: 10 },
+  bridge: { x: { min: 11, max: 19 }, z: { min: 9, max: 10 }, deckLevel: 10 },
   /** Slope ramps from the ground up to the deck, at both bridge ends. */
-  bridgeRampWest: { x: { min: 15, max: 19 } },
-  bridgeRampEast: { x: { min: 36, max: 40 } },
+  bridgeRampWest: { x: { min: 6, max: 10 } },
+  bridgeRampEast: { x: { min: 20, max: 24 } },
   /** Raised plateau with a vertical face towards -Z. */
-  cliff: { x: { min: 44, max: 63 }, z: { min: 40, max: 63 }, top: 14 },
+  cliff: { x: { min: 23, max: 31 }, z: { min: 20, max: 31 }, top: 14 },
   /** Slope ramp climbing +Z against the cliff's north face. */
-  cliffRamp: { x: { min: 50, max: 51 }, z: { min: 32, max: 39 } },
+  cliffRamp: { x: { min: 27, max: 28 }, z: { min: 12, max: 19 } },
   /** Hill crossed by a tunnel along X. */
-  hill: { x: { min: 2, max: 18 }, z: { min: 44, max: 58 }, top: 14 },
-  tunnel: { z: { min: 50, max: 52 }, floorTop: 6, ceilingLevel: 10 },
+  hill: { x: { min: 1, max: 10 }, z: { min: 20, max: 30 }, top: 14 },
+  tunnel: { z: { min: 24, max: 26 }, floorTop: 6, ceilingLevel: 10 },
 }
 
 const v = (material: number, shape: number = Shape.FULL, orientation = 0): Voxel =>

@@ -7,6 +7,7 @@ import {
   oneHotWeights,
   terrainChannel,
   connects,
+  facetCornerNormal,
   facetDiagonal,
   facetHeightAt,
   type TerrainRun,
@@ -80,6 +81,31 @@ describe('corner heights', () => {
     const c = f.cornerHeights(1, 1, floor)
     expect(c[0]).toBeCloseTo(6)
     expect(c[3]).toBeCloseTo(6)
+  })
+
+  it('keeps a cave mouth open: the ground in front stays level with the floor', () => {
+    const map = new VoxelMap()
+    // Open ground (x 0..1) in front of a hill (x 2..4) with a tunnel at z = 1.
+    for (let z = 0; z < 3; z++) {
+      for (let x = 0; x < 2; x++) column(map, x, z, 0, 6)
+      for (let x = 2; x < 5; x++) {
+        column(map, x, z, 0, 6)
+        if (z === 1) column(map, x, z, 10, 13)
+        else column(map, x, z, 6, 13)
+      }
+    }
+    const f = field(map)
+    const [floor] = f.runsAt(2, 1)
+    const ground = f.runsAt(1, 1)[0]
+    if (!floor || !ground) throw new Error('no run')
+    // Mouth edge x = 2: floor and ground corners all at level 6.
+    expect(f.cornerHeights(2, 1, floor)).toEqual([6, 6, 6, 6])
+    expect(f.cornerHeights(1, 1, ground)[1]).toBe(6)
+    expect(f.cornerHeights(1, 1, ground)[2]).toBe(6)
+    // Away from the mouth the ground still climbs towards the hill.
+    const side = f.runsAt(1, 0)[0]
+    if (!side) throw new Error('no run')
+    expect(f.cornerHeights(1, 0, side)[1]).toBeGreaterThan(6)
   })
 
   it('joins ground with an open cliff top (steep facet)', () => {
@@ -158,5 +184,83 @@ describe('facet triangulation', () => {
     expect(facetHeightAt(h, 0, 0)).toBeCloseTo(8)
     expect(facetHeightAt(h, 1, 1)).toBeCloseTo(6)
     expect(facetHeightAt(h, 0.25, 0.25)).toBeCloseTo(7)
+  })
+})
+
+describe('smooth corner normals', () => {
+  it('points straight up on flat facets', () => {
+    for (const corner of [0, 1, 2, 3] as const) {
+      expect(facetCornerNormal([6, 6, 6, 6], corner)).toEqual([0, 1, 0])
+    }
+  })
+
+  it('follows the height gradient of a tilted facet, with a unit vertical component', () => {
+    // Rises 2 levels (1 world unit) from x = 0 to x = 1.
+    const n = facetCornerNormal([0, 2, 2, 0], 1)
+    expect(n[0]).toBeCloseTo(-1)
+    expect(n[1]).toBeCloseTo(1)
+    expect(n[2]).toBeCloseTo(0)
+  })
+
+  it('averages the facets around a corner, so neighbouring cells share the normal', () => {
+    const map = new VoxelMap()
+    // A ramp along x: column x rises one level per cell.
+    for (let x = 0; x < 6; x++) for (let z = 0; z < 4; z++) column(map, x, z, 0, 4 + x)
+    const f = field(map)
+    const a = f.runsAt(2, 1)[0]
+    const b = f.runsAt(3, 1)[0]
+    if (!a || !b) throw new Error('no run')
+    const na = f.cornerNormals(2, 1, a)
+    const nb = f.cornerNormals(3, 1, b)
+    // Lattice point (3, 2) is a's c11 and b's c01.
+    expect(na[2]).toEqual(nb[3])
+    const [x, y, z] = na[2] ?? [0, 0, 0]
+    expect(Math.hypot(x, y, z)).toBeCloseTo(1)
+    expect(x).toBeLessThan(0) // tilted away from the rising side
+    expect(y).toBeGreaterThan(0.8)
+    expect(z).toBeCloseTo(0)
+  })
+
+  it('keeps a tunnel floor flat under its roof', () => {
+    const map = new VoxelMap()
+    for (let x = 0; x < 3; x++)
+      for (let z = 0; z < 3; z++) {
+        column(map, x, z, 0, 6)
+        if (x !== 1) column(map, x, z, 6, 14)
+      }
+    for (let z = 0; z < 3; z++) column(map, 1, z, 10, 14) // roof over the floor
+    const f = field(map)
+    const [floor] = f.runsAt(1, 1)
+    if (!floor) throw new Error('no run')
+    for (const n of f.cornerNormals(1, 1, floor)) expect(n).toEqual([0, 1, 0])
+  })
+})
+
+describe('vaulted undersides', () => {
+  it('keeps the bottom of ground resting on nothing flat (map floor)', () => {
+    const map = new VoxelMap()
+    for (let x = 0; x < 2; x++) for (let z = 0; z < 2; z++) column(map, x, z, 0, 6)
+    const f = field(map)
+    const run = f.runsAt(0, 0)[0]
+    if (!run) throw new Error('no run')
+    expect(f.cornerBottoms(0, 0, run)).toEqual([0, 0, 0, 0])
+  })
+
+  it('drops a roof towards the side walls of the opening', () => {
+    const map = new VoxelMap()
+    // Tunnel along z at x = 1..2, walls at x = 0 and x = 3; floor 6, roof from 10.
+    for (let z = 0; z < 4; z++)
+      for (let x = 0; x < 4; x++) {
+        column(map, x, z, 0, 6)
+        column(map, x, z, x === 0 || x === 3 ? 6 : 10, 14)
+      }
+    const f = field(map)
+    const roof = f.runsAt(1, 1)[1]
+    if (!roof) throw new Error('no roof')
+    const b = f.cornerBottoms(1, 1, roof)
+    // Corners c00 and c01 touch the wall (x = 1): lower than the middle ones.
+    expect(b[0]).toBeLessThan(b[1])
+    expect(b[3]).toBeLessThan(b[2])
+    expect(Math.min(...b)).toBeGreaterThan(6)
   })
 })

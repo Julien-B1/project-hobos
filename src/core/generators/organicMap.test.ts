@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { Material } from '../materials'
+import { Material, isFoliageMaterial } from '../materials'
 import { Shape, voxelTopCorners } from '../shapes'
 import { columnSurfaces } from '../surface'
 import { isAir, materialOf, shapeOf } from '../voxel'
 import type { VoxelMap } from '../voxelMap'
-import { createOrganicMap } from './organicMap'
+import { DEFAULT_ORGANIC_SIZE, createOrganicMap } from './organicMap'
 
 const SIZE = 64
 const organic = createOrganicMap({ seed: 7, size: SIZE })
@@ -75,7 +75,7 @@ describe('organic map', () => {
     forEachVoxel(organic.map, 60, (x, y, z, v) => {
       const shape = shapeOf(v)
       const material = materialOf(v)
-      if (isAir(v) || material === Material.LEAVES || material === Material.WOOD) return
+      if (isAir(v) || isFoliageMaterial(material) || material === Material.WOOD) return
       if (shape !== Shape.SLOPE && shape !== Shape.CORNERS) return
       wedges++
       expect(isAir(organic.map.get(x, y - 1, z))).toBe(false) // supported
@@ -128,15 +128,38 @@ describe('organic map', () => {
     }
   })
 
-  it('grows trees with trunks and leaves', () => {
+  it('grows several kinds of trees with trunks and foliage', () => {
     let wood = 0
-    let leaves = 0
+    let foliage = 0
+    const kinds = new Set<number>()
     forEachVoxel(organic.map, 60, (_x, _y, _z, v) => {
-      if (materialOf(v) === Material.WOOD) wood++
-      if (materialOf(v) === Material.LEAVES) leaves++
+      const m = materialOf(v)
+      if (m === Material.WOOD) wood++
+      if (isFoliageMaterial(m)) {
+        foliage++
+        kinds.add(m)
+      }
     })
     expect(wood).toBeGreaterThan(0)
-    expect(leaves).toBeGreaterThan(wood)
+    expect(foliage).toBeGreaterThan(wood)
+    expect(kinds.size).toBeGreaterThanOrEqual(2)
+  })
+
+  it('defaults to a battle-map sized encounter with water and trees', () => {
+    const encounter = createOrganicMap()
+    expect(encounter.size).toBe(DEFAULT_ORGANIC_SIZE)
+    expect(DEFAULT_ORGANIC_SIZE).toBeLessThanOrEqual(40)
+    let water = 0
+    let leaves = 0
+    for (let z = 0; z < encounter.size; z++)
+      for (let x = 0; x < encounter.size; x++)
+        for (let y = 0; y < 40; y++) {
+          const m = materialOf(encounter.map.get(x, y, z))
+          if (m === Material.WATER) water++
+          if (isFoliageMaterial(m)) leaves++
+        }
+    expect(water).toBeGreaterThan(0)
+    expect(leaves).toBeGreaterThan(0)
   })
 
   it('reports column heights consistent with the voxels', () => {

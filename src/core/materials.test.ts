@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Material, isTerrainMaterial, materialName } from './materials'
+import { Material, isFoliageMaterial, isTerrainMaterial, materialName } from './materials'
 
 describe('materials', () => {
   it('reserves 0 for air', () => {
@@ -15,6 +15,14 @@ describe('materials', () => {
   it('names materials for display', () => {
     expect(materialName(Material.STONE)).toBe('stone')
     expect(materialName(250)).toBe('unknown(250)')
+  })
+
+  it('groups the foliage materials', () => {
+    expect(isFoliageMaterial(Material.LEAVES)).toBe(true)
+    expect(isFoliageMaterial(Material.NEEDLES)).toBe(true)
+    expect(isFoliageMaterial(Material.BIRCH_LEAVES)).toBe(true)
+    expect(isFoliageMaterial(Material.WOOD)).toBe(false)
+    expect(isFoliageMaterial(Material.GRASS)).toBe(false)
   })
 
   it('separates terrain from built, vegetation and fluid materials', () => {

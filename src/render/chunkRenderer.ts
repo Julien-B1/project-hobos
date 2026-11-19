@@ -8,6 +8,13 @@
  */
 import { BufferAttribute, BufferGeometry, Group, Mesh, type Material } from 'three/webgpu'
 import type { VoxelMap } from '@/core/voxelMap'
+import { FOLIAGE_CARD_REACH } from './meshing/treeMesher'
+
+/** Layers left out of picking: decoration whose shapes do not match voxels. */
+const UNPICKABLE: ReadonlySet<string> = new Set(['foliage', 'scatter', 'props'])
+
+/** Tallest scatter card, in world units (bounding sphere margin). */
+const SCATTER_REACH = 1.6
 import {
   MESH_LAYERS,
   isEmptyMesh,
@@ -38,11 +45,17 @@ export class ChunkRenderer {
     this.group.name = 'chunks'
   }
 
-  /** Meshes to raycast against for picking (a fresh array each call). */
+  /**
+   * Meshes to raycast against for picking (a fresh array each call).
+   * Foliage and ground decoration are left out: they do not match voxel
+   * faces, and the cursor reaches the ground or trunk through them.
+   */
   get pickables(): Mesh[] {
     const out: Mesh[] = []
     for (const layers of this.meshes.values()) {
-      for (const mesh of Object.values(layers)) out.push(mesh)
+      for (const [layer, mesh] of Object.entries(layers)) {
+        if (!UNPICKABLE.has(layer)) out.push(mesh)
+      }
     }
     return out
   }
@@ -95,6 +108,13 @@ export class ChunkRenderer {
         continue
       }
       const geometry = toGeometry(part)
+      // Foliage positions are card centres; the shader spreads the corners.
+      if (layer === 'foliage' && geometry.boundingSphere) {
+        geometry.boundingSphere.radius += FOLIAGE_CARD_REACH
+      }
+      if (layer === 'scatter' && geometry.boundingSphere) {
+        geometry.boundingSphere.radius += SCATTER_REACH
+      }
       if (old) {
         old.geometry.dispose()
         old.geometry = geometry
@@ -105,6 +125,10 @@ export class ChunkRenderer {
       mesh.name = `chunk ${key} ${layer}`
       mesh.userData.chunkKey = key
       mesh.userData.layer = layer
+      // Water is see-through and scatter cards are tiny: they receive shadows
+      // but cast none. Foliage casts through its alpha test (dappled shadows).
+      mesh.castShadow = layer !== 'water' && layer !== 'scatter'
+      mesh.receiveShadow = true
       this.group.add(mesh)
       next[layer] = mesh
     }

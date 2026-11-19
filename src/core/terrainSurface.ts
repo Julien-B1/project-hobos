@@ -17,14 +17,20 @@
  *   they *connect*: the higher run's column is solid down to the lower top,
  *   and nothing covers the lower run below the higher top. A tunnel floor
  *   therefore never joins the hill top above it, while ground at the foot of
- *   a cliff joins the cliff top (the cliff becomes a steep facet).
+ *   a cliff joins the cliff top (the cliff becomes a steep facet). Around an
+ *   opening (a corner touched by a covered run: cave or arch floor), runs
+ *   only join when they agree on that covered run, so the ground in front of
+ *   a cave mouth stays level with its floor and the hill keeps a vertical
+ *   face around the mouth instead of sloping across it.
  * - The group's height is the mean of its run tops. All cells sharing the
  *   corner read the same value, so facets join without gaps.
  * - Water is not terrain: beds blend with the banks like any ground, so a
  *   bank slopes on under the water and the shoreline is where the facets
  *   cross the flat water plane drawn by the mesher.
  */
+import { VOXEL_HEIGHT } from './coords'
 import { Material } from './materials'
+import { hash01 } from './noise'
 import { isAir, materialOf, type Voxel } from './voxel'
 import { voxelTopCorners } from './shapes'
 import type { VoxelMap } from './voxelMap'
@@ -70,11 +76,16 @@ export function oneHotWeights(material: number): number[] {
   return w
 }
 
-/** Height and blended material weights of a run at one corner. */
+/** Height, blended material weights and group of a run at one corner. */
 interface CornerValue {
   readonly height: number
   readonly weights: readonly number[]
+  /** Id of the connected group at this lattice point (shared by its members). */
+  readonly group: number
 }
+
+/** A direction in world space (x, y, z). */
+export type Direction3 = readonly [number, number, number]
 
 /** Corner heights of a run's top, in levels: [c00, c10, c11, c01] (see `shapes.ts`). */
 export type FacetCorners = readonly [number, number, number, number]
@@ -105,6 +116,7 @@ const CELL_CORNERS: readonly (readonly [number, number])[] = [
 export class TerrainField {
   private readonly runsCache = new Map<string, TerrainRun[]>()
   private readonly cornerCache = new Map<string, Map<TerrainRun, CornerValue>>()
+  private readonly normalCache = new Map<string, Direction3>()
 
   /**
    * @param isTerrain Which voxels are terrain (others count as empty).
@@ -162,11 +174,95 @@ export class TerrainField {
     return [h[0] ?? run.top, h[1] ?? run.top, h[2] ?? run.top, h[3] ?? run.top]
   }
 
+  /**
+   * Smooth shading normals of a run's top at its 4 corners, in
+   * `FacetCorners` order (world space, unit length, pointing up).
+   *
+   * Each corner averages the facets of every run in its connected group
+   * around the lattice point (see {@link facetCornerNormal}), so the
+   * neighbouring cells, including those of other chunks, compute the same
+   * normal there: lighting is continuous across facets and chunk borders,
+   * while the geometry stays low-poly. Walls and undersides are not part of
+   * any group and keep their flat normals (sharp cliff edges).
+   */
+  cornerNormals(x: number, z: number, run: TerrainRun): Direction3[] {
+    return CELL_CORNERS.map(([dx, dz]) => this.latticeNormal(x + dx, z + dz, run))
+  }
+
+  /** Normal of `run`'s group at lattice point (cx, cz), cached per group. */
+  private latticeNormal(cx: number, cz: number, run: TerrainRun): Direction3 {
+    const groups = this.cornerGroups(cx, cz)
+    const mine = groups.get(run)
+    const key = `${cx},${cz},${mine?.group ?? -1}`
+    const cached = mine ? this.normalCache.get(key) : undefined
+    if (cached) return cached
+
+    let nx = 0
+    let ny = 0
+    let nz = 0
+    for (const [dx, dz] of CELLS_AROUND_CORNER) {
+      const x = cx + dx
+      const z = cz + dz
+      // Index of the lattice point among this cell's corners.
+      const corner = CELL_CORNERS.findIndex(([ox, oz]) => x + ox === cx && z + oz === cz)
+      for (const other of this.runsAt(x, z)) {
+        if (!Number.isFinite(other.top)) continue
+        const same = other === run || (mine && groups.get(other)?.group === mine.group)
+        if (!same) continue
+        const n = facetCornerNormal(this.cornerHeights(x, z, other), corner as 0 | 1 | 2 | 3)
+        nx += n[0]
+        ny += n[1]
+        nz += n[2]
+      }
+    }
+    const len = Math.hypot(nx, ny, nz)
+    const normal: Direction3 = len > 0 ? [nx / len, ny / len, nz / len] : [0, 1, 0]
+    if (mine) this.normalCache.set(key, normal)
+    return normal
+  }
+
+  /**
+   * Corner heights (levels) of the underside of an overhanging run (cave or
+   * arch roof) in cell (x, z), in `FacetCorners` order.
+   *
+   * The underside is vaulted: a corner touching a cell that is solid just
+   * under the roof (the opening's side wall) drops by about half the
+   * opening's height, and every corner gets a small random offset, so an
+   * opening is an irregular arch instead of a rectangle. Cells sharing a
+   * lattice point compute the same value when their roofs and floors are at
+   * the same levels (the usual case along a tunnel).
+   */
+  cornerBottoms(x: number, z: number, run: TerrainRun): FacetCorners {
+    const b = CELL_CORNERS.map(([dx, dz]) => this.cornerBottom(x, z, x + dx, z + dz, run))
+    return [b[0] ?? run.bottom, b[1] ?? run.bottom, b[2] ?? run.bottom, b[3] ?? run.bottom]
+  }
+
+  /** Underside height of `run` (column x, z) at lattice point (cx, cz). */
+  private cornerBottom(x: number, z: number, cx: number, cz: number, run: TerrainRun): number {
+    if (!Number.isFinite(run.bottom)) return run.bottom
+    // Floor of the opening: top of the run right below in the same column.
+    let floor = -Infinity
+    for (const r of this.runsAt(x, z)) if (r.top <= run.bottom) floor = Math.max(floor, r.top)
+    // No floor below: not an opening (e.g. the map's own bottom), keep it flat.
+    if (!Number.isFinite(floor)) return run.bottom
+    const gap = run.bottom - floor
+    // Solid just under the roof in a cell around the corner: a side wall.
+    const probe = run.bottom - 0.5
+    const walled = CELLS_AROUND_CORNER.some(([dx, dz]) =>
+      this.runsAt(cx + dx, cz + dz).some((r) => r.bottom < probe && r.top > probe),
+    )
+    const jitter = (hash01(cx, cz, 977 + run.bottom) - 0.5) * Math.min(1, gap * 0.25)
+    const dropped = run.bottom - (walled ? gap * 0.5 : 0) + jitter
+    // Stay above the floor and below the run's own top.
+    return Math.min(Math.max(dropped, floor + Math.min(1.5, gap * 0.5)), run.top - 0.25)
+  }
+
   /** Height (levels) of `run` at lattice point (cx, cz); the run must belong to a cell around it. */
   private cornerHeight(cx: number, cz: number, run: TerrainRun): number {
     const h = this.cornerGroups(cx, cz).get(run)?.height ?? run.top
-    // An overhanging run must not be pulled below its own bottom.
-    return Number.isFinite(run.bottom) ? Math.max(h, run.bottom + 0.25) : h
+    // An overhanging run must not be pulled below its own bottom (plus the
+    // largest upward jitter of its vaulted underside).
+    return Number.isFinite(run.bottom) ? Math.max(h, run.bottom + 0.75) : h
   }
 
   /** Group heights of every run around lattice point (cx, cz), cached. */
@@ -187,15 +283,31 @@ export class TerrainField {
       while (parent[i] !== i) i = parent[i] ?? i
       return i
     }
+    const linked = (i: number, j: number): boolean => {
+      const a = members[i]
+      const b = members[j]
+      if (!a || !b || a.cell === b.cell) return false
+      return connects(a.run, a.runs, b.run, b.runs)
+    }
+    // Covered members: runs with a roof above them (cave or arch floors).
+    const covered = members
+      .map((m, i) => (m.runs.some((r) => r.bottom > m.run.topY) ? i : -1))
+      .filter((i) => i >= 0)
     for (let i = 0; i < members.length; i++) {
       for (let j = i + 1; j < members.length; j++) {
-        const a = members[i]
-        const b = members[j]
-        if (!a || !b || a.cell === b.cell) continue
-        if (connects(a.run, a.runs, b.run, b.runs)) parent[find(i)] = find(j)
+        if (!linked(i, j)) continue
+        // Openings: two runs only join if they agree on every covered run
+        // around the corner. Otherwise the open ground in front of a cave
+        // mouth would chain the cave floor to the hill top (ground joins
+        // both), lifting the floor and closing the mouth. With this rule the
+        // ground stays level with the floor there and the hill keeps a
+        // vertical face around the opening.
+        const agree = covered.every((k) => k === i || k === j || linked(i, k) === linked(j, k))
+        if (agree) parent[find(i)] = find(j)
       }
     }
     const sums = new Map<number, { sum: number; count: number; weights: number[] }>()
+    // Group ids: the union-find roots (indices into `members`).
     members.forEach((m, i) => {
       const root = find(i)
       const s = sums.get(root) ?? { sum: 0, count: 0, weights: TERRAIN_CHANNELS.map(() => 0) }
@@ -208,11 +320,12 @@ export class TerrainField {
     const result = new Map<TerrainRun, CornerValue>()
     members.forEach((m, i) => {
       const s = sums.get(find(i))
+      const group = find(i)
       result.set(
         m.run,
         s
-          ? { height: s.sum / s.count, weights: s.weights.map((w) => w / s.count) }
-          : { height: m.run.top, weights: oneHotWeights(m.run.material) },
+          ? { height: s.sum / s.count, weights: s.weights.map((w) => w / s.count), group }
+          : { height: m.run.top, weights: oneHotWeights(m.run.material), group },
       )
     })
     this.cornerCache.set(key, result)
@@ -263,6 +376,56 @@ export function connects(
  */
 export function facetDiagonal(h: FacetCorners): 0 | 1 {
   return Math.abs(h[1] - h[3]) < Math.abs(h[0] - h[2]) ? 1 : 0
+}
+
+/**
+ * Contribution of one facet to the smooth normal at one of its corners
+ * (world space, not normalised, pointing up).
+ *
+ * The facet is the cell's two triangles (split by {@link facetDiagonal}) in
+ * world units (heights times `VOXEL_HEIGHT`). A corner on the diagonal
+ * touches both triangles and gets their mean; the other corners touch one.
+ * Every cell thus weighs the same in the average around a lattice point
+ * (each covers a right angle there), and the vertical component is always 1:
+ * summing contributions averages the height gradients.
+ */
+export function facetCornerNormal(h: FacetCorners, corner: 0 | 1 | 2 | 3): Direction3 {
+  const triangles: readonly (readonly [number, number, number])[] =
+    facetDiagonal(h) === 0
+      ? [
+          [0, 1, 2],
+          [0, 2, 3],
+        ]
+      : [
+          [1, 2, 3],
+          [1, 3, 0],
+        ]
+  const touching = triangles.filter((t) => t.includes(corner))
+  let nx = 0
+  let ny = 0
+  let nz = 0
+  for (const t of touching) {
+    const [a, b, c] = t.map((i) => {
+      const [ox, oz] = CELL_CORNERS[i] ?? [0, 0]
+      return [ox, h[i as 0 | 1 | 2 | 3] * VOXEL_HEIGHT, oz] as const
+    }) as [Direction3, Direction3, Direction3]
+    const u: Direction3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]]
+    const v: Direction3 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]]
+    let cx = u[1] * v[2] - u[2] * v[1]
+    let cy = u[2] * v[0] - u[0] * v[2]
+    let cz = u[0] * v[1] - u[1] * v[0]
+    // Every triangle covers half a cell: |cy| = 1. Orient it upwards.
+    if (cy < 0) {
+      cx = -cx
+      cy = -cy
+      cz = -cz
+    }
+    nx += cx
+    ny += cy
+    nz += cz
+  }
+  const k = 1 / Math.max(1, touching.length)
+  return [nx * k, ny * k, nz * k]
 }
 
 /**

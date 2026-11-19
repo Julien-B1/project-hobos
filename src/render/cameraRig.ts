@@ -103,6 +103,16 @@ export class CameraRig {
     return (this.yaw * 180) / Math.PI
   }
 
+  /** Current orbit target (world units). Read-only view, changes every frame. */
+  get focus(): Readonly<Vec3Like> {
+    return this.target
+  }
+
+  /** Current distance from the camera to its target (world units), animated. */
+  get currentDistance(): number {
+    return this.distance
+  }
+
   /** Move the target instantly to a world position. */
   setTarget(x: number, y: number, z: number): void {
     this.targetGoal = null

@@ -64,3 +64,19 @@ describe('smoothstep', () => {
     expect(smoothstep(0, 1, 0.5)).toBe(0.5)
   })
 })
+
+describe('valueNoise3', () => {
+  it('stays in [0, 1], is deterministic and continuous', async () => {
+    const { valueNoise3 } = await import('./noise')
+    for (let i = 0; i < 50; i++) {
+      const v = valueNoise3(i * 0.37, i * 0.61, i * 0.19, 7)
+      expect(v).toBeGreaterThanOrEqual(0)
+      expect(v).toBeLessThanOrEqual(1)
+      expect(valueNoise3(i * 0.37, i * 0.61, i * 0.19, 7)).toBe(v)
+      const near = valueNoise3(i * 0.37 + 1e-4, i * 0.61, i * 0.19 + 1e-4, 7)
+      expect(Math.abs(near - v)).toBeLessThan(1e-2)
+    }
+    // Varies along every axis.
+    expect(valueNoise3(0.5, 0.5, 0.5, 1)).not.toBe(valueNoise3(0.5, 1.5, 0.5, 1))
+  })
+})

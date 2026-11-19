@@ -4,18 +4,30 @@
  *
  * Creates the engine when mounted and disposes it when unmounted. The engine
  * instance is a plain (non-reactive) variable: Three.js objects must never be
- * wrapped in Vue proxies. Only the HUD snapshot is reactive.
+ * wrapped in Vue proxies. Only the HUD snapshot is reactive. The time of
+ * day is a prop: changing it relights the running engine.
  */
-import { onBeforeUnmount, onMounted, ref, useTemplateRef } from 'vue'
+import { onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from 'vue'
+import type { TimeOfDay } from '@/render/timeOfDay'
 import { Engine, type EngineHudState } from '@/render/engine'
 import { config, readUrlFlags } from '@/app/config'
 import { bindInputs } from '@/app/input/bindings'
 import { createDebugEdits } from '@/app/editing/debugEdits'
 import { createTestMap } from '@/core/generators/catalog'
+import type { SessionInfo } from '@/app/session'
+
+const props = defineProps<{
+  /** Lighting of the scene; changes are applied live. */
+  timeOfDay: TimeOfDay
+  /** World height above which nothing is drawn (null: no cut); applied live. */
+  cutHeight: number | null
+}>()
 
 const emit = defineEmits<{
   /** Fired whenever the engine publishes a new HUD snapshot. */
   hud: [state: EngineHudState]
+  /** Fired once at start-up with the settings this session runs with. */
+  session: [info: SessionInfo]
 }>()
 
 const canvas = useTemplateRef<HTMLCanvasElement>('canvas')
@@ -28,13 +40,27 @@ let unmounted = false
 onMounted(async () => {
   if (!canvas.value) return
   const flags = readUrlFlags()
-  const world = createTestMap(flags.map, flags.seed === undefined ? {} : { seed: flags.seed })
+  const world = createTestMap(flags.map, {
+    ...(flags.seed === undefined ? {} : { seed: flags.seed }),
+    ...(flags.size === undefined ? {} : { size: flags.size }),
+  })
+  emit('session', {
+    map: world.id,
+    seed: world.seed ?? null,
+    width: world.width,
+    depth: world.depth,
+    mesher: flags.mesher,
+    forceWebGL: flags.forceWebGL,
+  })
   try {
     const created = await Engine.create(canvas.value, {
       forceWebGL: flags.forceWebGL,
       camera: config.camera,
       map: world.map,
       mesher: flags.mesher,
+      shadows: flags.shadows,
+      grid: flags.grid,
+      timeOfDay: props.timeOfDay,
       onHudChange: (state) => {
         emit('hud', state)
       },
@@ -45,6 +71,7 @@ onMounted(async () => {
       return
     }
     engine = created
+    engine.setCutHeight(props.cutHeight)
     // Frame the map (also the reset view) and keep the target over it.
     engine.cameraRig.setHome(world.home.x, world.home.y, world.home.z)
     engine.cameraRig.setTargetBounds({ minX: 0, maxX: world.width, minZ: 0, maxZ: world.depth })
@@ -56,6 +83,20 @@ onMounted(async () => {
     error.value = e instanceof Error ? e.message : String(e)
   }
 })
+
+watch(
+  () => props.timeOfDay,
+  (time) => {
+    engine?.setTimeOfDay(time)
+  },
+)
+
+watch(
+  () => props.cutHeight,
+  (height) => {
+    engine?.setCutHeight(height)
+  },
+)
 
 onBeforeUnmount(() => {
   unmounted = true

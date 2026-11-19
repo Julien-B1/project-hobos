@@ -7,10 +7,8 @@ import { createOrganicMap } from '@/core/generators/organicMap'
 import { TerrainMesher, uncoveredStrips } from './terrainMesher'
 import { openStretches } from './watertight'
 
-const mesher = new TerrainMesher({
-  isTerrain: (v: Voxel) => isTerrainMaterial(materialOf(v)),
-  colorOf: () => [1, 1, 1],
-})
+const isTerrain = (v: Voxel): boolean => isTerrainMaterial(materialOf(v))
+const mesher = new TerrainMesher({ isTerrain, colorOf: () => [1, 1, 1] })
 const GRASS = packVoxel(Material.GRASS)
 
 const meshAll = (map: VoxelMap): MeshData[] =>
@@ -109,7 +107,7 @@ describe('TerrainMesher', () => {
     expectClosed(meshAll(map))
   })
 
-  it('keeps a tunnel open: flat floor, roof underside and inner walls', () => {
+  it('keeps a tunnel open: flat floor, vaulted roof and inner walls', () => {
     const map = new VoxelMap()
     box(map, 0, 10, 2, 12, 0, 10)
     // Carve a tunnel along X: air at levels 4..6, cells z 4..5.
@@ -125,12 +123,13 @@ describe('TerrainMesher', () => {
       const ny = at(m.normals, v, 1)
       const inside = x > 0.5 && x < 9.5
       if (inside && z > 4 && z < 6 && ny > 0.99 && Math.abs(y - 2) < 1e-6) floor++
-      if (inside && z >= 4 && z <= 6 && ny < -0.99 && Math.abs(y - 3.5) < 1e-6) roof++
+      // The roof is vaulted: facing down, between mid-height and a bit over level 7.
+      if (inside && z >= 4 && z <= 6 && ny < -0.3 && y > 2.6 && y < 3.8) roof++
       const onWall = Math.abs(z - 4) < 1e-6 && Math.abs(ny) < 1e-6
       if (inside && onWall && y >= 2 - 1e-6 && y <= 3.5 + 1e-6) innerWall++
     }
     expect(floor).toBeGreaterThan(0) // floor stays at level 4 (2.0 world units)
-    expect(roof).toBeGreaterThan(0) // roof underside at level 7 (3.5)
+    expect(roof).toBeGreaterThan(0) // roof underside around level 7 (3.5)
     expect(innerWall).toBeGreaterThan(0) // side wall between floor and roof
   })
 
@@ -149,6 +148,59 @@ describe('TerrainMesher', () => {
       const inside = zs.every((z) => z > 0 && z < 6)
       expect(vertical && inside).toBe(false)
     }
+  })
+  it('ends the map sides on a flat bottom, even under tall columns', () => {
+    const map = new VoxelMap()
+    box(map, 0, 4, 0, 20, 0, 4) // tops in the second chunk layer (level 20)
+    const ys = new Set<number>()
+    for (const m of meshAll(map)) {
+      for (let v = 0; v < m.positions.length / 3; v++) {
+        const onWestSide = Math.abs(at(m.positions, v, 0)) < 1e-6 && at(m.normals, v, 0) < -0.99
+        if (onWestSide) ys.add(Number(at(m.positions, v, 1).toFixed(3)))
+      }
+    }
+    // Down to the map floor, not one chunk below the top (level 3, 1.5 units).
+    expect(Math.min(...ys)).toBe(0)
+  })
+
+  it('smooth-shades tops: vertices at one lattice point share one normal', () => {
+    const map = new VoxelMap()
+    for (let x = 0; x < 8; x++) box(map, x, x + 1, 0, 4 + x, 0, 6)
+    const [m] = meshAll(map)
+    if (!m) throw new Error('no mesh')
+    const normals = new Map<string, string>()
+    let tilted = 0
+    for (let v = 0; v < m.positions.length / 3; v++) {
+      const ny = at(m.normals, v, 1)
+      if (ny < 0.5) continue // walls
+      const n = [0, 1, 2].map((c) => at(m.normals, v, c).toFixed(4)).join(',')
+      const k = key(m, v)
+      expect(normals.get(k) ?? n).toBe(n)
+      normals.set(k, n)
+      if (ny < 0.999) tilted++
+    }
+    expect(tilted).toBeGreaterThan(0)
+  })
+
+  it('gives water vertices their depth above the bed', () => {
+    const map = new VoxelMap()
+    box(map, 0, 10, 0, 6, 0, 10)
+    // Pond: cells 3..6 dug down to level 3, water up to level 6.
+    for (let x = 3; x < 7; x++)
+      for (let z = 3; z < 7; z++)
+        for (let y = 3; y < 6; y++) map.set(x, y, z, packVoxel(Material.WATER))
+    const water = [...map.chunks()].map((c) => mesher.mesh(map, c).water)
+    const depths: number[] = []
+    for (const w of water) {
+      if (!w.weights) continue
+      for (let v = 0; v < w.positions.length / 3; v++) {
+        expect(at(w.positions, v, 1)).toBeCloseTo(3 - 0.02)
+        depths.push(w.weights[v * 8] ?? NaN)
+      }
+    }
+    expect(depths.length).toBeGreaterThan(0)
+    expect(Math.max(...depths)).toBeGreaterThan(1) // pond centre: 1.5 below the surface
+    expect(Math.min(...depths)).toBeLessThanOrEqual(0) // banks rise above the surface
   })
 })
 

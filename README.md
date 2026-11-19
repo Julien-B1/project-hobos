@@ -50,10 +50,15 @@ make build       # production build into dist/
 make sh          # shell inside the container
 ```
 
-URL switches: `?forceWebGL=1` forces the WebGL 2 backend; `?map=flat` or
-`?map=organic` (with optional `&seed=42`) loads another test map instead of
-the reference map; `?mesher=blocky` shows exact voxel blocks instead of the
-faceted terrain.
+Maps are battle-map sized (32 x 32 squares, one encounter). URL switches:
+`?forceWebGL=1` forces the WebGL 2 backend; `?map=flat` or `?map=organic`
+(with optional `&seed=42` and `&size=24`) or `?map=kitchen-sink` (every
+element in one hand-made map) loads another test map instead of the
+reference map; `?time=dusk` (or `dawn`, `morning`, `noon`, `afternoon`,
+`evening`, `midnight`, `late-night`) sets the time of day, also chosen with
+the picker at the top right; `?mesher=blocky` shows exact voxel blocks instead of the
+faceted terrain; `?shadows=off`, `low` or `high` (default) sets the sun
+shadow quality.
 
 ### Controls
 
@@ -67,6 +72,7 @@ Keys are bound by physical position: the same keys work on AZERTY and QWERTY.
 | Pan                    | Middle mouse drag                                  |
 | Zoom                   | Mouse wheel, `R` / `F`, numpad `+` / `-`           |
 | Reset view             | `C` or `Home`                                      |
+| Show / hide the grid   | `G`                                                |
 | Remove voxel (debug)   | Right click                                        |
 | Place voxel (debug)    | `Shift` + left click                               |
 

@@ -94,3 +94,28 @@ accepted record: add a new one that supersedes it.
     (`resolveColumnHit`) and the highlight is draped on the mesh.
   - Meshing reads whole column runs: dirty tracking always marks the chunks
     above and below.
+  - Update: tops are now smooth-shaded (per-corner normals averaged over
+    connected facets); the geometry stays faceted.
+  - Update: leaves and tree trunks are no longer blocks, see ADR-006.
+
+## ADR-006: Trees are voxels in data, procedural meshes in rendering
+
+- **Status:** accepted (2026-11-19)
+- **Context.** Trees drawn as wood and leaf blocks looked like a PS1-era
+  game; the project owner asked for real trees, possibly procedural with
+  masked pseudo-foliage.
+- **Decision.** Keep trees as voxels (a WOOD trunk column topped by LEAVES)
+  so game logic, picking and edits keep one source of truth, and let the
+  renderer recognise them (`core/trees.ts`) and draw them as round tapered
+  trunks with branches plus alpha-tested leaf cards placed from the leaf
+  voxels (`TreeMesher`). Every voxel is meshed by its own chunk.
+  WOOD without LEAVES on top stays blocky (bridges, structures).
+- **Consequences.**
+  - Editing a trunk or leaf voxel rebuilds the tree like any voxel edit.
+  - The canopy's silhouette follows the leaf voxels, softened by the cards.
+  - Foliage costs overdraw (cards overlap): one texture fetch per layer of
+    cards, alpha to coverage on the existing MSAA, no sorting.
+  - A block touching a trunk still has its touching face culled (the
+    occlusion rule only sees voxel values); acceptable for now.
+  - Tree kinds are data too: the foliage material on top of the trunk
+    (leaves, needles, birch leaves) and the trunk height (one voxel: bush).

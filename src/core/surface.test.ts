@@ -33,10 +33,10 @@ describe('resolveHit on the reference map', () => {
   const map = createReferenceMap()
 
   it('gives two different surfaces for the same column: bridge deck and path below', () => {
-    const deck = resolveHit(map, { x: 23.5, y: (L.bridge.deckLevel + 1) * 0.5, z: 31.5 }, UP)
-    const path = resolveHit(map, { x: 23.5, y: L.path.top * 0.5, z: 31.5 }, UP)
-    expect(deck?.surface).toEqual({ x: 23, y: L.bridge.deckLevel, z: 31 })
-    expect(path?.surface).toEqual({ x: 23, y: L.path.top - 1, z: 31 })
+    const deck = resolveHit(map, { x: 13.5, y: (L.bridge.deckLevel + 1) * 0.5, z: 9.5 }, UP)
+    const path = resolveHit(map, { x: 13.5, y: L.path.top * 0.5, z: 9.5 }, UP)
+    expect(deck?.surface).toEqual({ x: 13, y: L.bridge.deckLevel, z: 9 })
+    expect(path?.surface).toEqual({ x: 13, y: L.path.top - 1, z: 9 })
     expect(deck?.facing).toBe('top')
   })
 
@@ -46,35 +46,36 @@ describe('resolveHit on the reference map', () => {
     const n = { x: -0.5, y: 1, z: 0 }
     const len = Math.hypot(n.x, n.y)
     const normal = { x: n.x / len, y: n.y / len, z: 0 }
-    const hit = resolveHit(map, { x: 17.5, y: (level + 0.5) * 0.5, z: 31.5 }, normal)
-    expect(hit?.voxel).toEqual({ x: 17, y: level, z: 31 })
-    expect(hit?.surface).toEqual({ x: 17, y: level, z: 31 })
+    const x = L.bridgeRampWest.x.min + 2
+    const hit = resolveHit(map, { x: x + 0.5, y: (level + 0.5) * 0.5, z: 9.5 }, normal)
+    expect(hit?.voxel).toEqual({ x, y: level, z: 9 })
+    expect(hit?.surface).toEqual({ x, y: level, z: 9 })
     expect(hit && surfaceShape(hit)).toBe(Shape.SLOPE)
   })
 
   it('targets the top of the stack when hitting a cliff face', () => {
-    const hit = resolveHit(map, { x: L.cliff.x.min, y: 4.25, z: 45.5 }, WEST)
+    const hit = resolveHit(map, { x: L.cliff.x.min, y: 4.25, z: 25.5 }, WEST)
     expect(hit?.facing).toBe('side')
-    expect(hit?.voxel).toEqual({ x: L.cliff.x.min, y: 8, z: 45 })
-    expect(hit?.surface).toEqual({ x: L.cliff.x.min, y: L.cliff.top - 1, z: 45 })
+    expect(hit?.voxel).toEqual({ x: L.cliff.x.min, y: 8, z: 25 })
+    expect(hit?.surface).toEqual({ x: L.cliff.x.min, y: L.cliff.top - 1, z: 25 })
   })
 
   it('picks the tunnel floor from inside the tunnel', () => {
-    const hit = resolveHit(map, { x: 10.5, y: L.tunnel.floorTop * 0.5, z: 51.5 }, UP)
-    expect(hit?.surface).toEqual({ x: 10, y: L.tunnel.floorTop - 1, z: 51 })
+    const hit = resolveHit(map, { x: 5.5, y: L.tunnel.floorTop * 0.5, z: 25.5 }, UP)
+    expect(hit?.surface).toEqual({ x: 5, y: L.tunnel.floorTop - 1, z: 25 })
   })
 
   it('maps a hit on the tunnel ceiling to the floor below it', () => {
-    const hit = resolveHit(map, { x: 10.5, y: L.tunnel.ceilingLevel * 0.5, z: 51.5 }, DOWN)
+    const hit = resolveHit(map, { x: 5.5, y: L.tunnel.ceilingLevel * 0.5, z: 25.5 }, DOWN)
     expect(hit?.facing).toBe('bottom')
-    expect(hit?.voxel).toEqual({ x: 10, y: L.tunnel.ceilingLevel, z: 51 })
-    expect(hit?.surface).toEqual({ x: 10, y: L.tunnel.floorTop - 1, z: 51 })
+    expect(hit?.voxel).toEqual({ x: 5, y: L.tunnel.ceilingLevel, z: 25 })
+    expect(hit?.surface).toEqual({ x: 5, y: L.tunnel.floorTop - 1, z: 25 })
   })
 
   it('finds the voxel when a smooth mesh surface lies in front of the voxel face', () => {
     // Smooth meshes round corners: the hit can be a little outside the solid.
-    const hit = resolveHit(map, { x: 23.5, y: L.path.top * 0.5 + 0.3, z: 5.5 }, UP)
-    expect(hit?.surface).toEqual({ x: 23, y: L.path.top - 1, z: 5 })
+    const hit = resolveHit(map, { x: 13.5, y: L.path.top * 0.5 + 0.3, z: 5.5 }, UP)
+    expect(hit?.surface).toEqual({ x: 13, y: L.path.top - 1, z: 5 })
   })
 
   it('returns null when the point resolves to air', () => {
@@ -96,8 +97,8 @@ describe('resolveColumnHit', () => {
 
   it('picks the column surface closest to the hit height', () => {
     // Bridge column over the path: near the deck -> deck; near the path -> path.
-    expect(resolveColumnHit(map, { x: 23.5, y: 5.3, z: 31.5 })?.surface.y).toBe(L.bridge.deckLevel)
-    expect(resolveColumnHit(map, { x: 23.5, y: 2.4, z: 31.5 })?.surface.y).toBe(L.path.top - 1)
+    expect(resolveColumnHit(map, { x: 13.5, y: 5.3, z: 9.5 })?.surface.y).toBe(L.bridge.deckLevel)
+    expect(resolveColumnHit(map, { x: 13.5, y: 2.4, z: 9.5 })?.surface.y).toBe(L.path.top - 1)
   })
 
   it('tolerates a faceted surface drawn between voxel levels', () => {

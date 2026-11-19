@@ -5,9 +5,11 @@
  *
  * Terrain voxels are drawn as a faceted height surface instead of blocks:
  * - **tops**: each terrain run (see `core/terrainSurface.ts`) gets a top made
- *   of two flat-shaded triangles whose corners are the smoothed corner
- *   heights; neighbouring tops share corner heights, so steps of any size
- *   become slopes and corners seen from above are cut diagonally;
+ *   of two triangles whose corners are the smoothed corner heights;
+ *   neighbouring tops share corner heights, so steps of any size become
+ *   slopes and corners seen from above are cut diagonally. Tops are smooth
+ *   shaded (per-corner normals averaged over the connected facets), so the
+ *   low-poly geometry does not show as a patchwork of flat facets;
  * - **walls**: vertical faces along cell edges, only where the neighbour
  *   column does not cover the run (cliff bases that do not join, tunnel
  *   walls, map borders);
@@ -17,7 +19,11 @@
  *   dips below it (water cells and the banks next to them). Beds blend with
  *   banks, so the shoreline is the exact line where facets cross the plane,
  *   not the cell grid. The plane sits a hair below the surface level so land
- *   facets lying exactly at that level win the depth test.
+ *   facets lying exactly at that level win the depth test. Each vertex
+ *   carries the water depth above the bed (weight channel 0, world units,
+ *   negative where the bank rises above the surface); the quad is split
+ *   along the bed's facet diagonal so the interpolated depth matches the
+ *   bed. The water shader fades the shore and darkens deep water with it.
  * Steep triangles take the colour of the layer under the top voxel (dirt
  * under grass, rock under rock), so slopes and cliffs read as bare ground.
  */
@@ -110,20 +116,21 @@ export class TerrainMesher {
           if (ownsTop) {
             const corners = field.cornerHeights(x, z, run)
             const weights = field.cornerWeights(x, z, run)
-            this.top(out, map, x, z, run, corners, weights)
+            const normals = field.cornerNormals(x, z, run)
+            this.top(out, map, x, z, run, corners, weights, normals)
             this.walls(out, map, field, x, z, run, corners, weights)
             this.water(waterOut, map, x, z, run, corners)
           }
           const b = run.bottom
           const ownsBottom = Number.isFinite(b) && b > FLOOR_LEVEL && b >= oy && b < oy + CHUNK_SIZE
-          if (ownsBottom) this.bottom(out, map, x, z, run)
+          if (ownsBottom) this.bottom(out, map, x, z, run, field.cornerBottoms(x, z, run))
         }
       }
     }
     return { terrain: out.toMeshData(), water: waterOut.toMeshData() }
   }
 
-  /** Two flat triangles over the cell, split along the facet diagonal. */
+  /** Two smooth-shaded triangles over the cell, split along the facet diagonal. */
   private top(
     out: MeshBuilder,
     map: VoxelMap,
@@ -132,6 +139,7 @@ export class TerrainMesher {
     run: TerrainRun,
     h: FacetCorners,
     weights: (readonly number[])[],
+    normals: readonly Vec3[],
   ): void {
     const p = CORNER_XZ.map(([dx, dz], i): Vec3 => [
       x + dx,
@@ -155,11 +163,12 @@ export class TerrainMesher {
     for (const corners of triangles) {
       const tri = corners.map((i): Vec3 => p[i] ?? [0, 0, 0])
       const [a, b, c] = tri as [Vec3, Vec3, Vec3]
-      const n = cross(sub(b, a), sub(c, a))
-      const ny = Math.abs(n[1]) / (Math.hypot(n[0], n[1], n[2]) || 1)
+      const face = cross(sub(b, a), sub(c, a))
+      const ny = Math.abs(face[1]) / (Math.hypot(face[0], face[1], face[2]) || 1)
       const material = ny < STEEP_NORMAL_Y ? bareMaterial : topMaterial
       const w = corners.map((i) => weights[i] ?? oneHotWeights(run.material))
-      out.polygon(tri, [0, 1, 0], this.shade(material, jitter), w)
+      const n = corners.map((i): Vec3 => normals[i] ?? [0, 1, 0])
+      this.emit(out, tri, w, [0, 1, 0], this.shade(material, jitter), n)
     }
   }
 
@@ -174,18 +183,39 @@ export class TerrainMesher {
     h: FacetCorners,
     weights: (readonly number[])[],
   ): void {
-    const runBottom = Number.isFinite(run.bottom) ? run.bottom : run.topY - CHUNK_SIZE
+    // A run continuing below the scanned window reaches at least the map
+    // floor: walls go down to it, so the map's sides end on a flat bottom
+    // instead of following the terrain one chunk below its top.
+    const runBottom = Number.isFinite(run.bottom)
+      ? run.bottom
+      : Math.min(FLOOR_LEVEL, run.topY - CHUNK_SIZE)
     for (const edge of EDGES) {
       const nx = x + edge.dx
       const nz = z + edge.dz
       const neighbourRuns = field.runsAt(nx, nz)
       // Boundaries along the edge (t = 0 at the first end, 1 at the second):
       // tops are straight lines (facet edges), bottoms are constant.
-      const mine: Band = [flat(runBottom), line(h[edge.mine[0]], h[edge.mine[1]])]
+      // Undersides of overhanging runs are vaulted (`cornerBottoms`): lines too.
+      const under = (
+        cx: number,
+        cz: number,
+        r: TerrainRun,
+        corners: readonly [0 | 1 | 2 | 3, 0 | 1 | 2 | 3],
+        fallback: number,
+      ): Boundary => {
+        if (!Number.isFinite(r.bottom)) return flat(fallback)
+        const b = field.cornerBottoms(cx, cz, r)
+        return line(b[corners[0]], b[corners[1]])
+      }
+      const mine: Band = [
+        under(x, z, run, edge.mine, runBottom),
+        line(h[edge.mine[0]], h[edge.mine[1]]),
+      ]
       const covers: Band[] = neighbourRuns.map((r) => {
-        if (!Number.isFinite(r.top)) return [flat(r.bottom), flat(Infinity)]
+        const lower = under(nx, nz, r, edge.theirs, r.bottom)
+        if (!Number.isFinite(r.top)) return [lower, flat(Infinity)]
         const c = field.cornerHeights(nx, nz, r)
-        return [flat(r.bottom), line(c[edge.theirs[0]], c[edge.theirs[1]])]
+        return [lower, line(c[edge.theirs[0]], c[edge.theirs[1]])]
       })
 
       const ends = edge.mine.map((corner) => CORNER_XZ[corner] ?? [0, 0])
@@ -203,7 +233,9 @@ export class TerrainMesher {
       const w1 = weights[edge.mine[1]] ?? oneHotWeights(run.material)
       const weightAt = (t: number, level: number): readonly number[] => {
         if (level >= mine[1](t) - 1e-3) return w0.map((v, k) => v + ((w1[k] ?? 0) - v) * t)
-        return oneHotWeights(materialOf(map.get(x, Math.floor(level - 1e-3), z)))
+        // Vaulted undersides dip below the run's voxels: use its lowest one.
+        const voxelY = Math.max(Math.floor(level - 1e-3), Math.ceil(runBottom))
+        return oneHotWeights(materialOf(map.get(x, voxelY, z)))
       }
       for (const { t0, t1, lo, hi } of uncoveredStrips(mine, covers)) {
         const corners = dedupe([
@@ -220,34 +252,56 @@ export class TerrainMesher {
         const material = this.options.isTerrain(voxel)
           ? materialOf(voxel)
           : materialOf(map.get(x, run.topY, z))
-        out.polygon(
+        this.emit(
+          out,
           polygon,
+          corners.map((c) => c.w),
           outward,
           this.shade(material, cellJitter(x, Math.floor(mid), z)),
-          corners.map((c) => c.w),
         )
       }
     }
   }
 
-  /** Flat face under an overhanging run (tunnel roof, ledge). */
-  private bottom(out: MeshBuilder, map: VoxelMap, x: number, z: number, run: TerrainRun): void {
+  /** Vaulted underside of an overhanging run (cave or arch roof, ledge). */
+  private bottom(
+    out: MeshBuilder,
+    map: VoxelMap,
+    x: number,
+    z: number,
+    run: TerrainRun,
+    b: FacetCorners,
+  ): void {
     const under = map.get(x, run.bottom - 1, z)
     if (!isAir(under) && materialOf(under) !== Material.WATER) return
-    const y = run.bottom * VOXEL_HEIGHT
     const material = materialOf(map.get(x, run.bottom, z))
     const w = oneHotWeights(material)
-    out.polygon(
-      [
-        [x, y, z],
-        [x + 1, y, z],
-        [x + 1, y, z + 1],
-        [x, y, z + 1],
-      ],
-      [0, -1, 0],
-      this.shade(material, cellJitter(x, run.bottom, z)),
-      [w, w, w, w],
-    )
+    const p = CORNER_XZ.map(([dx, dz], i): Vec3 => [
+      x + dx,
+      b[i as 0 | 1 | 2 | 3] * VOXEL_HEIGHT,
+      z + dz,
+    ])
+    const color = this.shade(material, cellJitter(x, run.bottom, z))
+    // Two triangles (the vault is not planar), split like the tops.
+    const triangles =
+      facetDiagonal(b) === 0
+        ? [
+            [0, 1, 2],
+            [0, 2, 3],
+          ]
+        : [
+            [1, 2, 3],
+            [1, 3, 0],
+          ]
+    for (const corners of triangles) {
+      this.emit(
+        out,
+        corners.map((i): Vec3 => p[i] ?? [0, 0, 0]),
+        [w, w, w],
+        [0, -1, 0],
+        color,
+      )
+    }
   }
 
   /**
@@ -263,48 +317,31 @@ export class TerrainMesher {
     run: TerrainRun,
     h: FacetCorners,
   ): void {
-    const level = this.waterSurfaceNear(map, x, z, run)
+    const level = waterSurfaceNear(map, x, z, run)
     if (level === null || Math.min(h[0], h[1], h[2], h[3]) >= level) return
     const y = level * VOXEL_HEIGHT - WATER_DROP
-    out.polygon(
-      [
-        [x, y, z],
-        [x + 1, y, z],
-        [x + 1, y, z + 1],
-        [x, y, z + 1],
-      ],
-      [0, 1, 0],
-      this.shade(Material.WATER, 1),
-    )
+    // Counter-clockwise seen from above, starting on the bed's diagonal so
+    // the fan's diagonal matches the facet's (interpolated depth = bed).
+    const order = facetDiagonal(h) === 0 ? [0, 3, 2, 1] : [1, 0, 3, 2]
+    const vertices = order.map((i): Vec3 => {
+      const [dx, dz] = CORNER_XZ[i] ?? [0, 0]
+      return [x + dx, y, z + dz]
+    })
+    const depths = order.map((i) => [y - h[i as 0 | 1 | 2 | 3] * VOXEL_HEIGHT])
+    out.polygon(vertices, [0, 1, 0], this.shade(Material.WATER, 1), depths)
   }
 
-  /**
-   * Level of the water surface relevant to a run: the top of the water
-   * column resting on it, else a water surface in a neighbouring column
-   * between this run's facet and its top. Null when there is none.
-   */
-  private waterSurfaceNear(map: VoxelMap, x: number, z: number, run: TerrainRun): number | null {
-    const isWater = (vx: number, vy: number, vz: number): boolean =>
-      materialOf(map.get(vx, vy, vz)) === Material.WATER
-    if (isWater(x, run.topY + 1, z)) {
-      let top = run.topY + 1
-      while (isWater(x, top + 1, z) && top < run.topY + MAX_WATER_DEPTH) top++
-      return top + 1
-    }
-    for (let y = run.topY - MAX_WATER_DEPTH; y <= run.topY; y++) {
-      for (let dz = -1; dz <= 1; dz++) {
-        for (let dx = -1; dx <= 1; dx++) {
-          if (
-            (dx !== 0 || dz !== 0) &&
-            isWater(x + dx, y, z + dz) &&
-            !isWater(x + dx, y + 1, z + dz)
-          ) {
-            return y + 1
-          }
-        }
-      }
-    }
-    return null
+  /** Emit a terrain face: smooth-shaded when `smooth` normals are given, flat otherwise. */
+  private emit(
+    out: MeshBuilder,
+    vertices: Vec3[],
+    weights: (readonly number[])[],
+    outward: Vec3,
+    color: Vec3,
+    smooth?: Vec3[],
+  ): void {
+    if (smooth) out.smoothPolygon(vertices, smooth, outward, color, weights)
+    else out.polygon(vertices, outward, color, weights)
   }
 
   /** Material colour times a brightness factor. */
@@ -312,6 +349,40 @@ export class TerrainMesher {
     const c = this.options.colorOf(material)
     return [c[0] * factor, c[1] * factor, c[2] * factor]
   }
+}
+
+/**
+ * Level of the water surface relevant to a run: the top of the water
+ * column resting on it, else a water surface in a neighbouring column
+ * (8 around) between this run's facet and its top. Null when there is none.
+ */
+export function waterSurfaceNear(
+  map: VoxelMap,
+  x: number,
+  z: number,
+  run: TerrainRun,
+): number | null {
+  const isWater = (vx: number, vy: number, vz: number): boolean =>
+    materialOf(map.get(vx, vy, vz)) === Material.WATER
+  if (isWater(x, run.topY + 1, z)) {
+    let top = run.topY + 1
+    while (isWater(x, top + 1, z) && top < run.topY + MAX_WATER_DEPTH) top++
+    return top + 1
+  }
+  for (let y = run.topY - MAX_WATER_DEPTH; y <= run.topY; y++) {
+    for (let dz = -1; dz <= 1; dz++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (
+          (dx !== 0 || dz !== 0) &&
+          isWater(x + dx, y, z + dz) &&
+          !isWater(x + dx, y + 1, z + dz)
+        ) {
+          return y + 1
+        }
+      }
+    }
+  }
+  return null
 }
 
 /** A boundary along an edge: height (levels) as a linear function of t in [0, 1]. */

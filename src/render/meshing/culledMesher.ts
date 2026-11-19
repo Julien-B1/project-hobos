@@ -38,16 +38,21 @@ import {
 import { isAir, materialOf, type Voxel } from '@/core/voxel'
 import type { VoxelMap } from '@/core/voxelMap'
 import { MeshBuilder, cellJitter, type Vec3 } from './meshBuilder'
-import type { ChunkMesher, ColorLookup, MeshData } from './mesher'
+import { BlockLook, type ChunkMesher, type ColorLookup, type MeshData } from './mesher'
+import { Material } from '@/core/materials'
 
-/** Brightness factor per face, baked into vertex colours for readability. */
+/**
+ * Brightness factor per face, baked into vertex colours. Kept light: the
+ * sun, the ambient and the shadows shade the faces; a strong factor made
+ * shadowed sides almost black.
+ */
 const FACE_SHADE: Readonly<Record<FaceId, number>> = {
   [Face.PY]: 1,
-  [Face.PX]: 0.86,
-  [Face.NX]: 0.86,
-  [Face.PZ]: 0.78,
-  [Face.NZ]: 0.78,
-  [Face.NY]: 0.6,
+  [Face.PX]: 0.96,
+  [Face.NX]: 0.96,
+  [Face.PZ]: 0.93,
+  [Face.NZ]: 0.93,
+  [Face.NY]: 0.8,
 }
 
 /** Corner positions within a cell, (dx, dz), in {@link CornerHeights} order. */
@@ -93,8 +98,17 @@ export class CulledMesher implements ChunkMesher {
     this.occludes = options.occludes ?? fullFaceOccludes
   }
 
-  /** Mesh one chunk; see the module comment for the rules. */
-  mesh(map: VoxelMap, chunk: Chunk): MeshData {
+  /**
+   * Mesh one chunk; see the module comment for the rules.
+   *
+   * @param filter Optional per-call filter on top of the `include` option,
+   *   with the voxel's world voxel coordinates (e.g. to skip tree trunks).
+   */
+  mesh(
+    map: VoxelMap,
+    chunk: Chunk,
+    filter?: (voxel: Voxel, x: number, y: number, z: number) => boolean,
+  ): MeshData {
     const out = new MeshBuilder()
     const ox = chunk.cx * CHUNK_SIZE
     const oy = chunk.cy * CHUNK_SIZE
@@ -105,6 +119,7 @@ export class CulledMesher implements ChunkMesher {
         for (let lx = 0; lx < CHUNK_SIZE; lx++) {
           const voxel = chunk.get(lx, ly, lz)
           if (isAir(voxel) || !this.include(voxel)) continue
+          if (filter && !filter(voxel, ox + lx, oy + ly, oz + lz)) continue
           // Neighbours inside the chunk are read directly (fast path); only
           // border voxels go through the map's chunk lookup.
           const neighbourAt = (dx: number, dy: number, dz: number): number => {
@@ -146,11 +161,24 @@ export class CulledMesher implements ChunkMesher {
         if (this.occludes(voxel, neighbour, face)) continue
       }
 
+      const material = materialOf(voxel)
+      const look = [
+        material === Material.WOOD
+          ? BlockLook.PLANKS
+          : material === Material.STONE_BRICK
+            ? BlockLook.BRICKS
+            : BlockLook.PLAIN,
+      ]
       const shade = FACE_SHADE[face] * jitter
       const color: Vec3 = [base[0] * shade, base[1] * shade, base[2] * shade]
       const outward = FACE_NORMALS[face] ?? [0, 1, 0]
       for (const polygon of facePolygons(face, corners, x, y, z))
-        out.polygon(polygon, outward, color)
+        out.polygon(
+          polygon,
+          outward,
+          color,
+          polygon.map(() => look),
+        )
     }
   }
 }

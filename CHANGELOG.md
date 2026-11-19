@@ -9,6 +9,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Kitchen-sink map (`?map=kitchen-sink`, 40 x 32): hand-made sample board,
+  one plot per element: ground swatches, wedge mound, one tree of each
+  kind, brick arch, brick ramp and platform, rock mesa with a cave, pond
+  with dock, canal with path and wooden bridge.
+- `STONE_BRICK` material (built structures, drawn as blocks) and patterned
+  blocks material: wood planks, stone bricks, bark (`BlockLook`,
+  `render/blocksMaterial.ts`).
+- Time of day: 8 lighting presets (dawn to late night; sun by day, moon at
+  night) with a picker in the UI and `?time=<id>`; shadows and the water
+  sheen follow the light.
+- Tree kinds: oak, pine (needles, cone), birch (pale leaves, white bark
+  with marks), bush; new `NEEDLES` and `BIRCH_LEAVES` materials,
+  `isFoliageMaterial`, `treeKind`; the organic map grows all of them.
+- Foliage wind: cards sway (gust wave, per-tree phase) and flutter; still
+  cards in the shadow pass.
+- Light ground scatter derived from the voxels (new `scatter` and `props`
+  layers, not pickable): sparse grass tufts and flowers, fallen leaves only
+  under tree canopies, smooth stones only on rocky ground, a few reeds and
+  algae.
+- Very light hue drift of the grass.
+- Cut slider (vertical, left edge, continuous height): hides everything
+  above a height (all layers and their shadows, picking included) to open
+  caves and look under roofs; what the cut slices is filled by a hatched
+  cap computed exactly from the mesh's corner heights, vaults included
+  (`CapMesher`, `CutCap`,
+  `Engine.setCutHeight`).
+- Openings in faceted terrain: runs around a corner touched by a covered
+  run (cave or arch floor) only join when they agree on it, so cave mouths
+  and natural arches stay open with a vertical face around them.
+- Faceted boulders at the foot of rock faces (cliffs, cave mouths, arches),
+  as decoration over the exact base geometry (`ScatterMesher`).
+- Vaulted undersides: cave and arch roofs drop towards their side walls
+  with a small random offset (`TerrainField.cornerBottoms`), so openings
+  are irregular arches instead of rectangles.
+- Real trees: tree voxels (WOOD trunk topped by LEAVES, `core/trees.ts`)
+  are drawn by `TreeMesher` as round tapered trunks with root flare and
+  branches, and alpha-tested leaf cards (procedural leaf cluster atlas,
+  alpha to coverage, canopy-volume normals, per-card tint and fake
+  occlusion, dappled shadows). New `foliage` render layer;
+  `mergeMeshData`; per-call filter on `CulledMesher.mesh`.
+- Terrain detail: procedural 512² detail texture (grass clumps, pebbles,
+  rock cracks, sand ripples) and height-based blending between materials
+  for crisp, irregular, random-looking transitions (3 fetches per pixel).
+- Battle-map grid on terrain, blocks and water, drawn in the shaders
+  (anti-aliased, fades at far zoom and on steep faces); `G` toggles it,
+  `?grid=off` starts hidden.
+- Debug HUD figures: map, resolved seed, mesher, shadow quality, drawing
+  buffer size, GPU time per frame and GPU load (timestamp queries), estimated
+  page VRAM, draw calls, triangles, shadow passes and camera pose
+  (`render/frameStats.ts`). `TestMap.seed` exposes the seed actually used.
+- Water material: translucent physical surface (IOR 1.33) whose colour and
+  opacity follow the water depth carried by each vertex (soft shoreline
+  fade, nearly clear shallows, dark deep water), a noisy foam band and
+  gently scrolling ripples from the shared noise texture (2 fetches per
+  water pixel, no refraction pass).
+- Sun shadows (default `high`): one PCF shadow map framed on the camera target (size in
+  discrete steps, snapped to texels, no shimmering), rendered only when the
+  framing changes or chunks are rebuilt. `?shadows=off|low|high` (`low`:
+  2048²; `high`: 4096², default).
+- Neutral tone mapping (Khronos PBR Neutral).
+- Smooth shading of faceted terrain tops: per-corner normals averaged over
+  the connected facets (`TerrainField.cornerNormals`, `facetCornerNormal`),
+  continuous across chunks; walls keep flat normals.
+
 - Terrain material (TSL): per-vertex blended material weights averaged per
   lattice point (`TerrainField.cornerWeights`), shaded with 2 fetches of a
   small precomputed tileable noise texture projected in world space; noisy,
@@ -38,6 +102,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Maps are sized for one encounter (battle map, 1 cell = one 5 ft square):
+  the reference map is 32 x 32 (was 64 x 64, same features), the organic
+  map defaults to 32 x 32 (was 128 x 128) with features rescaled (hills,
+  stream, cliffs, rock patches, forests); `?size=<cells>` (8 to 128) for
+  other sizes; the HUD shows the map size.
+- Water: no view-dependent specular (the sun spot moved with the camera);
+  a view-independent sun sheen and ripple glints instead, identical from
+  every side.
+- Grid: thin translucent lines (box-filtered: anti-aliased at every zoom,
+  no moiré, never hidden by the zoom), visible on all slopes except
+  near-vertical faces, readable on dark ground.
+- Trees: leaf cards always face the camera (and the sun in the shadow
+  pass) for full, fluffy canopies; per-pixel canopy normals; denser leaf
+  clusters; thicker trunks.
+
 - Chunks are drawn in three render layers (terrain, blocks, water), each
   with its own shared material; maximum zoom-out distance raised to 240.
 
@@ -60,6 +139,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Culled mesher reads in-chunk neighbours directly instead of through the
   map (about 3x fewer chunk lookups when meshing large maps).
+
+### Fixed
+
+- Foliage no longer shows hard shadow edges (one shadow lookup per card);
+  rocks and walls away from the sun no longer go black (upward-biased rock
+  normals, lifted ambient from below); the hover highlight lies exactly on
+  the rendered ground (computed from the terrain model, not rays).
+- Shadows no longer detach from the foot of objects (smaller biases); block
+  sides in shadow are no longer almost black (lighter baked face shade).
+- Sand borders no longer comb into stripes (blend height from a neutral
+  grain instead of the ripples); far grass tufts no longer blur into blobs.
+- The map sides end on a flat bottom instead of following the terrain one
+  chunk below its top.
 
 ## [0.2.0] - 2026-11-19
 

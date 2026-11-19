@@ -7,11 +7,12 @@
 import { VOXEL_HEIGHT } from '../coords'
 import type { VoxelMap } from '../voxelMap'
 import { createFlatMap } from './flatMap'
+import { KITCHEN_SINK_LAYOUT, createKitchenSinkMap } from './kitchenSinkMap'
 import { createOrganicMap } from './organicMap'
 import { REFERENCE_LAYOUT, createReferenceMap } from './referenceMap'
 
 /** Identifiers of the available test maps. */
-export const TEST_MAP_IDS = ['reference', 'flat', 'organic'] as const
+export const TEST_MAP_IDS = ['reference', 'flat', 'organic', 'kitchen-sink'] as const
 
 /** One of {@link TEST_MAP_IDS}. */
 export type TestMapId = (typeof TEST_MAP_IDS)[number]
@@ -26,6 +27,8 @@ export interface TestMap {
   readonly depth: number
   /** Camera home target, in world units. */
   readonly home: { readonly x: number; readonly y: number; readonly z: number }
+  /** Seed actually used (procedural maps only, defaults resolved). */
+  readonly seed?: number
 }
 
 /** Type guard for map ids coming from untrusted input (URL). */
@@ -37,6 +40,8 @@ export function isTestMapId(value: string): value is TestMapId {
 export interface TestMapOptions {
   /** Seed for procedural maps (ignored by fixed maps). */
   readonly seed?: number
+  /** Edge length in cells for procedural maps (ignored by fixed maps). */
+  readonly size?: number
 }
 
 /** Generate a test map by id. */
@@ -53,7 +58,10 @@ export function createTestMap(id: TestMapId, options: TestMapOptions = {}): Test
       }
     }
     case 'organic': {
-      const organic = createOrganicMap(options.seed === undefined ? {} : { seed: options.seed })
+      const organic = createOrganicMap({
+        ...(options.seed === undefined ? {} : { seed: options.seed }),
+        ...(options.size === undefined ? {} : { size: options.size }),
+      })
       const c = organic.size / 2
       return {
         id,
@@ -61,6 +69,7 @@ export function createTestMap(id: TestMapId, options: TestMapOptions = {}): Test
         width: organic.size,
         depth: organic.size,
         home: { x: c, y: organic.heightAt(c, c) * VOXEL_HEIGHT, z: c },
+        seed: organic.seed,
       }
     }
     case 'flat':
@@ -71,5 +80,15 @@ export function createTestMap(id: TestMapId, options: TestMapOptions = {}): Test
         depth: 32,
         home: { x: 16, y: VOXEL_HEIGHT, z: 16 },
       }
+    case 'kitchen-sink': {
+      const { width, depth } = KITCHEN_SINK_LAYOUT.size
+      return {
+        id,
+        map: createKitchenSinkMap(),
+        width,
+        depth,
+        home: { x: width / 2, y: KITCHEN_SINK_LAYOUT.groundTop * VOXEL_HEIGHT, z: depth / 2 },
+      }
+    }
   }
 }

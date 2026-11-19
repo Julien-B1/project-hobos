@@ -6,7 +6,7 @@
  * to WebGL 2 otherwise; this module reports which backend was really chosen,
  * so the HUD can display it.
  */
-import { WebGPURenderer } from 'three/webgpu'
+import { NeutralToneMapping, PCFShadowMap, WebGPURenderer } from 'three/webgpu'
 
 /** Graphics backend actually used by the renderer after initialisation. */
 export type RenderBackend = 'WebGPU' | 'WebGL 2'
@@ -15,12 +15,20 @@ export type RenderBackend = 'WebGPU' | 'WebGL 2'
 export interface CreateRendererOptions {
   /** Skip WebGPU and use the WebGL 2 backend (debug, `?forceWebGL=1`). */
   readonly forceWebGL: boolean
+  /** Enable the shadow map system (PCF filtering). */
+  readonly shadows: boolean
 }
 
 /** An initialised renderer and the backend it runs on. */
 export interface RendererHandle {
   readonly renderer: WebGPURenderer
   readonly backend: RenderBackend
+  /**
+   * Whether GPU timestamp queries are available (WebGPU `timestamp-query`
+   * feature, or `EXT_disjoint_timer_query_webgl2` on WebGL 2). When true,
+   * `renderer.resolveTimestampsAsync()` yields the GPU time of a frame.
+   */
+  readonly gpuTiming: boolean
 }
 
 /**
@@ -38,9 +46,28 @@ export async function createRenderer(
     canvas,
     antialias: true,
     forceWebGL: options.forceWebGL,
+    // GPU timing for the debug HUD; a few queries per frame, negligible cost.
+    trackTimestamp: true,
   })
+  // Neutral tone mapping (Khronos PBR Neutral): leaves mid-tones and the
+  // material palette almost untouched and only rolls off highlights (sun
+  // glints on water), instead of clipping them to white. A few ALU per pixel.
+  renderer.toneMapping = NeutralToneMapping
+  renderer.shadowMap.enabled = options.shadows
+  renderer.shadowMap.type = PCFShadowMap
   await renderer.init()
-  return { renderer, backend: detectBackend(renderer) }
+  return { renderer, backend: detectBackend(renderer), gpuTiming: hasGpuTiming(renderer) }
+}
+
+/**
+ * Whether the backend kept timestamp tracking after initialisation: WebGPU
+ * turns it off without the `timestamp-query` feature, WebGL 2 needs the
+ * disjoint timer extension. Both flags are internal backend fields.
+ */
+function hasGpuTiming(renderer: WebGPURenderer): boolean {
+  const backend = renderer.backend as { trackTimestamp?: boolean; disjoint?: unknown }
+  if (backend.trackTimestamp !== true) return false
+  return detectBackend(renderer) === 'WebGPU' || Boolean(backend.disjoint)
 }
 
 /**
