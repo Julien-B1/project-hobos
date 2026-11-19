@@ -119,3 +119,29 @@ accepted record: add a new one that supersedes it.
     occlusion rule only sees voxel values); acceptable for now.
   - Tree kinds are data too: the foliage material on top of the trunk
     (leaves, needles, birch leaves) and the trunk height (one voxel: bush).
+
+## ADR-007: Structures are parametric map objects that stamp gameplay voxels
+
+- **Status:** accepted (2026-11-19)
+- **Context.** Bridges built from voxel blocks looked like toy bricks, and
+  buildings and other set pieces are coming. Recognising them from voxel
+  patterns (as trees are, ADR-006) does not scale: an arch, a rope, a
+  roof truss cannot be told from voxels.
+- **Decision.** A structure is an object on the map (`core/structures`):
+  `{ id, kind, params }`. Its kind (`StructureKind`, registered by id in a
+  `StructureRegistry`) stamps the voxels gameplay needs (walkable decks,
+  blocking piers, raised beds) and returns the voxels it owns. A
+  render-side mesher per kind (`render/structures`, `StructureMesher`)
+  draws it from its parameters with shared closed primitives
+  (`render/geometry/primitives.ts`) into the blocks layer; owned voxels are
+  not drawn as blocks. `StructureSet` indexes the structures of a map
+  (owner of a voxel, home chunk of each structure's mesh).
+- **Consequences.**
+  - Voxels stay the truth for surfaces, picking and future path finding;
+    the structure's parameters are the truth for its look.
+  - New kinds (houses, towers...) plug in by registering a kind and a
+    mesher: no change to the engine, the chunk meshers or the generators
+    (open/closed).
+  - Structure meshes must be closed volumes (the cut section counts faces).
+  - A structure is meshed once, with the chunk of its first owned voxel;
+    editing voxels does not move or rebuild structures yet.

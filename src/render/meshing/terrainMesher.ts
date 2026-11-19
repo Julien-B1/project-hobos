@@ -71,6 +71,9 @@ const FLOOR_LEVEL = 0
 /** How far below the water surface level the plane is drawn, in world units. */
 const WATER_DROP = 0.02
 
+/** Levels above a run's top where a neighbour's water surface still counts. */
+const WATER_ABOVE_TOP = 3
+
 /** Deepest water column scanned, in voxels. */
 const MAX_WATER_DEPTH = 32
 
@@ -79,8 +82,31 @@ const MAX_WATER_DEPTH = 32
  * the undisplaced face, 0 = XZ, 1 = ZY, 2 = XY (see `TerrainMesher.emit`).
  */
 export const PROJECTION_CHANNEL = TERRAIN_CHANNELS.length
-/** Weight channel: how much the undisplaced surface faces up, 0..1 (see `TerrainMesher.emit`). */
+/**
+ * Weight channel: how much the undisplaced surface faces up, 0..1 (see
+ * `TerrainMesher.emit`); shifted per face look ({@link LOOK_SHIFT}).
+ */
 export const UP_CHANNEL = TERRAIN_CHANNELS.length + 1
+
+/**
+ * How the terrain shader's slope rule treats a face's steep parts:
+ * - `plain`: dirt on medium slopes, bare rock on steep ones;
+ * - `earthy`: dirt only (cave mouth and arch facades, like the slopes
+ *   around them);
+ * - `rocky`: rock only (inside caves and arches: vaults, walls facing the
+ *   roofed space).
+ */
+export type FaceLook = 'plain' | 'earthy' | 'rocky'
+
+/**
+ * Offset added to the up channel (0..1) per look: earthy faces read below
+ * -0.5, rocky faces above 1.5 (see `terrainMaterial.ts`).
+ */
+export const LOOK_SHIFT: Readonly<Record<FaceLook, number>> = {
+  plain: 0,
+  earthy: -2,
+  rocky: 2,
+}
 
 /** Faces whose normal's |y| exceeds this are textured from above (XZ plane). */
 const PROJECT_ON_XZ = 0.6
@@ -282,12 +308,30 @@ export class TerrainMesher {
         const material = this.options.isTerrain(voxel)
           ? materialOf(voxel)
           : materialOf(map.get(x, run.topY, z))
+        // A wall facing open air next to a roofed space is the facade of a
+        // cave mouth or an arch: it takes the earth look of the slopes
+        // around, not bare rock. Walls facing the roofed space itself
+        // (inside the cave) keep the rock look.
+        const inside = roofedGap(field, nx, nz, mid)
+        const tx = edge.dz
+        const tz = edge.dx
+        const facade =
+          !inside &&
+          [
+            [x, z],
+            [nx + tx, nz + tz],
+            [nx - tx, nz - tz],
+            [x + tx, z + tz],
+            [x - tx, z - tz],
+          ].some(([cx = 0, cz = 0]) => nearOpening(field, cx, cz, lo(tm), hi(tm)))
         this.emit(
           out,
           polygon,
           corners.map((c) => c.w),
           outward,
           this.shade(material, cellJitter(x, Math.floor(mid), z)),
+          undefined,
+          inside ? 'rocky' : facade ? 'earthy' : 'plain',
         )
       }
     }
@@ -356,6 +400,8 @@ export class TerrainMesher {
         [w, w, w],
         [0, -1, 0],
         color,
+        undefined,
+        'rocky',
       )
     }
   }
@@ -393,7 +439,8 @@ export class TerrainMesher {
    * Every vertex gets two extra weight channels describing the undisplaced
    * face: {@link PROJECTION_CHANNEL} (texture projection plane: 0 = XZ,
    * 1 = ZY, 2 = XY) and {@link UP_CHANNEL} (how much the base surface faces
-   * up, from the smooth normals on tops). The shader projects textures and
+   * up, from the smooth normals on tops; shifted per `look`, see
+   * {@link LOOK_SHIFT}). The shader projects textures and
    * applies the slope rule from them, not from the displaced facets, so the
    * crags' small facets keep one coherent texture instead of a patchwork.
    *
@@ -409,6 +456,7 @@ export class TerrainMesher {
     outward: Vec3,
     color: Vec3,
     smooth?: Vec3[],
+    look: FaceLook = 'plain',
   ): void {
     const [a, b, c] = vertices as [Vec3, Vec3, Vec3]
     const n = normalize(cross(sub(b, a), sub(c, a)))
@@ -418,7 +466,8 @@ export class TerrainMesher {
     const full = vertices.map((_, i) => {
       const w = TERRAIN_CHANNELS.map((__, k) => weights[i]?.[k] ?? 0)
       w[PROJECTION_CHANNEL] = projection
-      w[UP_CHANNEL] = smooth ? Math.abs(smooth[i]?.[1] ?? 1) : ay
+      const up = smooth ? Math.abs(smooth[i]?.[1] ?? 1) : ay
+      w[UP_CHANNEL] = up + LOOK_SHIFT[look]
       return w
     })
 
@@ -445,7 +494,15 @@ export class TerrainMesher {
         const tri = dot(flat, outward) < 0 ? [first, pc, pb] : [first, pb, pc]
         const moved = tri.map((v) => crag.displace(v.p))
         const [m0, m1, m2] = moved as [Vec3, Vec3, Vec3]
-        const fn = normalize(cross(sub(m1, m0), sub(m2, m0)))
+        // Facet normal softened towards the undisplaced face's: the crags
+        // read as facets without harsh, crumpled-paper contrasts.
+        const facet = normalize(cross(sub(m1, m0), sub(m2, m0)))
+        const base = dot(n, facet) < 0 ? ([-n[0], -n[1], -n[2]] as Vec3) : n
+        const fn = normalize([
+          facet[0] * (1 - CRAG_SOFTEN) + base[0] * CRAG_SOFTEN,
+          facet[1] * (1 - CRAG_SOFTEN) + base[1] * CRAG_SOFTEN,
+          facet[2] * (1 - CRAG_SOFTEN) + base[2] * CRAG_SOFTEN,
+        ])
         out.rawPolygon(
           moved,
           [fn, fn, fn],
@@ -481,7 +538,9 @@ export function waterSurfaceNear(
     while (isWater(x, top + 1, z) && top < run.topY + MAX_WATER_DEPTH) top++
     return top + 1
   }
-  for (let y = run.topY - MAX_WATER_DEPTH; y <= run.topY; y++) {
+  // Up to a few levels above the run's top: a structure voxel standing in
+  // the water (a stepping stone) hides this column's own water.
+  for (let y = run.topY - MAX_WATER_DEPTH; y <= run.topY + WATER_ABOVE_TOP; y++) {
     for (let dz = -1; dz <= 1; dz++) {
       for (let dx = -1; dx <= 1; dx++) {
         if (
@@ -501,11 +560,15 @@ export function waterSurfaceNear(
 const CRAG_STEP = 0.5
 /** Largest displacement of a vertex, in world units. */
 const CRAG_AMPLITUDE = 0.3
+/** Displacement amplitude around openings (caves, arches), in world units. */
+const OPENING_AMPLITUDE = 0.4
+/** Share of the undisplaced face's normal mixed into a crag facet's normal (0..1). */
+const CRAG_SOFTEN = 0.5
 /** Relief (levels between run tops around a lattice point) where crags start and are full. */
 const CRAG_FROM = 2.5
 const CRAG_FULL = 7
 /** Spatial frequency of the displacement noise, per world unit. */
-const CRAG_FREQUENCY = 0.95
+const CRAG_FREQUENCY = 0.6
 
 /**
  * Rock relief: how much terrain vertices are displaced, and where.
@@ -589,6 +652,17 @@ class Crag {
     return false
   }
 
+  /** Whether a column within 2 cells of lattice point (lx, lz) has an overhanging run. */
+  private nearOverhang(lx: number, lz: number): boolean {
+    for (let dz = -2; dz <= 1; dz++) {
+      for (let dx = -2; dx <= 1; dx++) {
+        const runs = this.field.runsAt(lx + dx, lz + dz)
+        if (runs.some((r) => runs.some((q) => q.top <= r.bottom))) return true
+      }
+    }
+    return false
+  }
+
   /** Amplitude at lattice point (lx, lz). */
   private lattice(lx: number, lz: number): number {
     const key = `${lx},${lz}`
@@ -609,10 +683,41 @@ class Crag {
       }
     }
     const relief = hi >= lo ? hi - lo : 0
-    const amplitude = smoothstep(CRAG_FROM, CRAG_FULL, relief) * CRAG_AMPLITUDE
+    let amplitude = smoothstep(CRAG_FROM, CRAG_FULL, relief) * CRAG_AMPLITUDE
+    // Around openings (a column within 2 cells has a roofed gap: cave or
+    // arch passage, its mouth), stronger relief: an irregular outline
+    // instead of the vault's regular arch.
+    if (this.nearOverhang(lx, lz)) amplitude = Math.max(amplitude, OPENING_AMPLITUDE)
     this.cache.set(key, amplitude)
     return amplitude
   }
+}
+
+/**
+ * Whether `level` lies in a roofed gap of column (x, z): inside no run,
+ * with a run above it (a cave or arch passage, a ledge's shelter).
+ */
+function roofedGap(field: TerrainField, x: number, z: number, level: number): boolean {
+  const runs = field.runsAt(x, z)
+  if (runs.some((r) => r.bottom <= level && level < r.top)) return false
+  return runs.some((r) => r.bottom > level)
+}
+
+/**
+ * Whether the levels [lo, hi] of column (x, z) meet an opening: a roofed
+ * gap (between two runs), or a run overhanging a gap (the roof of a cave
+ * or arch, its lintel).
+ */
+function nearOpening(field: TerrainField, x: number, z: number, lo: number, hi: number): boolean {
+  const runs = [...field.runsAt(x, z)].sort((a, b) => a.bottom - b.bottom)
+  for (let i = 1; i < runs.length; i++) {
+    const below = runs[i - 1]
+    const roof = runs[i]
+    if (!below || !roof) continue
+    // The gap under `roof`, and `roof` itself (its lintel).
+    if (below.top < hi && roof.top > lo) return true
+  }
+  return false
 }
 
 /** A boundary along an edge: height (levels) as a linear function of t in [0, 1]. */

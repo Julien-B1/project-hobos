@@ -5,7 +5,7 @@ import { VoxelMap } from '@/core/voxelMap'
 import type { MeshData } from './mesher'
 import { createKitchenSinkMap } from '@/core/generators/kitchenSinkMap'
 import { createOrganicMap } from '@/core/generators/organicMap'
-import { TerrainMesher, uncoveredStrips } from './terrainMesher'
+import { TerrainMesher, UP_CHANNEL, uncoveredStrips } from './terrainMesher'
 import { openStretches, unmatchedEdges } from './watertight'
 
 const isTerrain = (v: Voxel): boolean => isTerrainMaterial(materialOf(v))
@@ -295,5 +295,42 @@ describe('TerrainMesher crags', () => {
     expect(craggy.mesh(map, chunk).terrain.positions).toEqual(
       craggy.mesh(map, chunk).terrain.positions,
     )
+  })
+})
+
+describe('TerrainMesher openings', () => {
+  it('gives cave mouth facades the earth look and keeps rock inside', () => {
+    // A hill (levels 0..12) over the whole map, a tunnel along X at z 4..5,
+    // levels 4..6: its mouth opens on the map's west border (x = 0).
+    const map = new VoxelMap()
+    box(map, 0, 10, 0, 12, 0, 10)
+    for (let x = 0; x < 10; x++)
+      for (let y = 4; y < 7; y++) for (let z = 4; z < 6; z++) map.set(x, y, z, 0)
+    const meshes = meshAll(map)
+    const up = (m: MeshData, v: number): number => m.weights?.[v * 8 + UP_CHANNEL] ?? NaN
+    let facade = 0
+    let inside = 0
+    for (const m of meshes) {
+      for (let t = 0; t < m.indices.length; t += 3) {
+        const vs = [0, 1, 2].map((k) => m.indices[t + k] ?? 0)
+        const c = [0, 1, 2].map(
+          (axis) => vs.reduce((sum, v) => sum + at(m.positions, v, axis), 0) / 3,
+        )
+        const [cx = 0, , cz = 0] = c
+        const first = vs[0] ?? 0
+        // West face of the hill beside the mouth (cells z = 3 and 6).
+        if (Math.abs(cx) < 1e-6 && ((cz > 3 && cz < 4) || (cz > 6 && cz < 7))) {
+          expect(up(m, first)).toBeLessThan(-0.5)
+          facade++
+        }
+        // Side wall of the passage, deep inside (edge z = 4, facing +z).
+        if (cx > 3 && cx < 7 && Math.abs(cz - 4) < 1e-6) {
+          expect(up(m, first)).toBeGreaterThan(1.5) // rocky look
+          inside++
+        }
+      }
+    }
+    expect(facade).toBeGreaterThan(0)
+    expect(inside).toBeGreaterThan(0)
   })
 })

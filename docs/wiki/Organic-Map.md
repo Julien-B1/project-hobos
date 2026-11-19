@@ -44,3 +44,12 @@ faces with bare dirt or rock colours.
   voxel surfaces (half-height levels).
 - Trees are voxels (WOOD trunk, LEAVES canopy) drawn as procedural trees,
   see ADR-006.
+
+## River crossing
+
+After the terrain and its wedges, one crossing is placed over the river
+(see [[Structures]]): on the best row (short span, near the middle, away
+from the edges, deck meeting both banks, level approaches rather than the
+foot of a slope or a cliff), of a kind picked with the seed among those
+fitting the site. Trees and bushes keep clear of it. A map flooded from edge to edge
+has no banks to join and gets no crossing.

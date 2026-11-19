@@ -9,6 +9,8 @@
 #   see compose.yaml) so files created in the bind mount (node_modules,
 #   lockfile, build output) are owned by the host user.
 # - pnpm is pinned here AND in package.json ("packageManager"); keep them equal.
+# - Playwright (headless Chromium) is pinned here AND in package.json
+#   (devDependencies); keep them equal.
 
 FROM node:24.22.3-bookworm-slim
 
@@ -35,6 +37,15 @@ RUN corepack enable \
     # The container may run with a uid other than 1000 on another machine:
     # make the shared locations writable for any user (dev image only).
     && chmod -R a+rwX /pnpm-store /opt/corepack /home/node /app
+
+# Headless Chromium for screenshots of the running app (`make screenshots`).
+# Keep PLAYWRIGHT_VERSION equal to the `playwright` devDependency in
+# package.json: each Playwright release expects its own browser build.
+ARG PLAYWRIGHT_VERSION=1.64.1
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN npx -y "playwright@${PLAYWRIGHT_VERSION}" install --with-deps chromium \
+    && chmod -R a+rwX /ms-playwright \
+    && rm -rf /var/lib/apt/lists/* /home/node/.npm
 
 WORKDIR /app
 

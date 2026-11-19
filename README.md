@@ -58,8 +58,11 @@ many small modules for the dev server.
 Maps are battle-map sized (32 x 32 squares, one encounter). URL switches:
 `?forceWebGL=1` forces the WebGL 2 backend; `?map=flat` or `?map=organic`
 (with optional `&seed=42` and `&size=24`) or `?map=kitchen-sink` (every
-element in one hand-made map) loads another test map instead of the
-reference map; `?time=dusk` (or `dawn`, `morning`, `noon`, `afternoon`,
+element in one hand-made map) or `?map=bridges` (100 x 24 river, one
+crossing of each kind) loads another test map instead of the
+reference map. The map picker at the bottom right switches map, seed (🎲 for
+a random one) and size without reloading, and updates the URL to match; `?cam=x,z,distance,yaw` frames the camera on
+start; `?time=dusk` (or `dawn`, `morning`, `noon`, `afternoon`,
 `evening`, `midnight`, `late-night`) sets the time of day, also chosen with
 the picker at the top right; `?mesher=blocky` shows exact voxel blocks instead of the
 faceted terrain; `?shadows=off`, `low` or `high` (default) sets the sun
@@ -69,17 +72,18 @@ shadow quality.
 
 Keys are bound by physical position: the same keys work on AZERTY and QWERTY.
 
-| Action                 | Input                                              |
-| ---------------------- | -------------------------------------------------- |
-| Move the camera target | `Z` `Q` `S` `D` (AZERTY) / `W` `A` `S` `D`, arrows |
-| Rotate by 45° steps    | `A` / `E` (AZERTY) / `Q` / `E` (QWERTY)            |
-| Free rotation          | Left mouse drag                                    |
-| Pan                    | Middle mouse drag                                  |
-| Zoom                   | Mouse wheel, `R` / `F`, numpad `+` / `-`           |
-| Reset view             | `C` or `Home`                                      |
-| Show / hide the grid   | `G`                                                |
-| Remove voxel (debug)   | Right click                                        |
-| Place voxel (debug)    | `Shift` + left click                               |
+| Action                 | Input                                                                   |
+| ---------------------- | ----------------------------------------------------------------------- |
+| Move the camera target | `Z` `Q` `S` `D` (AZERTY) / `W` `A` `S` `D`, arrows                      |
+| Rotate by 45° steps    | `A` / `E` (AZERTY) / `Q` / `E` (QWERTY)                                 |
+| Free rotation          | Left mouse drag                                                         |
+| Pan                    | Middle mouse drag                                                       |
+| Zoom                   | Mouse wheel, `R` / `F`, numpad `+` / `-`                                |
+| Reset view             | `C` or `Home`                                                           |
+| Show / hide the grid   | `G`                                                                     |
+| Performance probes     | `1` to `6` (shadows, foliage, scatter, water, terrain, half resolution) |
+| Remove voxel (debug)   | Right click                                                             |
+| Place voxel (debug)    | `Shift` + left click                                                    |
 
 Camera settings (pitch, FOV, zoom bounds, speeds) live in `src/app/config.ts`.
 

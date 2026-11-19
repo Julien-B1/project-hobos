@@ -13,3 +13,6 @@ coverage/
 # gitignore on contributor machines).
 !AGENTS.md
 !CLAUDE.md
+
+# Screenshots from `make screenshots`
+screenshots/

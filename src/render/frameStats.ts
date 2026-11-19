@@ -82,8 +82,11 @@ export interface VramEstimate {
   readonly framebuffer: number
 }
 
-/** Bytes per pixel of the frame buffer target (RGBA half float) and of its depth. */
-const COLOR_BYTES = 8
+/**
+ * Bytes per pixel of one colour sample (RGBA8: the frame is drawn straight
+ * into the canvas, see `outputEncoding.ts`) and of one depth-stencil sample.
+ */
+const COLOR_BYTES = 4
 const DEPTH_BYTES = 4
 /** Bytes per pixel of the canvas (swap chain) buffer. */
 const CANVAS_BYTES = 4

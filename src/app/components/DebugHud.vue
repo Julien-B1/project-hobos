@@ -8,7 +8,7 @@
  * App.vue) and renders it. Never reads engine objects directly.
  */
 import type { SessionInfo } from '@/app/session'
-import type { EngineHudState } from '@/render/engine'
+import { PROBES, type EngineHudState } from '@/render/engine'
 
 defineProps<{
   /** Latest engine snapshot, or null before the engine has started. */
@@ -58,6 +58,18 @@ function count(n: number): string {
           ({{ state.render.gpuMs.toFixed(2) }} ms/frame)
         </template>
         <template v-else>n/a (no GPU timer)</template>
+        <span v-if="state.backend === 'WebGL 2' && state.render?.gpuMs != null" class="keys">
+          · WebGL timer: upper bound</span
+        >
+      </div>
+      <div>
+        Probes:
+        <span
+          v-for="(id, i) in PROBES"
+          :key="id"
+          :class="{ off: id === 'halfRes' ? state.probes[id] : !state.probes[id] }"
+          >[{{ i + 1 }}] {{ id }}
+        </span>
       </div>
       <template v-if="state.render">
         <div>
@@ -119,5 +131,11 @@ function count(n: number): string {
 
 .keys {
   opacity: 0.7;
+}
+
+/* A probe that changes the frame (part off, or half resolution on). */
+.off {
+  color: #ff8a65;
+  text-decoration: line-through;
 }
 </style>

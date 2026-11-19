@@ -12,7 +12,7 @@
  * ```
  *  row A, z 2..7    ground swatches:  dirt | sand | rock | stone | path | mound (wedges)
  *  row B, z 12..17  trees and builds: oak  birch  pine  bush | rock arch | brick ramp + platform
- *  row C, z 20..31  relief and water: hill + cave | pond + dock | canal, path, wooden bridge
+ *  row C, z 20..31  relief and water: hill + cave | pond + dock | canal, path, wooden bridge (structure)
  * ```
  *
  * Natural relief (hill, cave, rock arch) uses terrain materials, drawn
@@ -26,6 +26,11 @@ import { AIR, packVoxel, type Voxel } from '../voxel'
 import { VoxelMap } from '../voxelMap'
 import type { TreeKind } from '../trees'
 import { growTree } from './treeGrowth'
+import type { BridgeSpan } from '../structures/bridges/bridgeSpan'
+import { WOOD_BEAM_BRIDGE } from '../structures/bridges/woodBeamBridge'
+import { defaultStructureKinds } from '../structures/kinds'
+import type { StructureRegistry } from '../structures/registry'
+import { StructureSet } from '../structures/structureSet'
 
 /** Inclusive integer range. */
 interface Range {
@@ -80,19 +85,29 @@ export const KITCHEN_SINK_LAYOUT = {
   /** Row C: round pond (centre, radius in cells) with a wooden dock. */
   pond: { cx: 19, cz: 26, radius: 6 },
   dock: { x: r(14, 17), z: 26 },
-  /** Row C: canal along Z with a path on its west bank, crossed by a wooden bridge. */
+  /**
+   * Row C: canal along Z with a path on its west bank, crossed by a wooden
+   * beam bridge (a structure) resting on the path and the east bank.
+   */
   canal: { x: r(33, 35), z: r(20, 31), profile: [4, 2, 4] as readonly number[] },
   path: { x: r(31, 32), z: r(20, 31) },
-  bridge: { x: r(31, 36), z: r(24, 25), deckLevel: 8 },
-  bridgeRampWest: { x: r(28, 30) },
-  bridgeRampEast: { x: r(37, 39) },
+  /** Deck voxel y: the banks' top voxel (deck flush with the ground, level 6). */
+  bridge: { x: r(32, 36), z: r(24, 25), deckLevel: 5 },
 }
 
 const v = (material: number, shape: number = Shape.FULL, orientation = 0): Voxel =>
   packVoxel(material, shape, orientation)
 
-/** Build the kitchen-sink map. Deterministic. */
+/** Build the kitchen-sink map's voxels (see {@link createKitchenSinkWorld}). Deterministic. */
 export function createKitchenSinkMap(): VoxelMap {
+  return createKitchenSinkWorld().map
+}
+
+/** Build the kitchen-sink map and its structures. Deterministic. */
+export function createKitchenSinkWorld(kinds: StructureRegistry = defaultStructureKinds()): {
+  map: VoxelMap
+  structures: StructureSet
+} {
   const L = KITCHEN_SINK_LAYOUT
   const map = new VoxelMap()
   const { width, depth } = L.size
@@ -188,25 +203,24 @@ export function createKitchenSinkMap(): VoxelMap {
       }
     }
 
-  // 7. Wooden bridge over the path and the canal: ramps, then the deck.
+  // 7. Dock: planks on the water surface of the pond.
   const wood = v(Material.WOOD)
-  for (let k = 0; k <= L.bridgeRampWest.x.max - L.bridgeRampWest.x.min; k++)
-    for (let z = L.bridge.z.min; z <= L.bridge.z.max; z++) {
-      const west = L.bridgeRampWest.x.min + k
-      const east = L.bridgeRampEast.x.max - k
-      for (let y = L.groundTop; y < L.groundTop + k; y++) {
-        map.set(west, y, z, wood)
-        map.set(east, y, z, wood)
-      }
-      map.set(west, L.groundTop + k, z, v(Material.WOOD, Shape.SLOPE, Orientation.EAST))
-      map.set(east, L.groundTop + k, z, v(Material.WOOD, Shape.SLOPE, Orientation.WEST))
-    }
-  for (let z = L.bridge.z.min; z <= L.bridge.z.max; z++)
-    for (let x = L.bridge.x.min; x <= L.bridge.x.max; x++) map.set(x, L.bridge.deckLevel, z, wood)
-
-  // 8. Dock: planks on the water surface of the pond.
   for (let x = L.dock.x.min; x <= L.dock.x.max; x++) map.set(x, L.waterTop, L.dock.z, wood)
-  return map
+
+  // 8. Wooden bridge over the canal (a structure: stamps its deck).
+  const structures = new StructureSet()
+  const span: BridgeSpan = {
+    axis: 'x',
+    from: L.bridge.x.min,
+    to: L.bridge.x.max,
+    side: L.bridge.z.min,
+    width: L.bridge.z.max - L.bridge.z.min + 1,
+    deckY: L.bridge.deckLevel,
+    bedLevel: Math.min(...L.canal.profile),
+    waterLevel: L.waterTop,
+  }
+  structures.place({ id: 'canal-bridge', kind: WOOD_BEAM_BRIDGE, params: span }, map, kinds)
+  return { map, structures }
 }
 
 /** Whether (x, z) lies in the box `xs` x `zs`. */

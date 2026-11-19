@@ -22,6 +22,7 @@ import { createPropsMaterial, createScatterMaterial } from './scatterMaterial'
 import { createBlocksMaterial } from './blocksMaterial'
 import { createHoverCell, createTerrainMaterial, type HoverCell } from './terrainMaterial'
 import { createWaterMaterial } from './waterMaterial'
+import { encodeOutput } from './outputEncoding'
 
 /** Layer materials and the controls they share. */
 export interface LayerMaterialSet {
@@ -63,6 +64,7 @@ export function createLayerMaterials(gridVisible: boolean): LayerMaterialSet {
   }
   // One mask for every layer: keep only what lies below the cut.
   for (const material of Object.values(materials)) {
+    encodeOutput(material)
     material.maskNode = positionWorld.y.lessThan(cutHeight)
     // Never drawn where the cut section says "inside matter" (stencil above
     // its base, see `sectionCap.ts`): what pokes into the ground, or lies

@@ -40,8 +40,8 @@ describe('estimateVram', () => {
     const v = estimateVram({ total: 3000, texturesSize: 1000 }, 10, 10, 4)
     expect(v.textures).toBe(1000)
     expect(v.buffers).toBe(2000)
-    // 100 px x (3 extra samples x 12 B + 4 B canvas).
-    expect(v.framebuffer).toBe(100 * (3 * 12 + 4))
+    // 100 px x (3 extra samples x 8 B + 4 B canvas).
+    expect(v.framebuffer).toBe(100 * (3 * 8 + 4))
     expect(v.total).toBe(3000 + v.framebuffer)
   })
 

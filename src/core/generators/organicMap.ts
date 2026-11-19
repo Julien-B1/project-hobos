@@ -36,6 +36,15 @@ import { ORIENTATION_OFFSETS, shapeForCornerMask } from '../shapes'
 import { isAir, materialOf, packVoxel } from '../voxel'
 import type { TreeKind } from '../trees'
 import { VoxelMap } from '../voxelMap'
+import { spanLength, type BridgeSpan } from '../structures/bridges/bridgeSpan'
+import { crossingCandidates, pickCrossing } from '../structures/bridges/crossings'
+import {
+  groundLevel,
+  measureCrossing,
+  type CrossingSite,
+} from '../structures/bridges/riverCrossing'
+import { defaultStructureKinds } from '../structures/kinds'
+import { StructureSet } from '../structures/structureSet'
 import { growTree } from './treeGrowth'
 
 /** Options for {@link createOrganicMap}. */
@@ -55,6 +64,8 @@ export interface OrganicMap {
   readonly waterLevel: number
   /** Terrain surface level of a column before slopes and trees (no water). */
   heightAt(x: number, z: number): number
+  /** Structures placed on the map: the river's crossing. */
+  readonly structures: StructureSet
 }
 
 /** Default edge length of the map, in cells (battle-map squares). */
@@ -103,9 +114,12 @@ export function createOrganicMap(options: OrganicMapOptions = {}): OrganicMap {
   const wedgeColumns = new Set<number>()
   fillColumns(map, size, seed, heightAt)
   placeWedges(map, size, heightAt, wedgeColumns)
-  placeTrees(map, size, seed, heightAt, wedgeColumns)
+  const structures = new StructureSet()
+  // A river always gets a crossing; trees keep clear of it.
+  const reserved = placeCrossing(map, size, seed, structures)
+  placeTrees(map, size, seed, heightAt, wedgeColumns, reserved)
 
-  return { map, size, seed, waterLevel: WATER_LEVEL, heightAt }
+  return { map, size, seed, waterLevel: WATER_LEVEL, heightAt, structures }
 }
 
 /** Step 1 + 2: integer surface levels with the river carved in. */
@@ -371,9 +385,11 @@ function placeTrees(
   seed: number,
   heightAt: (x: number, z: number) => number,
   wedgeColumns: Set<number>,
+  reserved: ReadonlySet<number>,
 ): void {
   const BLOCK = 5
   const flatGrass = (x: number, z: number): boolean => {
+    if (reserved.has(x + z * size)) return false
     const h = heightAt(x, z)
     const ground = materialOf(map.get(x, h - 1, z))
     if (ground !== Material.GRASS || wedgeColumns.has(x + z * size)) return false
@@ -410,6 +426,121 @@ function placeTrees(
       if (free) growTree(map, x, h, z, 'bush', hash01(x, z, seed + 14))
     }
   }
+}
+
+/**
+ * Place one crossing over the river: on the row (across the river, which
+ * runs along Z) with the shortest span, preferring the middle of the map,
+ * of a kind fitting the site picked with the seed (`pickCrossing`).
+ * Returns the columns (x + z * size) to keep free of trees around it.
+ */
+function placeCrossing(
+  map: VoxelMap,
+  size: number,
+  seed: number,
+  structures: StructureSet,
+): Set<number> {
+  const reserved = new Set<number>()
+  let best: { site: CrossingSite; score: number } | null = null
+  // Every row is tried; the score prefers short spans near the middle.
+  for (let z = 1; z <= size - 4; z++) {
+    const centre = waterCentre(map, size, z)
+    if (centre === null) continue
+    const site = measureCrossing(map, 'x', z, 1, centre, WATER_LEVEL, size)
+    if (!site) continue
+    // Short spans near the middle; never along the map's edge.
+    const margin = Math.max(4, Math.round(size * 0.12))
+    const edge =
+      Math.min(z, size - 1 - z, site.span.from, size - 1 - site.span.to) < margin ? 1000 : 0
+    const score =
+      spanLength(site.span) * 4 +
+      site.waterWidth * 2 +
+      Math.abs(z - size / 2) * 0.5 +
+      approachCost(map, site.span, size) * 3 +
+      // A deck meeting its banks beats any fallback crossing.
+      (site.flush ? 0 : 500) +
+      edge
+    if (!best || score < best.score) best = { site, score }
+  }
+  if (!best) return reserved
+
+  // Pick a kind, then measure again at its width; fall back on the other
+  // fitting kinds if the wider band does not fit.
+  const first = pickCrossing(best.site, seed)
+  const rules = [first, ...crossingCandidates(best.site)].filter((r) => r !== null)
+  const z = best.site.span.side
+  const centre = waterCentre(map, size, z)
+  for (const rule of rules) {
+    const side = Math.max(0, Math.min(size - rule.width, z - Math.floor((rule.width - 1) / 2)))
+    const site =
+      centre === null
+        ? null
+        : measureCrossing(map, 'x', side, rule.width, centre, WATER_LEVEL, size)
+    if (!site || !rule.fits(site)) continue
+    structures.place(
+      { id: 'river-crossing', kind: rule.kind, params: site.span },
+      map,
+      defaultStructureKinds(),
+    )
+    const { span } = site
+    // Clear of tree trunks and of their canopies (a tall oak reaches 4 cells).
+    for (let x = span.from - 5; x <= span.to + 5; x++)
+      for (let zz = span.side - 4; zz <= span.side + span.width + 3; zz++)
+        reserved.add(x + zz * size)
+    break
+  }
+  return reserved
+}
+
+/** Cells beyond each end of a crossing judged as its approach. */
+const APPROACH_CELLS = 4
+
+/**
+ * How hard the approaches of a crossing are: beyond each end, along the
+ * crossing, the climb from cell to cell (levels) plus a penalty for bare
+ * rock; a crossing landing at the foot of a slope or a cliff costs more
+ * than one opening onto level ground, as a road builder would choose.
+ */
+function approachCost(map: VoxelMap, span: BridgeSpan, size: number): number {
+  let cost = 0
+  for (const [end, step] of [
+    [span.from, -1],
+    [span.to, 1],
+  ] as const) {
+    for (let across = 0; across < span.width; across++) {
+      const z = span.side + across
+      let previous = groundLevel(map, end, z)
+      for (let k = 1; k <= APPROACH_CELLS; k++) {
+        const x = end + step * k
+        if (x < 0 || x >= size) break
+        const level = groundLevel(map, x, z)
+        cost += Math.abs(level - previous)
+        const top = materialOf(map.get(x, level - 1, z))
+        if (top === Material.ROCK || top === Material.STONE) cost += 2
+        previous = level
+      }
+    }
+  }
+  return cost / span.width
+}
+
+/** Middle cell of the widest run of flooded cells on row z, or null. */
+function waterCentre(map: VoxelMap, size: number, z: number): number | null {
+  let bestStart = -1
+  let bestLength = 0
+  let start = -1
+  for (let x = 0; x <= size; x++) {
+    const wet = x < size && materialOf(map.get(x, WATER_LEVEL - 1, z)) === Material.WATER
+    if (wet && start < 0) start = x
+    if (!wet && start >= 0) {
+      if (x - start > bestLength) {
+        bestLength = x - start
+        bestStart = start
+      }
+      start = -1
+    }
+  }
+  return bestLength > 0 ? bestStart + Math.floor(bestLength / 2) : null
 }
 
 /** Kind of a tree standing at surface level `h`, from a random value in [0, 1). */

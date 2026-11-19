@@ -6,7 +6,7 @@
  * to WebGL 2 otherwise; this module reports which backend was really chosen,
  * so the HUD can display it.
  */
-import { NeutralToneMapping, PCFShadowMap, WebGPURenderer } from 'three/webgpu'
+import { LinearSRGBColorSpace, NoToneMapping, PCFShadowMap, WebGPURenderer } from 'three/webgpu'
 import { STENCIL_BASE } from './sectionCap'
 
 /** Graphics backend actually used by the renderer after initialisation. */
@@ -53,10 +53,12 @@ export async function createRenderer(
     stencil: true,
   })
   renderer.setClearStencil(STENCIL_BASE)
-  // Neutral tone mapping (Khronos PBR Neutral): leaves mid-tones and the
-  // material palette almost untouched and only rolls off highlights (sun
-  // glints on water), instead of clipping them to white. A few ALU per pixel.
-  renderer.toneMapping = NeutralToneMapping
+  // No tone mapping and no output conversion here: the materials apply
+  // Neutral tone mapping and sRGB encoding themselves (`outputEncoding.ts`),
+  // so the renderer draws straight into the canvas instead of going through
+  // a half-float intermediate target and a full-screen copy.
+  renderer.toneMapping = NoToneMapping
+  renderer.outputColorSpace = LinearSRGBColorSpace
   renderer.shadowMap.enabled = options.shadows
   renderer.shadowMap.type = PCFShadowMap
   await renderer.init()

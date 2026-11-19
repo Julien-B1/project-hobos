@@ -9,6 +9,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Structures (ADR-007): parametric map objects that stamp gameplay voxels
+  and are drawn by a mesher per kind (`core/structures`, `StructureKind`,
+  `StructureRegistry`, `StructureSet`; `render/structures`,
+  `StructureMesher`), with closed geometric primitives
+  (`render/geometry/primitives.ts`: box, beam, tube, catenary). First kind:
+  the wooden beam bridge (trestle bents, stringers, planks, railings),
+  replacing the voxel bridge of the kitchen-sink canal. `TestMap` carries
+  its `structures`; new `WOOD` blocks look (grain without seams).
+- Screenshots tooling: `make screenshots` captures the app in headless
+  Chromium (Playwright 1.64.1, in the dev image) into `screenshots/`;
+  `?cam=x,z,distance,yaw` frames the camera at start.
+- `StructureKind.surfaceAt`: the walking surface of a structure when it
+  differs from its voxels (sagging rope deck); the hover cursor follows it.
+- Six more crossing kinds: stone arch bridge (humpbacked deck on SLOPE
+  voxels, segmental voussoir arch, spandrels, parapets), slab bridge
+  (piers with cutwaters, one slab per bay), rope bridge (sagging deck
+  shared by voxels and mesh, posts, guy ropes, foot and hand ropes,
+  suspenders), fallen log (root plate, branch stubs), stepping stones and
+  ford (raised gravel bed, boulders, marker posts). New primitives
+  (`hexahedron`, `slabStone`) and blocks looks (`MASONRY`, `STONE`,
+  `ROPE`).
+- River crossings on generated maps: `measureCrossing` picks the deck
+  level meeting both banks flush (the span reaches up the lower bank's
+  slope; in a canyon, the plateau: the bridge spans the valley) and
+  measures the site, `CROSSING_RULES` and `pickCrossing` choose a fitting
+  kind with the seed; the organic map always crosses its river once (unless
+  it is a lake from edge to edge), at the best site (short span, away from
+  the map's edges, level approaches rather than the foot of a slope or a
+  cliff), trees keep clear of the crossing.
+- Bridges showcase map (`?map=bridges`, 100 x 24): a river along the map
+  crossed by every kind, each slot with the river width and depth that suit
+  it (a gorge for the rope bridge) and a path across.
+- Map picker (bottom right): switch the test map, seed (random seed
+  button) and size of procedural maps without reloading. The canvas is
+  remounted (old engine and input bindings disposed); time of day, cut and
+  grid carry over, and the URL is updated with `history.replaceState` so a
+  reload or shared link reproduces the map. Camera shortcuts ignore keys
+  typed into form fields.
 - Kitchen-sink map (`?map=kitchen-sink`, 40 x 32): hand-made sample board,
   one plot per element: ground swatches, wedge mound, one tree of each
   kind, brick arch, brick ramp and platform, rock mesa with a cave, pond
@@ -40,6 +78,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stencil, so nothing shows through the section. The terrain is closed by a floor face under the lowest
   run. Built voxels also get the section of their solid in their own
   colour, slopes included (`CapMesher`, `CutCap`, `Engine.setCutHeight`).
+- Cave mouths and arches: the facade around the opening takes the earth
+  look of the surrounding slopes (no bare grey rock framing the hole);
+  vaults and walls inside are rock only, never earth (`FaceLook`,
+  `LOOK_SHIFT`); stronger crags within 2 cells of an overhang, for an
+  irregular outline.
 - Openings in faceted terrain: runs around a corner touched by a covered
   run (cave or arch floor) only join when they agree on it, so cave mouths
   and natural arches stay open with a vertical face around them.
@@ -74,6 +117,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   square, height band, ground faces only): covers exactly the drawn
   ground, crags included, cut with it; light fill with a thin border.
   Block highlight cut like the scene, lighter.
+- Performance probes (debug): keys `1` to `6` switch off shadows, foliage,
+  scatter and stones, water, terrain, or halve the resolution, to read
+  each part's cost in the HUD's GPU time; the HUD flags the WebGL 2 GPU
+  timer as an upper bound.
 - Debug HUD figures: map, resolved seed, mesher, shadow quality, drawing
   buffer size, GPU time per frame and GPU load (timestamp queries), estimated
   page VRAM, draw calls, triangles, shadow passes and camera pose
@@ -161,6 +208,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Ground decoration needs 4 free levels above the ground and its
+  neighbours (water and canopies aside) and stays out of structures'
+  bounds: reeds no longer poke through bridge decks.
+- Water around stepping stones: columns whose water is replaced by a
+  structure voxel take the surface from their neighbours.
+- Fixed per-pixel cost of every frame: tone mapping and sRGB encoding are
+  done at the end of each material (`outputEncoding.ts`), so the renderer
+  draws straight into the canvas instead of a multisampled half-float
+  target resolved and copied by a full-screen pass (measured: the whole
+  11 ms per frame at 1906 x 1271 in WebGL 2 was that fixed cost).
 - Water no longer receives shadows: they fell on the surface and on the
   bed seen through it, twice and offset; they now land on the bed only.
 - No more lit strip between an object's foot and its shadow: blocks,

@@ -7,8 +7,9 @@
  * intensities and the background; the ambient is fairly strong so shadowed
  * ground stays readable, as in HD-2D scenes.
  */
-import { Color, DirectionalLight, HemisphereLight, Scene } from 'three/webgpu'
+import { DirectionalLight, HemisphereLight, Scene } from 'three/webgpu'
 import { lightDirection, type LightingPreset } from './timeOfDay'
+import { canvasColor } from './outputEncoding'
 
 /** Share of the sky colour mixed into the ambient light coming from below. */
 const GROUND_LIFT = 0.4
@@ -46,7 +47,7 @@ export function createScene(preset: LightingPreset): SceneHandle {
  */
 export function applyLighting(handle: SceneHandle, preset: LightingPreset): void {
   const { scene, sun, ambient } = handle
-  scene.background = new Color(preset.background)
+  scene.background = canvasColor(preset.background)
   ambient.color.setHex(preset.skyColor)
   // Light from below is lifted towards the sky colour: with the preset's
   // dark ground colour alone, vertical faces away from the sun (walls,

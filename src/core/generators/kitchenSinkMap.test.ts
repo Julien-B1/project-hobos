@@ -48,10 +48,11 @@ describe('kitchen-sink map', () => {
     expect([...kinds].sort()).toEqual(['birch', 'bush', 'oak', 'pine'])
   })
 
-  it('stacks two surfaces: bridge over path and canal, cave, arch', () => {
+  it('stacks two surfaces: cave, arch; the bridge deck is flush with the banks', () => {
     const deck = L.bridge.deckLevel + 1
-    expect(surfaceLevels(31, 24)).toEqual([L.groundTop, deck])
-    expect(surfaceLevels(34, 25)).toEqual([L.waterTop, deck])
+    expect(deck).toBe(L.groundTop)
+    expect(surfaceLevels(34, 25)).toEqual([deck])
+    expect(surfaceLevels(32, 24)).toEqual([L.groundTop])
     expect(surfaceLevels(6, 26)).toEqual([L.cave.floorTop, L.hill.top])
     expect(surfaceLevels(25, 14)).toEqual([L.groundTop, L.arch.top])
   })

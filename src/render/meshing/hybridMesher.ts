@@ -27,13 +27,19 @@ import { FaceProfile, faceProfile, oppositeFace } from '@/core/shapes'
 import { isAir, materialOf, type Voxel } from '@/core/voxel'
 import type { VoxelMap } from '@/core/voxelMap'
 import { isTrunkVoxel } from '@/core/trees'
+import { chunkKey } from '@/core/coords'
+import { StructureSet } from '@/core/structures/structureSet'
+import { defaultStructureMeshers } from '../structures'
+import type { StructureMesherRegistry } from '../structures/structureMesher'
 import { CulledMesher } from './culledMesher'
+import { MeshBuilder } from './meshBuilder'
 import {
   EMPTY_MESH,
   mergeMeshData,
   type ColorLookup,
   type LayeredMeshData,
   type LayeredMesher,
+  type MeshData,
 } from './mesher'
 import { ScatterMesher } from './scatterMesher'
 import { TerrainMesher } from './terrainMesher'
@@ -49,8 +55,17 @@ export class HybridMesher implements LayeredMesher {
   private readonly trees: TreeMesher
   private readonly scatter: ScatterMesher
 
-  /** @param colorOf Linear RGB colour of a material id. */
-  constructor(colorOf: ColorLookup) {
+  /**
+   * @param colorOf Linear RGB colour of a material id.
+   * @param structures Structures of the map: their owned voxels are not
+   *   drawn as blocks, their meshes are added to their home chunk.
+   * @param meshers Structure meshers by kind id.
+   */
+  constructor(
+    colorOf: ColorLookup,
+    private readonly structures: StructureSet = new StructureSet(),
+    private readonly meshers: StructureMesherRegistry = defaultStructureMeshers(),
+  ) {
     this.terrain = new TerrainMesher({ isTerrain: isTerrainVoxel, colorOf })
     this.trees = new TreeMesher(colorOf)
     this.scatter = new ScatterMesher(isTerrainVoxel)
@@ -68,6 +83,19 @@ export class HybridMesher implements LayeredMesher {
     })
   }
 
+  /**
+   * Geometry of the structures whose home is `chunk` (each structure is
+   * meshed once, with the chunk of its first owned voxel; its geometry may
+   * reach over neighbouring chunks).
+   */
+  private structureMesh(chunk: Chunk): MeshData {
+    const list = this.structures.inChunk(chunkKey(chunk.cx, chunk.cy, chunk.cz))
+    if (list.length === 0) return EMPTY_MESH
+    const out = new MeshBuilder()
+    for (const structure of list) this.meshers.get(structure.kind).mesh(structure, out)
+    return out.toMeshData()
+  }
+
   /** Mesh the layers of the chunk. */
   mesh(map: VoxelMap, chunk: Chunk): LayeredMeshData {
     const { terrain, water } = this.terrain.mesh(map, chunk)
@@ -76,15 +104,16 @@ export class HybridMesher implements LayeredMesher {
       map,
       chunk,
       (voxel, x, y, z) =>
-        trees.trunks.length === 0 ||
-        materialOf(voxel) !== Material.WOOD ||
-        !isTrunkVoxel(trees.trunks, x, y, z),
+        !this.structures.owns(x, y, z) &&
+        (trees.trunks.length === 0 ||
+          materialOf(voxel) !== Material.WOOD ||
+          !isTrunkVoxel(trees.trunks, x, y, z)),
     )
-    const decoration = this.scatter.mesh(map, chunk)
+    const decoration = this.scatter.mesh(map, chunk, (x, y, z) => this.structures.within(x, y, z))
     return {
       terrain,
       water,
-      blocks: mergeMeshData(blocks, trees.bark),
+      blocks: mergeMeshData(mergeMeshData(blocks, trees.bark), this.structureMesh(chunk)),
       foliage: trees.foliage,
       scatter: decoration.cards,
       props: decoration.props,

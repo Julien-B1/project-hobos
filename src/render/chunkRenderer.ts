@@ -43,6 +43,8 @@ export class ChunkRenderer {
   private readonly meshes = new Map<string, Partial<Record<MeshLayer, Mesh>>>()
   /** Whether the cut section's stencil companions are drawn. */
   private sectionOn = false
+  /** Layers hidden by the performance probes. */
+  private readonly hidden = new Set<MeshLayer>()
 
   /**
    * @param materials One material per layer, shared by all chunks (the
@@ -64,6 +66,16 @@ export class ChunkRenderer {
     this.sectionOn = on
     for (const layers of this.meshes.values()) {
       for (const mesh of Object.values(layers)) setCompanionsVisible(mesh, on)
+    }
+  }
+
+  /** Show or hide one layer in every chunk (performance probes). */
+  setLayerVisible(layer: MeshLayer, visible: boolean): void {
+    if (visible) this.hidden.delete(layer)
+    else this.hidden.add(layer)
+    for (const layers of this.meshes.values()) {
+      const mesh = layers[layer]
+      if (mesh) mesh.visible = visible
     }
   }
 
@@ -165,6 +177,7 @@ export class ChunkRenderer {
       // it; a shadow on the surface as well would show twice, offset.
       mesh.receiveShadow = layer !== 'water'
       if (this.stencil && SOLID.has(layer)) addStencilCompanions(mesh, this.stencil, this.sectionOn)
+      mesh.visible = !this.hidden.has(layer)
       this.group.add(mesh)
       next[layer] = mesh
     }

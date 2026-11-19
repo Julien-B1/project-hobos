@@ -122,4 +122,12 @@ export const BlockLook = {
   BRICKS: 2,
   /** Tree bark with vertical streaks. */
   BARK: 3,
+  /** Plain wood: grain only, no seams (beams, single planks). */
+  WOOD: 4,
+  /** Rubble masonry: irregular courses of large dressed stones. */
+  MASONRY: 5,
+  /** Plain stone: mottled, no joints (slabs, stepping stones). */
+  STONE: 6,
+  /** Twisted rope: fine diagonal strands. */
+  ROPE: 7,
 } as const

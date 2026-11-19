@@ -60,6 +60,9 @@ export const config = {
  * - `?grid=off` starts with the battle-map grid hidden (toggle with G).
  * - `?shadows=off|low|high` sets the sun shadow quality (`high` by default:
  *   4096² map; `low`: 2048²; `off`: no shadow pass, no lookups).
+ * - `?cam=x,z[,distance[,yaw]]` starts the camera on cell (x, z), at that
+ *   distance (world units) and yaw (degrees): reproducible views,
+ *   screenshots.
  */
 export function readUrlFlags(search: string = window.location.search): {
   forceWebGL: boolean
@@ -70,6 +73,7 @@ export function readUrlFlags(search: string = window.location.search): {
   shadows: ShadowQuality
   grid: boolean
   timeOfDay: TimeOfDay
+  camera: CameraView | undefined
 } {
   const params = new URLSearchParams(search)
   const map = params.get('map') ?? 'reference'
@@ -79,12 +83,74 @@ export function readUrlFlags(search: string = window.location.search): {
     forceWebGL: params.get('forceWebGL') === '1',
     map: isTestMapId(map) ? map : 'reference',
     seed: Number.isFinite(seed) ? seed : undefined,
-    size: Number.isFinite(size) ? Math.min(128, Math.max(8, size)) : undefined,
+    size: Number.isFinite(size) ? clampMapSize(size) : undefined,
     mesher: params.get('mesher') === 'blocky' ? 'blocky' : 'faceted',
     shadows: parseShadowQuality(params.get('shadows')),
     grid: params.get('grid') !== 'off',
     timeOfDay: parseTimeOfDay(params.get('time')),
+    camera: parseCameraView(params.get('cam')),
   }
+}
+
+/** Start-up camera view (`?cam=x,z[,distance[,yaw]]`): target cell, distance, yaw in degrees. */
+export interface CameraView {
+  readonly x: number
+  readonly z: number
+  readonly distance?: number
+  readonly yawDeg?: number
+}
+
+/** Parse `?cam=x,z[,distance[,yaw]]`; undefined when absent or malformed. */
+export function parseCameraView(value: string | null): CameraView | undefined {
+  if (!value) return undefined
+  const parts = value.split(',').map((p) => Number.parseFloat(p))
+  const [x, z, distance, yawDeg] = parts
+  if (x === undefined || z === undefined || !Number.isFinite(x) || !Number.isFinite(z)) {
+    return undefined
+  }
+  return {
+    x,
+    z,
+    ...(distance !== undefined && Number.isFinite(distance) ? { distance } : {}),
+    ...(yawDeg !== undefined && Number.isFinite(yawDeg) ? { yawDeg } : {}),
+  }
+}
+
+/** Bounds of the procedural map edge length (`?size=`), in cells. */
+export const MAP_SIZE_RANGE = { min: 8, max: 128 } as const
+
+/** Clamp a procedural map edge length (cells) into {@link MAP_SIZE_RANGE}; rounds to an integer. */
+export function clampMapSize(size: number): number {
+  return Math.min(MAP_SIZE_RANGE.max, Math.max(MAP_SIZE_RANGE.min, Math.round(size)))
+}
+
+/**
+ * Which test map to generate. Held by `App.vue` so the map picker can switch
+ * it at run time; `undefined` seed or size means "generator default".
+ */
+export interface MapSettings {
+  readonly map: TestMapId
+  /** Seed of procedural maps (any 32-bit integer). */
+  readonly seed: number | undefined
+  /** Edge length of procedural maps, in cells, within {@link MAP_SIZE_RANGE}. */
+  readonly size: number | undefined
+}
+
+/**
+ * Query string reproducing `settings`: writes `map`, `seed` and `size` into
+ * `search` and keeps every other parameter (time, shadows, mesher...). Seed
+ * and size are dropped when undefined so the generator defaults apply on
+ * reload. Returns the string with its leading `?` (or an empty string).
+ */
+export function withMapParams(search: string, settings: MapSettings): string {
+  const params = new URLSearchParams(search)
+  params.set('map', settings.map)
+  if (settings.seed === undefined) params.delete('seed')
+  else params.set('seed', String(settings.seed))
+  if (settings.size === undefined) params.delete('size')
+  else params.set('size', String(settings.size))
+  const query = params.toString()
+  return query === '' ? '' : `?${query}`
 }
 
 /** Shadow quality from a URL value; unknown or missing values give `high`. */

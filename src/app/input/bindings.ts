@@ -14,6 +14,7 @@
  * | NumpadAdd / NumpadSubtract | + / - (pad)  | Zoom in / out (held)       |
  * | KeyC or Home               | C or Home    | Reset view (animated)      |
  * | KeyG                       | G            | Show / hide the grid       |
+ * | Digit1 .. Digit6           | 1 .. 6 (row) | Performance probes (debug) |
  * | Arrow keys                 | Arrow keys   | Same as W/A/S/D            |
  *
  * Mouse: left drag = free rotation, middle drag = pan, wheel = zoom. The
@@ -24,6 +25,7 @@
  */
 import type { CameraRig } from '@/render/cameraRig'
 import type { EditActions } from '@/app/editing/debugEdits'
+import { PROBES, type ProbeId } from '@/render/engine'
 
 /** What the bindings drive: the camera rig and the hover cursor. Implemented by `Engine`. */
 export interface InputTarget {
@@ -36,6 +38,8 @@ export interface InputTarget {
   readonly gridVisible: boolean
   /** Show or hide the battle-map grid. */
   setGridVisible(visible: boolean): void
+  /** Flip a performance probe (debug). */
+  toggleProbe(id: ProbeId): void
 }
 
 /** Sensitivity settings, see `config.input`. */
@@ -61,6 +65,21 @@ const ZOOM_KEYS = {
 
 /** Key codes that reset the view. */
 const RESET_KEYS: readonly string[] = ['KeyC', 'Home']
+
+/**
+ * Whether a keyboard event target is a form field or editable element, where
+ * keys are text or list navigation rather than camera shortcuts. Buttons and
+ * range sliders are not included: they do not consume letter keys.
+ */
+export function isTextEntryTarget(target: EventTarget | null): boolean {
+  if (typeof HTMLElement === 'undefined' || !(target instanceof HTMLElement)) return false
+  if (target.isContentEditable) return true
+  if (target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) return true
+  if (target instanceof HTMLInputElement) {
+    return !['button', 'checkbox', 'radio', 'range', 'reset', 'submit'].includes(target.type)
+  }
+  return false
+}
 
 /** Ongoing pointer gesture. */
 type Drag =
@@ -98,6 +117,8 @@ export function bindInputs(
 
   const onKeyDown = (e: KeyboardEvent): void => {
     if (e.ctrlKey || e.metaKey || e.altKey) return
+    // Keys typed into a UI field (map picker seed, select...) are not shortcuts.
+    if (isTextEntryTarget(e.target)) return
     if (e.code === 'KeyQ' || e.code === 'KeyE') {
       // Ignore auto-repeat: one press = one 45-degree step.
       if (!e.repeat) rig.snapRotate(e.code === 'KeyQ' ? -1 : 1)
@@ -105,6 +126,12 @@ export function bindInputs(
     }
     if (e.code === 'KeyG') {
       if (!e.repeat) target.setGridVisible(!target.gridVisible)
+      return
+    }
+    // Digit1..Digit6 (top row): performance probes, in `PROBES` order.
+    const probe = e.code.startsWith('Digit') ? PROBES[Number(e.code.slice(5)) - 1] : undefined
+    if (probe) {
+      if (!e.repeat) target.toggleProbe(probe)
       return
     }
     if (RESET_KEYS.includes(e.code)) {

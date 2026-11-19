@@ -10,6 +10,9 @@
  * - bricks (dressed stone): courses half a voxel high, staggered joints,
  *   mortar lines and a per-brick tint;
  * - bark: vertical streaks;
+ * - wood: grain only (beams and single planks of structures);
+ * - masonry: irregular courses of large stones; stone: mottled, no joints;
+ * - rope: fine diagonal strands;
  * - plain: a light noise variation.
  * Cost per pixel: 1 fetch of the shared noise texture and a few dozen ALU.
  * The battle-map grid is drawn on top faces (`gridOverlay.ts`).
@@ -74,8 +77,9 @@ export function createBlocksMaterial(
   )
 
   // One noise fetch, stretched according to the look (grain, streaks...).
+  const woody = is(BlockLook.PLANKS).or(is(BlockLook.WOOD))
   const noiseUv = select(
-    is(BlockLook.PLANKS),
+    woody,
     vec2(uv.x.mul(0.06), uv.y.mul(0.9)),
     select(
       is(BlockLook.BRICKS),
@@ -115,12 +119,42 @@ export function createBlocksMaterial(
     .mul(grain.mul(0.3).add(0.85))
     .mul(float(1).sub(mortar.mul(0.4)))
 
+  // Masonry: courses 0.3 high, stones of varying length per course.
+  const mCourse = uv.y.div(0.3)
+  const mCourseId = floor(mCourse)
+  const mLength = hash(mCourseId.mul(3.1)).mul(0.35).add(0.5)
+  const mAlong = uv.x.div(mLength).add(hash(mCourseId).mul(5))
+  const mJoint = max(
+    smoothstep(0.42, 0.5, abs(fract(mCourse).sub(0.5))),
+    smoothstep(0.44, 0.5, abs(fract(mAlong).sub(0.5))),
+  )
+  const stoneTint = hash(floor(mAlong).add(mCourseId.mul(11.7)))
+  const masonry = stoneTint
+    .mul(0.3)
+    .add(0.8)
+    .mul(grain.mul(0.35).add(0.82))
+    .mul(float(1).sub(mJoint.mul(0.5)))
+  const stone = grain.mul(0.45).add(0.75)
+  // Rope: fine diagonal strands.
+  const strand = abs(fract(p.x.add(p.y).add(p.z).mul(14)).sub(0.5))
+  const rope = smoothstep(0.05, 0.3, strand).mul(0.35).add(0.7)
   const bark = grain.mul(0.8).add(0.6)
   const plain = grain.mul(0.2).add(0.9)
-  const pattern = select(
-    is(BlockLook.PLANKS),
-    planks,
-    select(is(BlockLook.BRICKS), bricks, select(is(BlockLook.BARK), bark, plain)),
+  // Plain wood: the planks' grain and tint, without seams or joints.
+  const timber = grain.mul(0.4).add(0.8)
+  // Pattern by look, as a chain of selects (one branch per look).
+  const looks: [number, Node<'float'>][] = [
+    [BlockLook.PLANKS, planks],
+    [BlockLook.WOOD, timber],
+    [BlockLook.BRICKS, bricks],
+    [BlockLook.BARK, bark],
+    [BlockLook.MASONRY, masonry],
+    [BlockLook.STONE, stone],
+    [BlockLook.ROPE, rope],
+  ]
+  const pattern = looks.reduceRight<Node<'float'>>(
+    (rest, [id, value]) => select(is(id), value, rest),
+    plain,
   )
   material.colorNode = applyGrid(vertexColor().rgb.mul(pattern), p, f.y, grid)
   return material

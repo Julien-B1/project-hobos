@@ -31,6 +31,7 @@ make up        # dev server, open http://localhost:5173
 | `make typecheck`                | `vue-tsc --build` (app and tooling tsconfigs).          |
 | `make check`                    | Lint, format check, typecheck, tests. Before commits.   |
 | `make build` / `make preview`   | Production build into `dist/` / serve it.               |
+| `make screenshots`              | Headless Chromium captures into `screenshots/`.         |
 | `make sh`                       | Bash inside the container.                              |
 | `make wiki-publish`             | Mirror `docs/wiki/` to the GitHub wiki (host-side git). |
 
@@ -57,6 +58,20 @@ make up        # dev server, open http://localhost:5173
   expected.
 - **WebGPU.** The renderer runs in your browser, not in the container.
   `http://localhost` is a secure context, which WebGPU requires.
+
+## Screenshots
+
+`make screenshots` (`scripts/screenshots.mjs`) starts its own Vite server in
+the container, opens the app in headless Chromium (Playwright, installed in
+the image) and saves one PNG per view into `screenshots/` (git-ignored).
+Without a GPU, the page runs on the WebGL 2 backend rendered in software
+(SwiftShader): slow, and close to but not exactly a real GPU's image.
+Default views: the bridges map and each of its crossings. Custom views:
+`make screenshots VIEWS=screenshots/views.json`, a JSON array of
+`{ "name", "query" }` where the query is the page's URL query, e.g.
+`map=organic&seed=7&cam=16,16,30,35` (`cam=x,z,distance,yaw` frames the
+camera). Playwright is pinned in `package.json` and in the Dockerfile
+(`PLAYWRIGHT_VERSION`); keep them equal, then `make image`.
 
 ## Troubleshooting
 

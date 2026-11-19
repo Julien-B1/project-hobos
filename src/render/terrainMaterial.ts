@@ -17,7 +17,9 @@
  *    so nothing lines up with the cell grid.
  * 3. Steep ground moves weight to dirt (medium slopes) and rock (steep
  *    slopes), from the base surface's smooth slope (per vertex), so the
- *    change is continuous and ignores the crags' facets.
+ *    change is continuous and ignores the crags' facets. Facades of cave
+ *    mouths and arches (flagged earthy by the mesher) stop at dirt; faces
+ *    inside them (flagged rocky) go straight to rock.
  * 4. **Height blending**: each material gets a height, its detail pattern
  *    (grass clumps, pebbles, rock grain, sand ripples) plus a random
  *    large-scale offset. Where materials meet, the highest one wins within a
@@ -179,8 +181,12 @@ export function createTerrainMaterial(
   const p = positionWorld
   const projection = wb.z
   const uv = select(projection.lessThan(0.5), p.xz, select(projection.lessThan(1.5), p.zy, p.xy))
-  // How much the undisplaced surface faces up (weight channel 7, smooth).
-  const up = wb.w
+  // How much the undisplaced surface faces up (weight channel 7, smooth),
+  // shifted by -2 on earthy faces (cave mouth and arch facades) and +2 on
+  // rocky ones (inside caves and arches), see `LOOK_SHIFT`.
+  const earthy = step(wb.w, -0.5)
+  const rockyLook = step(1.5, wb.w)
+  const up = wb.w.add(earthy.mul(2)).sub(rockyLook.mul(2))
   const large = texture(noise, uv.div(LARGE_SCALE))
   const small = texture(noise, uv.div(SMALL_SCALE).add(vec2(0.37, 0.71)))
   const c = Math.cos(DETAIL_ANGLE)
@@ -194,7 +200,9 @@ export function createTerrainMaterial(
   const raw: Node<'float'>[] = [wa.x, wa.y, wa.z, wa.w, wb.x, wb.y]
   const sandShare = raw[SAND] ?? float(0)
   const steep = smoothstep(0.86, 0.6, up).mul(float(1).sub(sandShare.mul(0.7)))
-  const rocky = smoothstep(0.62, 0.35, up)
+  // Earthy faces stop at the earth look (no bare rock around openings);
+  // rocky faces skip it (no earth inside caves and arches).
+  const rocky = max(smoothstep(0.62, 0.35, up).mul(float(1).sub(earthy)), rockyLook)
   const weights = raw.map((w, i) => {
     let out = w.mul(float(1).sub(steep))
     if (i === DIRT) out = out.add(steep.mul(float(1).sub(rocky)))

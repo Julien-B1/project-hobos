@@ -77,6 +77,8 @@ describe('organic map', () => {
       const material = materialOf(v)
       if (isAir(v) || isFoliageMaterial(material) || material === Material.WOOD) return
       if (shape !== Shape.SLOPE && shape !== Shape.CORNERS) return
+      // A structure's deck (a humpbacked bridge) spans the air on purpose.
+      if (organic.structures.owns(x, y, z)) return
       wedges++
       expect(isAir(organic.map.get(x, y - 1, z))).toBe(false) // supported
       voxelTopCorners(v).forEach((h, corner) => {
@@ -171,5 +173,47 @@ describe('organic map', () => {
       const h = organic.heightAt(x, z)
       expect(isAir(organic.map.get(x, h - 1, z))).toBe(false)
     }
+  })
+})
+
+describe('createOrganicMap crossing', () => {
+  it('always crosses the river once, with a walkable crossing', async () => {
+    const { columnSurfaces } = await import('../surface')
+    const { isBridgeSpan, spanLength, spanVoxel } = await import('../structures/bridges/bridgeSpan')
+    const kinds = new Map<string, number>()
+    for (let seed = 1; seed <= 24; seed++) {
+      const organic = createOrganicMap({ seed })
+      // A river has dry land on both sides of its water on some row; a map
+      // flooded wall to wall (a lake) has nothing to cross.
+      const { groundLevel } = await import('../structures/bridges/riverCrossing')
+      const hasBanks = Array.from({ length: organic.size }, (_, z) => z).some((z) => {
+        const row = Array.from({ length: organic.size }, (_, x) => ({
+          wet: materialOf(organic.map.get(x, organic.waterLevel - 1, z)) === Material.WATER,
+          dry: groundLevel(organic.map, x, z) >= organic.waterLevel,
+        }))
+        const firstWet = row.findIndex((c) => c.wet)
+        const lastWet = row.length - 1 - [...row].reverse().findIndex((c) => c.wet)
+        return (
+          firstWet > 0 &&
+          row.slice(0, firstWet).some((c) => c.dry) &&
+          row.slice(lastWet + 1).some((c) => c.dry)
+        )
+      })
+      if (!hasBanks) continue
+      expect(organic.structures.size, `seed ${seed}`).toBe(1)
+      const [crossing] = organic.structures.all
+      if (!crossing || !isBridgeSpan(crossing.params)) throw new Error('no crossing')
+      kinds.set(crossing.kind, (kinds.get(crossing.kind) ?? 0) + 1)
+      const span = crossing.params
+      for (let along = 0; along < spanLength(span); along++) {
+        const v = spanVoxel(span, along, 0, 0)
+        const top = Math.max(...columnSurfaces(organic.map, v.x, v.z, 0, 60)) + 1
+        expect(top, `seed ${seed} ${crossing.kind} at ${along}`).toBeGreaterThanOrEqual(
+          organic.waterLevel - 1,
+        )
+      }
+    }
+    // The seed varies the kind.
+    expect(kinds.size).toBeGreaterThan(2)
   })
 })

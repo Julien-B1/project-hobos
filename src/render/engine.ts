@@ -13,6 +13,8 @@ import { isTerrainMaterial, materialName } from '@/core/materials'
 import { shapeDefinition, topHeightAt, voxelTopCorners } from '@/core/shapes'
 import { resolveColumnHit, resolveHit, type HitFacing, type SurfaceHit } from '@/core/surface'
 import { materialOf, shapeOf } from '@/core/voxel'
+import { defaultStructureKinds } from '@/core/structures/kinds'
+import type { StructureSet } from '@/core/structures/structureSet'
 import type { VoxelMap } from '@/core/voxelMap'
 import { CameraRig, type CameraRigSettings } from './cameraRig'
 import { ChunkRenderer } from './chunkRenderer'
@@ -53,6 +55,26 @@ export interface HoverInfo {
   readonly surfaceShape: string
 }
 
+/**
+ * Performance probes (debug): parts of the frame that can be switched off
+ * one at a time to read their cost in the HUD's GPU time. `halfRes` is the
+ * opposite: on renders at half the pixel ratio (fill-rate bound or not).
+ */
+export const PROBES = ['shadows', 'foliage', 'scatter', 'water', 'terrain', 'halfRes'] as const
+
+/** One performance probe. */
+export type ProbeId = (typeof PROBES)[number]
+
+/** Probe states at start-up: everything drawn, full resolution. */
+const ALL_ON: Readonly<Record<ProbeId, boolean>> = {
+  shadows: true,
+  foliage: true,
+  scatter: true,
+  water: true,
+  terrain: true,
+  halfRes: false,
+}
+
 /** Snapshot of engine state shown by the debug HUD. Replaced, never mutated. */
 export interface EngineHudState {
   /** Backend selected by the renderer. */
@@ -77,6 +99,8 @@ export interface EngineHudState {
   readonly chunkMeshes: number
   /** Last chunk rebuild batch, to check that edits rebuild only what they must. */
   readonly lastRebuild: RebuildInfo | null
+  /** Performance probes: what is switched off to measure its cost. */
+  readonly probes: Readonly<Record<ProbeId, boolean>>
 }
 
 /** Rendering cost of the last measurement window (see `frameStats.ts`). */
@@ -127,6 +151,8 @@ export interface EngineOptions {
   readonly camera: CameraRigSettings
   /** Voxel terrain to display and pick on. The engine only reads it. */
   readonly map: VoxelMap
+  /** Structures of the map (already stamped into it), drawn by their meshers. */
+  readonly structures?: StructureSet
   /**
    * Terrain rendering: `faceted` (terrain as a low-poly height surface, structures and
    * water as blocks) or `blocky` (every voxel as its exact shape).
@@ -161,6 +187,8 @@ export class Engine {
   private readonly scene: Scene
   private readonly lights: SceneHandle
   private readonly sunShadow: SunShadow
+  /** Pixel ratio factor (performance probe `halfRes`). */
+  private resolutionScale = 1
   private readonly rig: CameraRig
   private readonly resizeObserver: ResizeObserver
   private readonly chunks: ChunkRenderer
@@ -169,6 +197,8 @@ export class Engine {
   private readonly highlight: SurfaceHighlight
   /** Fills the section of what the cut slices. */
   private readonly cutCap: CutCap
+  /** Structure kinds (walking surfaces of the structures, for the cursor). */
+  private readonly structureKinds = defaultStructureKinds()
   /** Cut section: stencil companions of the solid layers and the plane they mask. */
   private readonly stencilMaterials: StencilMaterials
   private readonly sectionPlane = new SectionPlane()
@@ -205,7 +235,7 @@ export class Engine {
 
     const mesher =
       options.mesher === 'faceted'
-        ? new HybridMesher(materialColor)
+        ? new HybridMesher(materialColor, options.structures)
         : new BlockyMesher(materialColor)
     this.stencilMaterials = createStencilMaterials(this.layerMaterials.cutHeight)
     this.chunks = new ChunkRenderer(
@@ -233,6 +263,7 @@ export class Engine {
       hover: null,
       chunkMeshes: 0,
       lastRebuild: null,
+      probes: { ...ALL_ON },
     }
     // Every chunk of a freshly generated map is dirty: the first update builds them all.
     this.rebuildDirtyChunks()
@@ -275,6 +306,28 @@ export class Engine {
   setGridVisible(visible: boolean): void {
     this.layerMaterials.gridOpacity.value = visible ? 1 : 0
     this.publish({ ...this.hud, grid: visible })
+  }
+
+  /** Flip a performance probe (debug, see {@link PROBES}). */
+  toggleProbe(id: ProbeId): void {
+    const probes = { ...this.hud.probes, [id]: !this.hud.probes[id] }
+    const on = probes[id]
+    switch (id) {
+      case 'shadows':
+        this.sunShadow.setEnabled(on)
+        break
+      case 'scatter':
+        this.chunks.setLayerVisible('scatter', on)
+        this.chunks.setLayerVisible('props', on)
+        break
+      case 'halfRes':
+        this.resolutionScale = on ? 0.5 : 1
+        this.resize()
+        break
+      default:
+        this.chunks.setLayerVisible(id, on)
+    }
+    this.publish({ ...this.hud, probes })
   }
 
   /** Whether the battle-map grid is shown. */
@@ -447,9 +500,16 @@ export class Engine {
    * voxel's top corners (blocks, and the fallback for terrain).
    */
   private surfaceSampler(hit: SurfaceHit): SurfaceSampler {
-    const { y } = hit.surface
+    const { x, y, z } = hit.surface
     const corners = voxelTopCorners(hit.surfaceValue)
-    return (fx, fz) => (y + topHeightAt(corners, fx, fz)) * VOXEL_HEIGHT
+    const voxelTop: SurfaceSampler = (fx, fz) => (y + topHeightAt(corners, fx, fz)) * VOXEL_HEIGHT
+    // A structure's walking surface may differ from its voxels (a sagging
+    // rope deck): its kind gives the drawn height.
+    const owner = this.options.structures?.ownerOf(x, y, z)
+    const kind = owner ? this.structureKinds.get(owner.kind) : undefined
+    if (!owner || !kind?.surfaceAt) return voxelTop
+    const surfaceAt = kind.surfaceAt.bind(kind)
+    return (fx, fz) => surfaceAt(owner, x + fx, z + fz) ?? voxelTop(fx, fz)
   }
 
   /**
@@ -549,7 +609,7 @@ export class Engine {
     const width = Math.max(1, this.canvas.clientWidth)
     const height = Math.max(1, this.canvas.clientHeight)
     const renderer = this.handle.renderer
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2) * this.resolutionScale)
     renderer.setSize(width, height, false)
     this.rig.setAspect(width / height)
   }

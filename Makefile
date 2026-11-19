@@ -23,7 +23,7 @@ RUN     := $(COMPOSE) run --rm app
 
 .DEFAULT_GOAL := help
 
-.PHONY: help image install up down test test-watch lint format format-check typecheck build preview check sh wiki-publish clean
+.PHONY: help image install up down test test-watch lint format format-check typecheck build preview check screenshots sh wiki-publish clean
 
 help: ## List available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -65,6 +65,9 @@ preview: ## Serve the production build on http://localhost:5173
 	$(COMPOSE) run --rm --service-ports app pnpm preview
 
 check: lint format-check typecheck test ## Lint + format check + type-check + tests (run before each commit)
+
+screenshots: ## Screenshots of the app in headless Chromium into screenshots/ (VIEWS=file.json for custom views)
+	$(RUN) node scripts/screenshots.mjs $(VIEWS)
 
 sh: ## Open a shell inside the dev container
 	$(RUN) bash

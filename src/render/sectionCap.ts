@@ -40,6 +40,7 @@ import {
   type Node,
   type UniformNode,
 } from 'three/webgpu'
+import { encodeOutput } from './outputEncoding'
 import { sectionColor } from './terrainMaterial'
 
 /** Value the stencil buffer is cleared to; counts above it mean "inside". */
@@ -138,6 +139,7 @@ export class SectionPlane {
     })
     this.material.name = 'section plane'
     this.material.colorNode = sectionColor(base)
+    encodeOutput(this.material)
     const geometry = new PlaneGeometry(2 * PLANE_HALF, 2 * PLANE_HALF)
     geometry.rotateX(-Math.PI / 2)
     this.mesh = new Mesh(geometry, this.material)

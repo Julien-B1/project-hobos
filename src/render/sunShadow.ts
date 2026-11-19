@@ -76,6 +76,12 @@ export class SunShadow {
     this.frameKey = ''
   }
 
+  /** Turn the shadows on or off (performance probe); no effect with quality 'off'. */
+  setEnabled(enabled: boolean): void {
+    this.sun.castShadow = enabled && this.quality !== 'off'
+    this.frameKey = ''
+  }
+
   /** Force a new shadow pass on the next `update()` (what casts shadows changed). */
   invalidate(): void {
     this.frameKey = ''

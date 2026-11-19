@@ -43,8 +43,16 @@ App.vue
   `onBeforeUnmount`. It is kept in a plain variable, never in reactive state.
 - The engine pushes immutable HUD snapshots (`EngineHudState`) through a
   callback, at most a few times per second. Vue only stores the latest one.
-  `GameCanvas.vue` also emits a `SessionInfo` once (map, resolved seed,
-  mesher), so screenshots of the HUD are self-describing.
+  `GameCanvas.vue` also emits a `SessionInfo` once per map (map, resolved
+  seed, mesher), so screenshots of the HUD are self-describing.
+- **Map switching** (`MapPicker.vue`, bottom right): `App.vue` holds the map
+  settings (`MapSettings`: map id, seed, size). Loading a map replaces them
+  and bumps the `key` of `GameCanvas`, so Vue unmounts it (engine disposed,
+  input listeners removed, animation loop stopped) and mounts a fresh one on
+  a new canvas. The engine needs no "swap map" API. Time of day, cut and
+  grid visibility live in `App.vue` and carry over; the URL is rewritten
+  with `history.replaceState` (other query parameters kept). Keyboard
+  shortcuts ignore keys typed into form fields (`isTextEntryTarget`).
 - **Debug figures** (`render/frameStats.ts`, averaged over 0.5 s): FPS; GPU
   time per frame from timestamp queries (`trackTimestamp`, one readback in
   flight) and the derived GPU load (GPU time / frame interval: the page's
@@ -203,7 +211,15 @@ scatter, props), each layer with its own shared material
   so the ground stays level in front of a mouth and the hill keeps a
   vertical face there; undersides are vaulted (`cornerBottoms`: corners
   against the side walls drop by half the opening's height, plus a random
-  offset), so openings are irregular arches.
+  offset), so openings are irregular arches; the crags are stronger there
+  (0.4 unit within 2 cells of an overhang) so the outline is irregular too.
+  The mesher gives each face a look for the shader's slope rule
+  (`FaceLook`, encoded as an offset of the up channel, `LOOK_SHIFT`):
+  `rocky` inside (vaults, walls facing the roofed space: steep parts go
+  straight to rock, never to earth), `earthy` on the facade around the
+  opening (walls next to a roofed gap or belonging to its roof, facing
+  open air: steep parts stop at earth, like the slopes around), `plain`
+  elsewhere.
 - **Crags** (`meshing/terrainMesher.ts` `Crag`, `meshing/polygonSplit.ts`):
   where the relief around a lattice point is marked (run tops differing by
   2.5 levels or more, full at 7), terrain faces are cut by the half-cell
@@ -221,7 +237,9 @@ scatter, props), each layer with its own shared material
   the undisplaced face's texture projection plane and upward facing (weight
   channels `PROJECTION_CHANNEL`, `UP_CHANNEL`): the terrain shader
   projects textures and applies the slope rule from them, so the small
-  facets keep one coherent texture. The cut section and the hover
+  facets keep one coherent texture. Facet normals are mixed half and half
+  with the undisplaced face's normal (`CRAG_SOFTEN`) and the noise is
+  broad (0.6 per unit): faceted rock without crumpled-paper contrasts. The cut section and the hover
   highlight follow the drawn mesh (stencil capping, mesh pieces).
 - **Battle-map grid** (`render/gridOverlay.ts`): the terrain, blocks and
   water shaders darken the cell borders (integer x, z) with thin,
@@ -246,7 +264,13 @@ scatter, props), each layer with its own shared material
   background). The picker in the app (`TimeOfDayPicker.vue`) and
   `?time=<id>` choose it; the engine relights live, reframes the shadow and
   updates the water sheen uniforms (`render/lightUniforms.ts`); Khronos PBR Neutral tone mapping (rolls off
-  highlights, keeps the palette). Sun shadows (`render/sunShadow.ts`,
+  highlights, keeps the palette), applied with sRGB encoding at the end of
+  every visible material (`render/outputEncoding.ts`): the renderer itself
+  has no tone mapping and stays in the working colour space, so it draws
+  straight into the canvas instead of a half-float intermediate target
+  copied by a full-screen pass (a fixed per-pixel cost, measured at about
+  11 ms of 11 ms per frame at 1906 x 1271 in WebGL 2). The background is
+  given as an already encoded colour (`canvasColor`). Sun shadows (`render/sunShadow.ts`,
   framing maths in `render/shadowMath.ts`): one orthographic shadow map
   centred on the camera target, sized from the camera distance in
   2^(1/4) steps and snapped to its texel grid (no shimmering while

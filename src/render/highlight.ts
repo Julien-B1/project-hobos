@@ -10,6 +10,7 @@
  * engine decides how to sample; this class only owns the geometry.
  */
 import { positionWorld } from 'three/tsl'
+import { encodeOutput } from './outputEncoding'
 import {
   BufferAttribute,
   BufferGeometry,
@@ -53,6 +54,7 @@ export class SurfaceHighlight {
       side: DoubleSide,
     })
     material.maskNode = positionWorld.y.lessThan(cutHeight)
+    encodeOutput(material)
     this.mesh = new Mesh(geometry, material)
     this.mesh.name = 'surface-highlight'
     this.mesh.visible = false

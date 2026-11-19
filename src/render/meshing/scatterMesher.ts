@@ -29,7 +29,7 @@
  */
 import type { Chunk } from '@/core/chunk'
 import { CHUNK_SIZE, VOXEL_HEIGHT } from '@/core/coords'
-import { Material } from '@/core/materials'
+import { Material, isFoliageMaterial, isTerrainMaterial } from '@/core/materials'
 import { hash01 } from '@/core/noise'
 import {
   TERRAIN_CHANNELS,
@@ -42,6 +42,7 @@ import { CANOPY_REACH, findTrunks, treeKind, type Trunk } from '@/core/trees'
 import { isAir, materialOf, type Voxel } from '@/core/voxel'
 import type { VoxelMap } from '@/core/voxelMap'
 import { ATLAS_CELLS, AtlasRow, ScatterCell } from '../leafTexture'
+import { ICO_FACES, ICO_VERTICES } from '../geometry/primitives'
 import { MeshBuilder, normalize, srgbHexToLinear, type Vec3 } from './meshBuilder'
 import type { MeshData } from './mesher'
 import { waterSurfaceNear } from './terrainMesher'
@@ -78,7 +79,16 @@ export class ScatterMesher {
   constructor(private readonly isTerrain: (voxel: Voxel) => boolean) {}
 
   /** Mesh the decorations of one chunk. */
-  mesh(map: VoxelMap, chunk: Chunk): ScatterMeshes {
+  /**
+   * Mesh the decorations of one chunk. `blocked(x, y, z)` marks ground
+   * left bare whatever the voxels say (the footprint of structures: a deck
+   * resting on a bank has no voxel of its own there).
+   */
+  mesh(
+    map: VoxelMap,
+    chunk: Chunk,
+    blocked: (x: number, y: number, z: number) => boolean = () => false,
+  ): ScatterMeshes {
     const ox = chunk.cx * CHUNK_SIZE
     const oy = chunk.cy * CHUNK_SIZE
     const oz = chunk.cz * CHUNK_SIZE
@@ -98,8 +108,10 @@ export class ScatterMesher {
       for (let x = ox; x < ox + CHUNK_SIZE; x++) {
         for (const run of field.runsAt(x, z)) {
           if (!Number.isFinite(run.top) || run.topY < oy || run.topY >= oy + CHUNK_SIZE) continue
-          const above = map.get(x, run.topY + 1, z)
-          if (!isAir(above) && materialOf(above) !== Material.WATER) continue // covered
+          // Tall items (reeds) also lean over the neighbouring cells: keep
+          // clear of anything built right beside (a bridge deck).
+          if (covered(map, x, run.topY, z) || coveredAround(map, x, run.topY, z)) continue
+          if (blocked(x, run.topY + 1, z)) continue
           const cell: Cell = {
             x,
             z,
@@ -282,47 +294,6 @@ function fallenLeaf(out: MeshBuilder, base: Vec3, tree: Trunk, h: (k: number) =>
   )
 }
 
-/** Icosahedron vertices (unit sphere) and faces. */
-const PHI = (1 + Math.sqrt(5)) / 2
-const ICO_VERTICES: readonly Vec3[] = (
-  [
-    [-1, PHI, 0],
-    [1, PHI, 0],
-    [-1, -PHI, 0],
-    [1, -PHI, 0],
-    [0, -1, PHI],
-    [0, 1, PHI],
-    [0, -1, -PHI],
-    [0, 1, -PHI],
-    [PHI, 0, -1],
-    [PHI, 0, 1],
-    [-PHI, 0, -1],
-    [-PHI, 0, 1],
-  ] as const
-).map((v) => normalize(v))
-const ICO_FACES: readonly (readonly [number, number, number])[] = [
-  [0, 11, 5],
-  [0, 5, 1],
-  [0, 1, 7],
-  [0, 7, 10],
-  [0, 10, 11],
-  [1, 5, 9],
-  [5, 11, 4],
-  [11, 10, 2],
-  [10, 7, 6],
-  [7, 1, 8],
-  [3, 9, 4],
-  [3, 4, 2],
-  [3, 2, 6],
-  [3, 6, 8],
-  [3, 8, 9],
-  [4, 9, 5],
-  [2, 4, 11],
-  [6, 2, 10],
-  [8, 6, 7],
-  [9, 8, 1],
-]
-
 /**
  * A low-poly rock of radius about `radius` (world units) sunk into the
  * ground at `base`: an icosahedron with jittered vertices, squashed and
@@ -371,4 +342,45 @@ function rock(out: MeshBuilder, base: Vec3, radius: number, h: (k: number) => nu
     )
     out.smoothPolygon([p0, p1, p2], normals, outward, tint)
   }
+}
+
+/**
+ * Levels above a ground top that must be free of anything solid for
+ * decoration to grow there: the tallest items (reeds, about 1.5 world
+ * units) must not poke through a bridge deck or a ceiling.
+ */
+const HEADROOM_LEVELS = 4
+
+/**
+ * Whether something solid lies within the headroom above (x, topY, z).
+ * Water and foliage do not count (under a canopy the ground stays
+ * decorated); the voxel right above always does.
+ */
+function covered(map: VoxelMap, x: number, topY: number, z: number): boolean {
+  for (let y = topY + 1; y <= topY + HEADROOM_LEVELS; y++) {
+    const v = map.get(x, y, z)
+    if (isAir(v)) continue
+    const m = materialOf(v)
+    if (m === Material.WATER) continue
+    if (isFoliageMaterial(m) && y > topY + 1) continue
+    return true
+  }
+  return false
+}
+
+/** Whether a solid, non-foliage voxel stands within the headroom of a neighbouring cell. */
+function coveredAround(map: VoxelMap, x: number, topY: number, z: number): boolean {
+  for (let dz = -1; dz <= 1; dz++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      if (dx === 0 && dz === 0) continue
+      for (let y = topY + 1; y <= topY + HEADROOM_LEVELS; y++) {
+        const v = map.get(x + dx, y, z + dz)
+        if (isAir(v)) continue
+        const m = materialOf(v)
+        if (m === Material.WATER || isFoliageMaterial(m) || isTerrainMaterial(m)) continue
+        return true
+      }
+    }
+  }
+  return false
 }

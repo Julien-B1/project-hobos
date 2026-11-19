@@ -13,6 +13,7 @@ import { vec3, vertexColor } from 'three/tsl'
 import { BufferAttribute, BufferGeometry, Mesh, MeshStandardNodeMaterial } from 'three/webgpu'
 import type { VoxelMap } from '@/core/voxelMap'
 import type { CapMesher } from './meshing/capMesher'
+import { encodeOutput } from './outputEncoding'
 import { sectionColor } from './terrainMaterial'
 
 /** Owns the cap mesh. Add {@link CutCap.mesh} to the scene. */
@@ -30,6 +31,7 @@ export class CutCap {
     this.material.colorNode = vec3(0)
     this.material.emissiveNode = sectionColor(vertexColor().rgb)
     // Drawn over the section plane (same height) that fills everything else.
+    encodeOutput(this.material)
     this.material.polygonOffset = true
     this.material.polygonOffsetFactor = -1
     this.material.polygonOffsetUnits = -4
