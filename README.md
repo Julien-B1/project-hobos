@@ -69,6 +69,7 @@ Camera settings (pitch, FOV, zoom bounds, speeds) live in `src/app/config.ts`.
 
 ## Documentation
 
-- Wiki (architecture, conventions, extending the engine): the GitHub wiki of
-  this repository, sourced from [`docs/wiki/`](docs/wiki/).
+- [Wiki](https://github.com/Julien-B1/project-hobos/wiki) (architecture,
+  conventions, development environment, decisions), sourced from
+  [`docs/wiki/`](docs/wiki/).
 - Rules for contributors and AI agents: [`AGENTS.md`](AGENTS.md).
