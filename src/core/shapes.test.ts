@@ -4,6 +4,7 @@ import {
   FACE_NORMALS,
   Face,
   FaceProfile,
+  ORIENTATION_OFFSETS,
   Orientation,
   SHAPES,
   Shape,
@@ -82,5 +83,14 @@ describe('top surface height', () => {
     const north = voxelTopCorners(slope(Orientation.NORTH))
     expect(topHeightAt(north, 0.5, 0)).toBeCloseTo(1)
     expect(topHeightAt(north, 0.5, 1)).toBeCloseTo(0)
+  })
+})
+
+describe('orientation offsets', () => {
+  it('point north to -Z, east to +X, south to +Z, west to -X', () => {
+    expect(ORIENTATION_OFFSETS[Orientation.NORTH]).toEqual([0, -1])
+    expect(ORIENTATION_OFFSETS[Orientation.EAST]).toEqual([1, 0])
+    expect(ORIENTATION_OFFSETS[Orientation.SOUTH]).toEqual([0, 1])
+    expect(ORIENTATION_OFFSETS[Orientation.WEST]).toEqual([-1, 0])
   })
 })

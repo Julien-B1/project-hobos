@@ -1,0 +1,86 @@
+import { describe, expect, it } from 'vitest'
+import { Material } from '../materials'
+import { ORIENTATION_OFFSETS, Shape } from '../shapes'
+import { columnSurfaces } from '../surface'
+import { isAir, materialOf, orientationOf, shapeOf } from '../voxel'
+import type { VoxelMap } from '../voxelMap'
+import { createOrganicMap } from './organicMap'
+
+const SIZE = 64
+const organic = createOrganicMap({ seed: 7, size: SIZE })
+
+/** Flat copy of every chunk, for equality checks. */
+const snapshot = (map: VoxelMap): Map<string, number[]> =>
+  new Map([...map.chunks()].map((c) => [c.key, Array.from(c.voxels)]))
+
+/** Visit every voxel of the map footprint up to `maxY`. */
+function forEachVoxel(
+  map: VoxelMap,
+  maxY: number,
+  visit: (x: number, y: number, z: number, v: number) => void,
+): void {
+  for (let z = 0; z < SIZE; z++)
+    for (let x = 0; x < SIZE; x++) for (let y = 0; y <= maxY; y++) visit(x, y, z, map.get(x, y, z))
+}
+
+describe('organic map', () => {
+  it('is deterministic for a seed and changes with the seed', () => {
+    const again = createOrganicMap({ seed: 7, size: SIZE })
+    const other = createOrganicMap({ seed: 8, size: SIZE })
+    expect(snapshot(again.map)).toEqual(snapshot(organic.map))
+    expect(snapshot(other.map)).not.toEqual(snapshot(organic.map))
+  })
+
+  it('has ground in every column of its footprint', () => {
+    for (let z = 0; z < SIZE; z++)
+      for (let x = 0; x < SIZE; x++) {
+        expect(columnSurfaces(organic.map, x, z, 0, 60).length).toBeGreaterThan(0)
+      }
+  })
+
+  it('has water, only below the water level', () => {
+    let water = 0
+    forEachVoxel(organic.map, 60, (_x, y, _z, v) => {
+      if (materialOf(v) !== Material.WATER) return
+      water++
+      expect(y).toBeLessThan(organic.waterLevel)
+    })
+    expect(water).toBeGreaterThan(0)
+  })
+
+  it('places every slope against a higher neighbour, rising towards it', () => {
+    let slopes = 0
+    forEachVoxel(organic.map, 60, (x, y, z, v) => {
+      if (isAir(v) || shapeOf(v) !== Shape.SLOPE) return
+      slopes++
+      const [dx, dz] = ORIENTATION_OFFSETS[orientationOf(v)] ?? [0, 0]
+      // High side: the neighbour is solid at the slope's level.
+      expect(isAir(organic.map.get(x + dx, y, z + dz))).toBe(false)
+      // Support: solid below the slope.
+      expect(isAir(organic.map.get(x, y - 1, z))).toBe(false)
+    })
+    expect(slopes).toBeGreaterThan(50)
+  })
+
+  it('grows trees with trunks and leaves', () => {
+    let wood = 0
+    let leaves = 0
+    forEachVoxel(organic.map, 60, (_x, _y, _z, v) => {
+      if (materialOf(v) === Material.WOOD) wood++
+      if (materialOf(v) === Material.LEAVES) leaves++
+    })
+    expect(wood).toBeGreaterThan(0)
+    expect(leaves).toBeGreaterThan(wood)
+  })
+
+  it('reports column heights consistent with the voxels', () => {
+    for (const [x, z] of [
+      [3, 3],
+      [30, 40],
+      [60, 10],
+    ] as const) {
+      const h = organic.heightAt(x, z)
+      expect(isAir(organic.map.get(x, h - 1, z))).toBe(false)
+    }
+  })
+})

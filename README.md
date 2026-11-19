@@ -50,8 +50,9 @@ make build       # production build into dist/
 make sh          # shell inside the container
 ```
 
-URL switches: `?forceWebGL=1` forces the WebGL 2 backend; `?map=flat` loads
-the flat test map instead of the reference map.
+URL switches: `?forceWebGL=1` forces the WebGL 2 backend; `?map=flat` or
+`?map=organic` (with optional `&seed=42`) loads another test map instead of
+the reference map.
 
 ### Controls
 

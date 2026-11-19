@@ -19,6 +19,7 @@ export const Material = {
   WATER: 6,
   WOOD: 7,
   PATH: 8,
+  LEAVES: 9,
 } as const
 
 /** A material id from {@link Material}. */

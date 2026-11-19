@@ -28,7 +28,7 @@ let unmounted = false
 onMounted(async () => {
   if (!canvas.value) return
   const flags = readUrlFlags()
-  const world = createTestMap(flags.map)
+  const world = createTestMap(flags.map, flags.seed === undefined ? {} : { seed: flags.seed })
   try {
     const created = await Engine.create(canvas.value, {
       forceWebGL: flags.forceWebGL,

@@ -46,16 +46,20 @@ export const config = {
  * Read debug switches from the page URL.
  *
  * - `?forceWebGL=1` forces the WebGL 2 backend to test the fallback path.
- * - `?map=<id>` picks a test map (`reference` by default, `flat`).
+ * - `?map=<id>` picks a test map (`reference` by default, `flat`, `organic`).
+ * - `?seed=<integer>` changes the seed of procedural maps (`organic`).
  */
 export function readUrlFlags(search: string = window.location.search): {
   forceWebGL: boolean
   map: TestMapId
+  seed: number | undefined
 } {
   const params = new URLSearchParams(search)
   const map = params.get('map') ?? 'reference'
+  const seed = Number.parseInt(params.get('seed') ?? '', 10)
   return {
     forceWebGL: params.get('forceWebGL') === '1',
     map: isTestMapId(map) ? map : 'reference',
+    seed: Number.isFinite(seed) ? seed : undefined,
   }
 }

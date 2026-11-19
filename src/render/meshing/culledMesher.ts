@@ -120,7 +120,17 @@ export class CulledMesher implements ChunkMesher {
         for (let lx = 0; lx < CHUNK_SIZE; lx++) {
           const voxel = chunk.get(lx, ly, lz)
           if (isAir(voxel)) continue
-          this.meshVoxel(out, map, ox + lx, oy + ly, oz + lz, voxel)
+          // Neighbours inside the chunk are read directly (fast path); only
+          // border voxels go through the map's chunk lookup.
+          const neighbourAt = (dx: number, dy: number, dz: number): number => {
+            const nx = lx + dx
+            const ny = ly + dy
+            const nz = lz + dz
+            const inChunk =
+              nx >= 0 && ny >= 0 && nz >= 0 && nx < CHUNK_SIZE && ny < CHUNK_SIZE && nz < CHUNK_SIZE
+            return inChunk ? chunk.get(nx, ny, nz) : map.get(ox + nx, oy + ny, oz + nz)
+          }
+          this.meshVoxel(out, neighbourAt, ox + lx, oy + ly, oz + lz, voxel)
         }
       }
     }
@@ -130,7 +140,7 @@ export class CulledMesher implements ChunkMesher {
   /** Emit the visible faces of the voxel at world voxel coordinates (x, y, z). */
   private meshVoxel(
     out: MeshBuilder,
-    map: VoxelMap,
+    neighbourAt: (dx: number, dy: number, dz: number) => number,
     x: number,
     y: number,
     z: number,
@@ -147,7 +157,7 @@ export class CulledMesher implements ChunkMesher {
       const isSlopedTop = face === Face.PY && own !== FaceProfile.FULL
       if (!isSlopedTop) {
         const n = FACE_NORMALS[face] ?? [0, 0, 0]
-        const neighbour = map.get(x + n[0], y + n[1], z + n[2])
+        const neighbour = neighbourAt(n[0], n[1], n[2])
         if (faceProfile(neighbour, oppositeFace(face)) === FaceProfile.FULL) continue
       }
 

@@ -51,6 +51,17 @@ export const Orientation = {
 export type OrientationId = (typeof Orientation)[keyof typeof Orientation]
 
 /**
+ * Horizontal unit offset (dx, dz) of each orientation, indexed by
+ * orientation id: NORTH (0, -1), EAST (1, 0), SOUTH (0, 1), WEST (-1, 0).
+ */
+export const ORIENTATION_OFFSETS: readonly (readonly [number, number])[] = [
+  [0, -1],
+  [1, 0],
+  [0, 1],
+  [-1, 0],
+]
+
+/**
  * Axis-aligned faces of a voxel cell. Opposite faces differ only by their
  * lowest bit, so `face ^ 1` is the opposite face.
  */

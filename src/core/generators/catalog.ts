@@ -7,10 +7,11 @@
 import { VOXEL_HEIGHT } from '../coords'
 import type { VoxelMap } from '../voxelMap'
 import { createFlatMap } from './flatMap'
+import { createOrganicMap } from './organicMap'
 import { REFERENCE_LAYOUT, createReferenceMap } from './referenceMap'
 
 /** Identifiers of the available test maps. */
-export const TEST_MAP_IDS = ['reference', 'flat'] as const
+export const TEST_MAP_IDS = ['reference', 'flat', 'organic'] as const
 
 /** One of {@link TEST_MAP_IDS}. */
 export type TestMapId = (typeof TEST_MAP_IDS)[number]
@@ -32,8 +33,14 @@ export function isTestMapId(value: string): value is TestMapId {
   return (TEST_MAP_IDS as readonly string[]).includes(value)
 }
 
+/** Options for {@link createTestMap}. */
+export interface TestMapOptions {
+  /** Seed for procedural maps (ignored by fixed maps). */
+  readonly seed?: number
+}
+
 /** Generate a test map by id. */
-export function createTestMap(id: TestMapId): TestMap {
+export function createTestMap(id: TestMapId, options: TestMapOptions = {}): TestMap {
   switch (id) {
     case 'reference': {
       const { width, depth } = REFERENCE_LAYOUT.size
@@ -43,6 +50,17 @@ export function createTestMap(id: TestMapId): TestMap {
         width,
         depth,
         home: { x: width / 2, y: REFERENCE_LAYOUT.groundTop * VOXEL_HEIGHT, z: depth / 2 },
+      }
+    }
+    case 'organic': {
+      const organic = createOrganicMap(options.seed === undefined ? {} : { seed: options.seed })
+      const c = organic.size / 2
+      return {
+        id,
+        map: organic.map,
+        width: organic.size,
+        depth: organic.size,
+        home: { x: c, y: organic.heightAt(c, c) * VOXEL_HEIGHT, z: c },
       }
     }
     case 'flat':

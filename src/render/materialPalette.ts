@@ -20,6 +20,7 @@ const PALETTE: Readonly<Record<MaterialId, number>> = {
   [Material.WATER]: 0x3f7fb8,
   [Material.WOOD]: 0x9b6b3c,
   [Material.PATH]: 0xb9a27a,
+  [Material.LEAVES]: 0x4f7d3a,
 }
 
 /** Colour shown for ids missing from the palette. */

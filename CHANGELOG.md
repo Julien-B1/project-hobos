@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Seeded noise utilities in core: lattice hash, smooth value noise, fBm,
+  smoothstep. Deterministic across platforms.
+- Organic test map (`?map=organic`, `?seed=<n>`): 128 x 128 procedural
+  terrain with fractal hills and plains, a meandering river with blended
+  banks and lakes, sand shores, rocky steep ground and peaks, automatic
+  slopes on one-level steps, and trees (trunk + leaf canopy) denser in
+  forest patches. New `LEAVES` material.
+
+### Changed
+
+- Culled mesher reads in-chunk neighbours directly instead of through the
+  map (about 3x fewer chunk lookups when meshing large maps).
+
 ## [0.2.0] - 2026-11-19
 
 ### Added
