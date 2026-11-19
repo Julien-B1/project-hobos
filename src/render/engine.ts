@@ -6,13 +6,15 @@
  * app must keep the engine out of reactive state (plain variable or
  * `markRaw`) so Three.js objects are never proxied.
  */
-import { Raycaster, Vector2, type Mesh, type Scene } from 'three/webgpu'
+import { Raycaster, Vector2, type Scene } from 'three/webgpu'
 import { worldToCell, type CellCoord } from '@/core/coords'
-import type { FlatGrid } from '@/core/generators/flatGrid'
+import type { VoxelMap } from '@/core/voxelMap'
 import { CameraRig, type CameraRigSettings } from './cameraRig'
+import { ChunkRenderer } from './chunkRenderer'
 import { createRenderer, type RenderBackend, type RendererHandle } from './createRenderer'
-import { createGridMesh } from './gridMesh'
 import { CellHighlight } from './highlight'
+import { materialColor } from './materialPalette'
+import { CulledMesher } from './meshing/culledMesher'
 import { createScene } from './sceneSetup'
 
 /** Snapshot of engine state shown by the debug HUD. Replaced, never mutated. */
@@ -21,8 +23,10 @@ export interface EngineHudState {
   readonly backend: RenderBackend
   /** Frames per second, averaged over the last measurement window. */
   readonly fps: number
-  /** Cell under the mouse cursor, or null when the cursor is off the grid. */
+  /** Cell under the mouse cursor, or null when the cursor is off the terrain. */
   readonly hoveredCell: CellCoord | null
+  /** Number of chunk meshes in the scene. */
+  readonly chunkMeshes: number
 }
 
 /** Options for {@link Engine.create}. */
@@ -31,8 +35,8 @@ export interface EngineOptions {
   readonly forceWebGL: boolean
   /** Orbit camera settings. */
   readonly camera: CameraRigSettings
-  /** Ground grid to display and pick on. */
-  readonly grid: FlatGrid
+  /** Voxel terrain to display and pick on. The engine only reads it. */
+  readonly map: VoxelMap
   /** Called when HUD-visible state changes (at most a few times per second for FPS). */
   readonly onHudChange: (state: EngineHudState) => void
 }
@@ -56,7 +60,7 @@ export class Engine {
   private readonly scene: Scene
   private readonly rig: CameraRig
   private readonly resizeObserver: ResizeObserver
-  private readonly gridMesh: Mesh
+  private readonly chunks: ChunkRenderer
   private readonly highlight = new CellHighlight()
   private readonly raycaster = new Raycaster()
   /** Cursor in normalised device coordinates, or null when outside the canvas. */
@@ -74,11 +78,18 @@ export class Engine {
     this.scene = createScene()
     this.rig = new CameraRig(options.camera)
 
-    this.gridMesh = createGridMesh(options.grid)
-    this.scene.add(this.gridMesh)
+    this.chunks = new ChunkRenderer(options.map, new CulledMesher(materialColor))
+    // Every chunk of a freshly generated map is dirty: the first update builds them all.
+    this.chunks.update()
+    this.scene.add(this.chunks.group)
     this.scene.add(this.highlight.mesh)
 
-    this.hud = { backend: handle.backend, fps: 0, hoveredCell: null }
+    this.hud = {
+      backend: handle.backend,
+      fps: 0,
+      hoveredCell: null,
+      chunkMeshes: this.chunks.meshCount,
+    }
 
     // Observe the canvas itself: it is sized by CSS, the renderer follows.
     this.resizeObserver = new ResizeObserver(() => {
@@ -128,6 +139,7 @@ export class Engine {
   dispose(): void {
     void this.handle.renderer.setAnimationLoop(null)
     this.resizeObserver.disconnect()
+    this.chunks.dispose()
     // dispose() is async in WebGPURenderer; nothing to wait for on teardown.
     void this.handle.renderer.dispose()
   }
@@ -137,26 +149,27 @@ export class Engine {
     const dt = this.lastFrameTime === null ? 0 : (time - this.lastFrameTime) / 1000
     this.lastFrameTime = time
     this.rig.update(Math.min(dt, MAX_FRAME_DT))
+    this.chunks.update()
     // Pick every frame: the camera may move under a still cursor.
     this.updateHover()
     this.updateFps(time)
     this.handle.renderer.render(this.scene, this.rig.camera)
   }
 
-  /** Raycast the cursor against the grid and update highlight and HUD. */
+  /** Raycast the cursor against the chunk meshes and update highlight and HUD. */
   private updateHover(): void {
     let cell: CellCoord | null = null
+    let height = 0
     if (this.pointerNdc) {
       this.raycaster.setFromCamera(this.pointerNdc, this.rig.camera)
-      const hit = this.raycaster.intersectObject(this.gridMesh, false)[0]
+      const hit = this.raycaster.intersectObjects(this.chunks.pickables, false)[0]
       if (hit) {
-        const candidate = worldToCell(hit.point.x, hit.point.z)
-        // A hit exactly on the far border floors to a cell outside the grid.
-        if (this.options.grid.contains(candidate)) cell = candidate
+        cell = worldToCell(hit.point.x, hit.point.z)
+        height = hit.point.y
       }
     }
 
-    if (cell) this.highlight.showCell(cell.x, cell.z, 0)
+    if (cell) this.highlight.showCell(cell.x, cell.z, height)
     else this.highlight.hide()
 
     const previous = this.hud.hoveredCell

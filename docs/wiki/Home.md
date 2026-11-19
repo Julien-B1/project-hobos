@@ -11,6 +11,7 @@ documentation; the repository README only covers setup and daily usage.
 
 - [[Architecture]]: layers and import rules, tooling.
 - [[Reference Map|Reference-Map]]: layout of the deterministic test map and key columns to check.
+- [[Extending]]: add materials, shapes, meshers, test maps.
 - [[Conventions]]: world frame, units, voxel levels, camera and input conventions.
 - [[Development Environment|Development-Environment]]: Docker stack, `make`
   targets, dev container, troubleshooting.

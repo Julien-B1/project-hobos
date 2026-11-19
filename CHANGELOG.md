@@ -20,10 +20,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Deterministic reference map: base ground, river trench with low bank path,
   bridge over path and river with slope ramps, cliff with a slope ramp, hill
   crossed by a tunnel. Wiki page _Reference-Map_.
+- Chunk meshing: `ChunkMesher` interface producing typed arrays, `CulledMesher`
+  with face culling against neighbours (across chunks), dedicated slope
+  geometry (triangular sides, sloped top), per-material vertex colours.
+- `ChunkRenderer`: one mesh per chunk, rebuilt from the map's dirty set.
+- Test map catalog with `?map=reference|flat`; flat voxel test map.
+- Debug HUD shows the number of chunk meshes. Wiki page _Extending_.
 
 ### Changed
 
+- The engine renders a voxel map instead of the step 1 flat grid; default
+  camera distance raised to frame the 64 x 64 reference map.
+
 - Branch model: `master` holds only the README, work happens on `dev`.
+
+### Removed
+
+- Step 1 flat grid (`core/generators/flatGrid`, `render/gridMesh`),
+  superseded by the flat voxel test map.
 
 ### Fixed
 

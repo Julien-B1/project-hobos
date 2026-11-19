@@ -5,6 +5,7 @@
  * them to tweak the feel without touching engine code.
  */
 import type { CameraRigSettings } from '@/render/cameraRig'
+import { isTestMapId, type TestMapId } from '@/core/generators/catalog'
 
 /** Settings consumed when the engine and input bindings are created. */
 export const config = {
@@ -19,7 +20,7 @@ export const config = {
     pitchDeg: 40,
     initialYawDeg: 45,
     snapStepDeg: 45,
-    initialDistance: 45,
+    initialDistance: 60,
     minDistance: 10,
     maxDistance: 110,
     /** Keyboard pan speed, as a fraction of the camera distance per second. */
@@ -44,9 +45,17 @@ export const config = {
 /**
  * Read debug switches from the page URL.
  *
- * `?forceWebGL=1` forces the WebGL 2 backend to test the fallback path.
+ * - `?forceWebGL=1` forces the WebGL 2 backend to test the fallback path.
+ * - `?map=<id>` picks a test map (`reference` by default, `flat`).
  */
-export function readUrlFlags(search: string = window.location.search): { forceWebGL: boolean } {
+export function readUrlFlags(search: string = window.location.search): {
+  forceWebGL: boolean
+  map: TestMapId
+} {
   const params = new URLSearchParams(search)
-  return { forceWebGL: params.get('forceWebGL') === '1' }
+  const map = params.get('map') ?? 'reference'
+  return {
+    forceWebGL: params.get('forceWebGL') === '1',
+    map: isTestMapId(map) ? map : 'reference',
+  }
 }

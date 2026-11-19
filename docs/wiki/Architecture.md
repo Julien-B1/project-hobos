@@ -51,13 +51,37 @@ App.vue
   of its target looking towards -Z; positive yaw turns counter-clockwise seen
   from above.
 - Hover picking: bindings forward the cursor to `Engine.setPointer()` (CSS
-  pixels, converted to NDC). Every frame the engine raycasts the ground
-  mesh, converts the hit point with `core/coords.worldToCell()`, moves the
-  `CellHighlight` quad and publishes `hoveredCell` in the HUD snapshot only
-  when it changes. Picking runs every frame because the camera can move
+  pixels, converted to NDC). Every frame the engine raycasts the chunk
+  meshes, moves the highlight and publishes the result in the HUD snapshot
+  only when it changes. Picking runs every frame because the camera can move
   under a still cursor.
 - Debug URL flags are read by the app layer (`src/app/config.ts`):
-  `?forceWebGL=1` forces the WebGL 2 backend.
+  `?forceWebGL=1` forces the WebGL 2 backend, `?map=<id>` selects a test map
+  (`reference` by default, `flat`).
+
+## Terrain pipeline
+
+```
+core/generators/catalog ── createTestMap(id) ──> VoxelMap (+ footprint, home)
+                                                     │ set() marks dirty chunks
+                                                     ▼
+render/chunkRenderer.update()  ── drainDirty() ──> keys to rebuild
+        │ for each key
+        ▼
+ChunkMesher.mesh(map, chunk) ──> MeshData (typed arrays, no Three.js)
+        │                         (CulledMesher: face culling, slope geometry)
+        ▼
+BufferGeometry on one Mesh per chunk (shared vertex-colour material)
+```
+
+- `ChunkRenderer.update()` runs every frame; after generation every chunk is
+  dirty, so the first call builds the whole map.
+- A dirty key whose chunk no longer exists, or whose mesh is empty, removes
+  the chunk mesh.
+- Colours come from `render/materialPalette.ts` (sRGB authored, converted to
+  linear once), multiplied by a per-face shade and a small per-voxel jitter
+  so cells stay readable.
+- How to add materials, shapes, meshers and maps: see [[Extending]].
 
 ## Documentation rules in code
 

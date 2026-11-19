@@ -20,6 +20,7 @@ defineProps<{
         Backend: <strong>{{ state.backend }}</strong>
       </div>
       <div>FPS: {{ state.fps }}</div>
+      <div>Chunks: {{ state.chunkMeshes }}</div>
       <div>
         Cell:
         <template v-if="state.hoveredCell">

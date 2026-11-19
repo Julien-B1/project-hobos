@@ -10,7 +10,7 @@ import { onBeforeUnmount, onMounted, ref, useTemplateRef } from 'vue'
 import { Engine, type EngineHudState } from '@/render/engine'
 import { config, readUrlFlags } from '@/app/config'
 import { bindInputs } from '@/app/input/bindings'
-import { createFlatGrid } from '@/core/generators/flatGrid'
+import { createTestMap } from '@/core/generators/catalog'
 
 const emit = defineEmits<{
   /** Fired whenever the engine publishes a new HUD snapshot. */
@@ -26,12 +26,13 @@ let unmounted = false
 
 onMounted(async () => {
   if (!canvas.value) return
-  const grid = createFlatGrid(32, 32)
+  const flags = readUrlFlags()
+  const world = createTestMap(flags.map)
   try {
     const created = await Engine.create(canvas.value, {
-      forceWebGL: readUrlFlags().forceWebGL,
+      forceWebGL: flags.forceWebGL,
       camera: config.camera,
-      grid,
+      map: world.map,
       onHudChange: (state) => {
         emit('hud', state)
       },
@@ -42,9 +43,9 @@ onMounted(async () => {
       return
     }
     engine = created
-    // Look at the middle of the grid (also the reset view) and keep the target over it.
-    engine.cameraRig.setHome(grid.width / 2, 0, grid.depth / 2)
-    engine.cameraRig.setTargetBounds({ minX: 0, maxX: grid.width, minZ: 0, maxZ: grid.depth })
+    // Frame the map (also the reset view) and keep the target over it.
+    engine.cameraRig.setHome(world.home.x, world.home.y, world.home.z)
+    engine.cameraRig.setTargetBounds({ minX: 0, maxX: world.width, minZ: 0, maxZ: world.depth })
     unbindInputs = bindInputs(canvas.value, engine, config.input)
     engine.start()
   } catch (e) {
