@@ -24,4 +24,4 @@ See `CHANGELOG.md` in the repository. Roadmap source: `BOOTSTRAP.md`.
 | Step | Content                                                                                  | Status        |
 | ---- | ---------------------------------------------------------------------------------------- | ------------- |
 | 1    | Foundation: scaffold, WebGPU scene, RO-style camera, grid picking                        | Done (v0.1.0) |
-| 2    | Multi-level voxel map: chunks, reference map, meshing, surface picking, targeted rebuild | In progress   |
+| 2    | Multi-level voxel map: chunks, reference map, meshing, surface picking, targeted rebuild | Done (v0.2.0) |

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-19
+
 ### Added
 
 - Voxel map core: 16-bit voxel encoding (material / shape / orientation),
@@ -79,5 +81,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   debug HUD shows its coordinates. Core coordinate helpers
   (`core/coords.ts`: cell and half-height voxel level conversions) with tests.
 
-[Unreleased]: https://github.com/Julien-B1/project-hobos/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Julien-B1/project-hobos/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Julien-B1/project-hobos/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Julien-B1/project-hobos/releases/tag/v0.1.0
