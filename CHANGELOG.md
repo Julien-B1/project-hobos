@@ -206,6 +206,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Dev and preview servers prefer Brotli over gzip (`tooling/compression.ts`,
+  was `gzip.ts`; compressed bodies cached by content hash; gzip now level
+  9); the production build writes `.br` and `.gz` next to each asset. The
+  preview server caches hashed `/assets/` for a year (immutable: a new
+  version has new file names) and revalidates `index.html` every load.
+  Production download: 568 kB (gzip) -> about 422 kB (Brotli). Browsers
+  only ask for Brotli over HTTPS or on localhost: a plain-HTTP remote dev
+  server still gets gzip.
 - Maps are sized for one encounter (battle map, 1 cell = one 5 ft square):
   the reference map is 32 x 32 (was 64 x 64, same features), the organic
   map defaults to 32 x 32 (was 128 x 128) with features rescaled (hills,

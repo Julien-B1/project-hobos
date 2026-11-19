@@ -8,13 +8,13 @@
 import { fileURLToPath, URL } from 'node:url'
 import vue from '@vitejs/plugin-vue'
 import { defineConfig } from 'vitest/config'
-import { gzip } from './tooling/gzip.ts'
+import { compression } from './tooling/compression.ts'
 
 /** Polling fallback for file watching, enabled with VITE_USE_POLLING=true. */
 const usePolling = process.env.VITE_USE_POLLING === 'true'
 
 export default defineConfig({
-  plugins: [vue(), gzip()],
+  plugins: [vue(), compression()],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
