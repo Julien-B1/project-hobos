@@ -13,6 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   material ids, 16^3 chunks, sparse `VoxelMap` with lazy chunk creation,
   removal of emptied chunks and dirty-chunk tracking including border
   neighbours. Fully unit-tested, negative coordinates included.
+- Shape registry (`FULL`, `SLOPE` in 4 orientations) based on top corner
+  heights, with derived face profiles for culling and top-height sampling.
+- Surface detection per column (`columnSurfaces`), supporting several
+  surfaces in one column.
+- Deterministic reference map: base ground, river trench with low bank path,
+  bridge over path and river with slope ramps, cliff with a slope ramp, hill
+  crossed by a tunnel. Wiki page _Reference-Map_.
 
 ### Changed
 

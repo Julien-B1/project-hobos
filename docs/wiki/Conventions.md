@@ -28,8 +28,35 @@ A voxel is one `uint16` (`src/core/voxel.ts`):
 
 - **material** (8 bits): id from `src/core/materials.ts`; `0` = air. Ids are
   never renumbered. Colours are a render concern.
-- **shape** (4 bits) and **orientation** (4 bits): see the shapes section.
+- **shape** (4 bits) and **orientation** (4 bits): see _Shapes and
+  orientations_ below.
 - Any voxel with material 0 is air, whatever its other bits.
+
+## Shapes and orientations
+
+Defined in `src/core/shapes.ts`.
+
+- Orientations are compass directions: **North = -Z, East = +X, South = +Z,
+  West = -X**.
+- Faces: `PX, NX, PY, NY, PZ, NZ`; the opposite face is `face ^ 1`.
+- Every shape so far is a **height-field column**: solid from the voxel
+  bottom up to a top surface given by 4 corner heights
+  `[c00, c10, c11, c01]` (voxel units, 0..1; `c00` = north-west corner).
+
+| Shape   | Id  | Top corners                                  | Faces                                                                 |
+| ------- | --- | -------------------------------------------- | --------------------------------------------------------------------- |
+| `FULL`  | 0   | all 1                                        | 6 full faces.                                                         |
+| `SLOPE` | 1   | 1 on the high side (orientation), 0 opposite | Full bottom and high side, no low side, triangular sides, sloped top. |
+
+A slope rises by one voxel (0.5 world unit) across one cell.
+
+**Face profiles** (`NONE`, `PARTIAL`, `FULL`) are derived from the corners.
+Culling rule: a face is hidden only when the neighbour's touching face is
+`FULL`.
+
+**Surface**: the top of a non-air voxel whose voxel above is air
+(`src/core/surface.ts`). A column can hold several surfaces (bridge over a
+path).
 
 ## Chunks and the map
 

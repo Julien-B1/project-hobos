@@ -93,7 +93,9 @@ export default defineConfigWithVueTs(
             FunctionDeclaration: true,
             ClassDeclaration: true,
             MethodDefinition: true,
-            ArrowFunctionExpression: true,
+            // Exported arrow functions are covered by the VariableDeclaration context below;
+            // inline arrows (callbacks, object members) do not need their own block.
+            ArrowFunctionExpression: false,
             FunctionExpression: true,
           },
           contexts: [
