@@ -22,7 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - RO-style orbit camera: locked pitch (40° by default), free rotation by
   left drag, animated 45° snaps (`A`/`E` on AZERTY), bounded animated zoom,
   target panning by middle drag or `ZQSD`/arrows (layout-independent key
-  codes). Camera maths unit-tested.
+  codes). Keyboard zoom (`R`/`F`, numpad `+`/`-`) and animated view reset
+  (`C` or `Home`: home target, initial yaw without extra spins, initial
+  zoom). Camera maths unit-tested.
 - Flat 32 x 32 test grid (`core/generators/flatGrid.ts`) rendered as a
   checker mesh; hover picking by raycast highlights the targeted cell and the
   debug HUD shows its coordinates. Core coordinate helpers

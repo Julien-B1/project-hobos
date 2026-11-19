@@ -3,6 +3,7 @@ import {
   clamp,
   dampTowards,
   groundAxes,
+  nearestEquivalentAngle,
   nextSnapYaw,
   orbitPosition,
   worldPerPixel,
@@ -81,5 +82,17 @@ describe('clamp / worldPerPixel', () => {
   it('matches the frustum height at the target distance', () => {
     // fov 90 deg: frustum height = 2 * d.
     expect(worldPerPixel(10, 90, 200)).toBeCloseTo(0.1)
+  })
+})
+
+describe('nearestEquivalentAngle', () => {
+  it('returns the angle itself when already closest', () => {
+    expect(nearestEquivalentAngle(1, 1.2)).toBeCloseTo(1)
+  })
+
+  it('picks the equivalent angle within half a turn of the reference', () => {
+    const turn = 2 * Math.PI
+    expect(nearestEquivalentAngle(0.5, 3 * turn + 0.4)).toBeCloseTo(3 * turn + 0.5)
+    expect(nearestEquivalentAngle(0.5, -2 * turn)).toBeCloseTo(-2 * turn + 0.5)
   })
 })

@@ -87,6 +87,19 @@ export function dampTowards(current: number, goal: number, sharpness: number, dt
   return current + (goal - current) * t
 }
 
+/**
+ * Angle equivalent to `angle` (modulo a full turn) that is closest to
+ * `reference`, in radians.
+ *
+ * Yaw is not wrapped (free rotation can accumulate several turns), so a reset
+ * to the initial yaw must target the nearest equivalent angle, otherwise the
+ * camera would spin back through every accumulated turn.
+ */
+export function nearestEquivalentAngle(angle: number, reference: number): number {
+  const turn = 2 * Math.PI
+  return angle + Math.round((reference - angle) / turn) * turn
+}
+
 /** Clamp `value` into `[min, max]`. */
 export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))

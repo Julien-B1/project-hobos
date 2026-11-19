@@ -62,7 +62,8 @@ Keys are bound by physical position: the same keys work on AZERTY and QWERTY.
 | Rotate by 45° steps    | `A` / `E` (AZERTY) / `Q` / `E` (QWERTY)            |
 | Free rotation          | Left mouse drag                                    |
 | Pan                    | Middle mouse drag                                  |
-| Zoom                   | Mouse wheel                                        |
+| Zoom                   | Mouse wheel, `R` / `F`, numpad `+` / `-`           |
+| Reset view             | `C` or `Home`                                      |
 
 Camera settings (pitch, FOV, zoom bounds, speeds) live in `src/app/config.ts`.
 

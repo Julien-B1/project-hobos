@@ -24,6 +24,8 @@ export const config = {
     maxDistance: 110,
     /** Keyboard pan speed, as a fraction of the camera distance per second. */
     keyPanSpeed: 0.9,
+    /** Keyboard zoom speed (distance multiplied by e^speed per second). */
+    keyZoomSpeed: 1.6,
     /** Animation sharpness for snaps and zoom, in 1/second. */
     smoothing: 12,
   } satisfies CameraRigSettings,

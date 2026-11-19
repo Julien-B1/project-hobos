@@ -10,6 +10,9 @@
  * | KeyW / KeyS                | Z / S        | Move target forward / back |
  * | KeyA / KeyD                | Q / D        | Move target left / right   |
  * | KeyQ / KeyE                | A / E        | Rotate 45 degrees (snap)   |
+ * | KeyR / KeyF                | R / F        | Zoom in / out (held)       |
+ * | NumpadAdd / NumpadSubtract | + / - (pad)  | Zoom in / out (held)       |
+ * | KeyC or Home               | C or Home    | Reset view (animated)      |
  * | Arrow keys                 | Arrow keys   | Same as W/A/S/D            |
  *
  * Mouse: left drag = free rotation, middle drag = pan, wheel = zoom. The
@@ -41,6 +44,15 @@ const MOVE_KEYS = {
   right: ['KeyD', 'ArrowRight'],
 } as const
 
+/** Key codes for held keyboard zoom. */
+const ZOOM_KEYS = {
+  in: ['KeyR', 'NumpadAdd'],
+  out: ['KeyF', 'NumpadSubtract'],
+} as const
+
+/** Key codes that reset the view. */
+const RESET_KEYS: readonly string[] = ['KeyC', 'Home']
+
 /** Ongoing pointer gesture. */
 type Drag =
   | { kind: 'none' }
@@ -65,11 +77,13 @@ export function bindInputs(
 
   const isPressed = (codes: readonly string[]): boolean => codes.some((c) => pressed.has(c))
 
-  /** Recompute the rig's move intent from the set of held keys. */
+  /** Recompute the rig's move and zoom intents from the set of held keys. */
   const updateMoveIntent = (): void => {
     const forward = Number(isPressed(MOVE_KEYS.forward)) - Number(isPressed(MOVE_KEYS.back))
     const right = Number(isPressed(MOVE_KEYS.right)) - Number(isPressed(MOVE_KEYS.left))
     rig.setMoveIntent(forward, right)
+    // Zooming in = shorter distance = negative intent.
+    rig.setZoomIntent(Number(isPressed(ZOOM_KEYS.out)) - Number(isPressed(ZOOM_KEYS.in)))
   }
 
   const onKeyDown = (e: KeyboardEvent): void => {
@@ -77,6 +91,11 @@ export function bindInputs(
     if (e.code === 'KeyQ' || e.code === 'KeyE') {
       // Ignore auto-repeat: one press = one 45-degree step.
       if (!e.repeat) rig.snapRotate(e.code === 'KeyQ' ? -1 : 1)
+      return
+    }
+    if (RESET_KEYS.includes(e.code)) {
+      if (!e.repeat) rig.reset()
+      e.preventDefault() // Home would scroll the page otherwise
       return
     }
     pressed.add(e.code)

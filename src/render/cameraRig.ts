@@ -5,7 +5,9 @@
  * - a locked pitch (set once from config),
  * - free yaw rotation plus fixed-step snaps (e.g. 45 degrees), animated,
  * - bounded, animated zoom (distance to the target),
- * - target panning, by drag (instant) or by held keys (velocity, per frame).
+ * - target panning, by drag (instant) or by held keys (velocity, per frame),
+ * - keyboard zoom (held keys, per frame),
+ * - an animated reset to the initial view (home target, initial yaw and zoom).
  *
  * The rig knows nothing about input devices: `src/app/input/bindings.ts`
  * translates mouse and keyboard events into calls on this API. Call
@@ -16,6 +18,7 @@ import {
   clamp,
   dampTowards,
   groundAxes,
+  nearestEquivalentAngle,
   nextSnapYaw,
   orbitPosition,
   worldPerPixel,
@@ -40,6 +43,11 @@ export interface CameraRigSettings {
   readonly maxDistance: number
   /** Keyboard pan speed, as a fraction of the current distance per second. */
   readonly keyPanSpeed: number
+  /**
+   * Keyboard zoom speed: the distance is multiplied by `exp(keyZoomSpeed)`
+   * per second of held key (exponential, so it feels uniform at any zoom).
+   */
+  readonly keyZoomSpeed: number
   /** Smoothing sharpness for yaw and zoom animations, in 1/second. */
   readonly smoothing: number
 }
@@ -67,7 +75,13 @@ export class CameraRig {
   /** Keyboard pan intent in screen axes, each in [-1, 1]. */
   private moveForward = 0
   private moveRight = 0
+  /** Keyboard zoom intent: -1 zooms in, +1 zooms out, 0 stops. */
+  private zoomIntent = 0
   private bounds: TargetBounds | null = null
+  /** Target restored by `reset()`. */
+  private readonly home: Vec3Like = { x: 0, y: 0, z: 0 }
+  /** Animated target destination during a reset; null when idle. */
+  private targetGoal: Vec3Like | null = null
 
   constructor(private readonly settings: CameraRigSettings) {
     const toRad = Math.PI / 180
@@ -91,11 +105,39 @@ export class CameraRig {
 
   /** Move the target instantly to a world position. */
   setTarget(x: number, y: number, z: number): void {
+    this.targetGoal = null
     this.target.x = x
     this.target.y = y
     this.target.z = z
     this.clampTarget()
     this.applyPose()
+  }
+
+  /** Set the target restored by `reset()` and move there instantly. */
+  setHome(x: number, y: number, z: number): void {
+    this.home.x = x
+    this.home.y = y
+    this.home.z = z
+    this.setTarget(x, y, z)
+  }
+
+  /**
+   * Animate back to the initial view: home target, initial yaw (nearest
+   * equivalent angle, no extra spins) and initial distance.
+   */
+  reset(): void {
+    const { initialYawDeg, initialDistance, minDistance, maxDistance } = this.settings
+    this.yawGoal = nearestEquivalentAngle((initialYawDeg * Math.PI) / 180, this.yaw)
+    this.distanceGoal = clamp(initialDistance, minDistance, maxDistance)
+    this.targetGoal = { ...this.home }
+  }
+
+  /**
+   * Keyboard zoom intent: -1 zooms in, +1 zooms out, 0 stops. Integrated in
+   * `update()` so the speed does not depend on key repeat.
+   */
+  setZoomIntent(direction: number): void {
+    this.zoomIntent = clamp(direction, -1, 1)
   }
 
   /** Restrict where the target can go (e.g. the map footprint). `null` removes limits. */
@@ -140,6 +182,7 @@ export class CameraRig {
     // The ground is seen at an angle: a vertical pixel covers more ground.
     const dForward = (dyPx * wpp) / Math.sin(this.pitch)
     const dRight = -dxPx * wpp
+    this.targetGoal = null // manual pan cancels a running reset
     this.target.x += right.x * dRight + forward.x * dForward
     this.target.z += right.z * dRight + forward.z * dForward
     this.clampTarget()
@@ -162,11 +205,34 @@ export class CameraRig {
 
   /** Advance animations and keyboard panning by `dt` seconds, then pose the camera. */
   update(dt: number): void {
-    const { smoothing, keyPanSpeed } = this.settings
+    const { smoothing, keyPanSpeed, keyZoomSpeed, minDistance, maxDistance } = this.settings
+
+    if (this.zoomIntent !== 0) {
+      this.distanceGoal = clamp(
+        this.distanceGoal * Math.exp(this.zoomIntent * keyZoomSpeed * dt),
+        minDistance,
+        maxDistance,
+      )
+    }
+
     this.yaw = dampTowards(this.yaw, this.yawGoal, smoothing, dt)
     this.distance = dampTowards(this.distance, this.distanceGoal, smoothing, dt)
 
+    if (this.targetGoal) {
+      const goal = this.targetGoal
+      this.target.x = dampTowards(this.target.x, goal.x, smoothing, dt)
+      this.target.y = dampTowards(this.target.y, goal.y, smoothing, dt)
+      this.target.z = dampTowards(this.target.z, goal.z, smoothing, dt)
+      const remaining = Math.hypot(
+        goal.x - this.target.x,
+        goal.y - this.target.y,
+        goal.z - this.target.z,
+      )
+      if (remaining < 1e-3) this.targetGoal = null
+    }
+
     if (this.moveForward !== 0 || this.moveRight !== 0) {
+      this.targetGoal = null // manual move cancels a running reset
       const { forward, right } = groundAxes(this.yaw)
       // Normalise diagonals so they are not faster than straight moves.
       const len = Math.hypot(this.moveForward, this.moveRight)

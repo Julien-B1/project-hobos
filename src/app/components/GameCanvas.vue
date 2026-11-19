@@ -42,8 +42,8 @@ onMounted(async () => {
       return
     }
     engine = created
-    // Look at the middle of the grid and keep the target over it.
-    engine.cameraRig.setTarget(grid.width / 2, 0, grid.depth / 2)
+    // Look at the middle of the grid (also the reset view) and keep the target over it.
+    engine.cameraRig.setHome(grid.width / 2, 0, grid.depth / 2)
     engine.cameraRig.setTargetBounds({ minX: 0, maxX: grid.width, minZ: 0, maxZ: grid.depth })
     unbindInputs = bindInputs(canvas.value, engine, config.input)
     engine.start()
