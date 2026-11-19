@@ -67,6 +67,12 @@ Keys are bound by physical position: the same keys work on AZERTY and QWERTY.
 
 Camera settings (pitch, FOV, zoom bounds, speeds) live in `src/app/config.ts`.
 
+## Branches
+
+`master` only holds this README. Code and documentation live on the
+[`dev`](https://github.com/Julien-B1/project-hobos/tree/dev) branch; releases
+are tags on `dev`.
+
 ## Documentation
 
 - [Wiki](https://github.com/Julien-B1/project-hobos/wiki) (architecture,

@@ -69,3 +69,14 @@ make up        # dev server, open http://localhost:5173
 - **Permission errors on files.** Run `make` (not raw `docker compose`) so
   `CONTAINER_UID` is computed. If you call Compose directly, export it
   yourself (`0` with rootless Docker, `id -u` otherwise).
+
+## Branches and releases
+
+| Branch   | Content                                                    |
+| -------- | ---------------------------------------------------------- |
+| `master` | README only (public landing page).                         |
+| `dev`    | All code and docs. Releases are tags `vX.Y.Z` on this one. |
+
+Release at each validated milestone: freeze `CHANGELOG.md`, bump
+`package.json`, commit `chore(release): X.Y.Z`, tag `vX.Y.Z`, push `dev` with
+tags, then `make wiki-publish`.

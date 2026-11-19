@@ -50,6 +50,12 @@ Update documentation **in the same commit** as the code:
 
 ## Git workflow
 
+- Repository: https://github.com/Julien-B1/project-hobos (public; the GitHub
+  wiki needs a public repository on the free plan).
+- Branches: `master` holds only the README (landing page). All work happens
+  on `dev`, tagged at each validated milestone. Never merge `dev` into
+  `master` unless the project owner asks.
+
 - One commit per significant step, Conventional Commits
   (`feat:`, `fix:`, `chore:`, `docs:`, `test:`, `refactor:`), scoped when
   useful (`feat(core): ...`).
