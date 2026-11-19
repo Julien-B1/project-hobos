@@ -31,6 +31,7 @@ import {
   type UniformNode,
 } from 'three/webgpu'
 import { encodeOutput } from '../outputEncoding'
+import { FootIk } from './footIk'
 
 /** Character height, in world units (a cell is 1 unit wide). */
 export const CHARACTER_HEIGHT = 1.35
@@ -101,6 +102,8 @@ export class Character {
   /** Ring opacity: pulses while selected. */
   private readonly ringOpacity = uniform(0)
   private readonly materials: Material[] = []
+  /** Plants the feet on uneven ground. */
+  private readonly feet: FootIk
   /** Remaining walk, next point first. */
   private path: WalkPoint[] = []
   /** Feet height the walk expects (between path points), world units. */
@@ -140,6 +143,10 @@ export class Character {
     this.walkAction.timeScale = WALK_TIME_SCALE
     for (const action of [this.idle, this.walkAction]) action.setLoop(LoopRepeat, Infinity)
     this.idle.play()
+    this.feet = new FootIk(this.model, this.model)
+    // Stance: the idle clip's first frame.
+    this.mixer.update(0)
+    this.feet.captureStance()
 
     const blob = blobMaterial(cutHeight)
     this.materials.push(blob)
@@ -236,6 +243,8 @@ export class Character {
       }
       this.blob.userData.placed = true
     }
+    this.root.updateMatrixWorld(true)
+    this.feet.update(dt, this.root.position.y, ground, !this.hop, !this.walking)
     return moved
   }
 

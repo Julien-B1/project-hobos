@@ -19,7 +19,7 @@ import {
   type HitFacing,
   type SurfaceHit,
 } from '@/core/surface'
-import { materialOf, shapeOf } from '@/core/voxel'
+import { isAir, materialOf, shapeOf } from '@/core/voxel'
 import { defaultStructureKinds } from '@/core/structures/kinds'
 import type { StructureSet } from '@/core/structures/structureSet'
 import type { VoxelMap } from '@/core/voxelMap'
@@ -506,6 +506,16 @@ export class Engine {
     for (const y of [level, level - 1, level + 1]) {
       const owner = structures.ownerOf(cx, y, cz)
       const voxel = this.options.map.get(cx, y, cz)
+      // A bank under a deck's end: the ground is drawn lower, under the
+      // planks; one walks on the deck, flush with the voxel's top.
+      if (
+        !owner &&
+        isTerrainMaterial(materialOf(voxel)) &&
+        isAir(this.options.map.get(cx, y + 1, cz)) &&
+        structures.within(cx, y + 1, cz)
+      ) {
+        return (y + 1) * VOXEL_HEIGHT
+      }
       if (!owner || isTerrainMaterial(materialOf(voxel))) continue
       if (structures.ownerOf(cx, y + 1, cz)) continue // not the top
       const kind = this.structureKinds.get(owner.kind)

@@ -11,7 +11,8 @@
  * A views file is an array of { "name", "query" } (query string after `?`,
  * e.g. "map=bridges&cam=47,12,14,35"), with optional "steps": mouse
  * clicks played before the capture, each { "click": [x, y], "button":
- * "left" | "right", "wait": ms } in viewport pixels (1280 x 800). Without a
+ * "left" | "right", "wait": ms } in viewport pixels (1280 x 800), or a
+ * burst of captures { "frames": n, "every": ms } saved as name-NN.png. Without a
  * views file, the default views show every crossing of the bridges map.
  */
 import { mkdir, readFile } from 'node:fs/promises'
@@ -64,6 +65,15 @@ try {
     await page.getByText('Backend:').waitFor({ timeout: 120_000 })
     await page.waitForTimeout(6000)
     for (const step of view.steps ?? []) {
+      if (step.frames) {
+        // A burst of captures (animation checks): name-00.png, name-01.png...
+        for (let i = 0; i < step.frames; i++) {
+          const burst = `${OUT}/${view.name}-${String(i).padStart(2, '0')}.png`
+          await page.screenshot({ path: burst })
+          await page.waitForTimeout(step.every ?? 100)
+        }
+        continue
+      }
       const [x, y] = step.click
       await page.mouse.move(x, y)
       await page.waitForTimeout(500) // hover picking runs in the next frames

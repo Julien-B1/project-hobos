@@ -338,6 +338,13 @@ trees and grid. Shadow quality barely changes GPU time; `high` costs about
   redrawn when the scene changes; a moving character would redraw it
   every frame): a soft blob decal instead, plus the selection ring, both
   laid along the ground normal.
+  After the mixer, `FootIk` plants the feet: each foot probes the ground
+  under it (decks and stones through their structure surface, never
+  between planks), the body is lowered by the largest drop needed, each leg
+  is solved by a two-bone IK whose knee is placed on the front side (pole:
+  the animated knee, backward part removed), and planted feet are turned
+  along the slope. Standing, the feet are locked on the stance of the idle
+  clip's first frame. A hop (stepping stones) fades the IK out.
 - **Walk area** (`core/navigation/walkArea.ts`): a stand is a solid voxel,
   not water or foliage, with 3 free levels above (shallow water, at most
   `WADING_DEPTH`, counts as free). Moves go to the 8 neighbour columns, at

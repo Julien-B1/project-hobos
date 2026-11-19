@@ -183,6 +183,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   decoder to ship (key reduction, quantized rotations, weights, UVs and
   normals, WebP texture): the fighter went from 1060 kB to 522 kB (259 kB
   gzipped; the dev server now gzips `model/gltf-binary`).
+- Foot IK (`render/actors/footIk.ts`): each foot is planted on the ground
+  under it (body lowered for the lowest foot, two-bone leg IK with a pole
+  in front of the knee, planted feet turned along the slope); standing,
+  the feet are locked on the idle clip's first-frame stance, so the idle
+  clip's own foot shuffles no longer slide them.
 - Screenshots: views take `steps` (mouse clicks before the capture);
   console warnings and errors of the page are printed.
 
@@ -228,6 +233,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Character on a bank cell under a deck's end: feet on the deck level,
+  not on the ground drawn lower between the planks.
 - Character on decks: its feet stand on the structure's walking surface
   (`surfaceAt` or the owned voxel's top), never between planks; on
   stepping stones it hops from stone to stone (`StructureKind.hops`).
