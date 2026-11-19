@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { Material } from '../materials'
-import { ORIENTATION_OFFSETS, Shape } from '../shapes'
+import { Shape, voxelTopCorners } from '../shapes'
 import { columnSurfaces } from '../surface'
-import { isAir, materialOf, orientationOf, shapeOf } from '../voxel'
+import { isAir, materialOf, shapeOf } from '../voxel'
 import type { VoxelMap } from '../voxelMap'
 import { createOrganicMap } from './organicMap'
 
@@ -48,18 +48,45 @@ describe('organic map', () => {
     expect(water).toBeGreaterThan(0)
   })
 
-  it('places every slope against a higher neighbour, rising towards it', () => {
-    let slopes = 0
+  it('raises every wedge corner against solid ground at the same level', () => {
+    const neighbours = [
+      [
+        [-1, 0],
+        [0, -1],
+        [-1, -1],
+      ],
+      [
+        [1, 0],
+        [0, -1],
+        [1, -1],
+      ],
+      [
+        [1, 0],
+        [0, 1],
+        [1, 1],
+      ],
+      [
+        [-1, 0],
+        [0, 1],
+        [-1, 1],
+      ],
+    ] as const
+    let wedges = 0
     forEachVoxel(organic.map, 60, (x, y, z, v) => {
-      if (isAir(v) || shapeOf(v) !== Shape.SLOPE) return
-      slopes++
-      const [dx, dz] = ORIENTATION_OFFSETS[orientationOf(v)] ?? [0, 0]
-      // High side: the neighbour is solid at the slope's level.
-      expect(isAir(organic.map.get(x + dx, y, z + dz))).toBe(false)
-      // Support: solid below the slope.
-      expect(isAir(organic.map.get(x, y - 1, z))).toBe(false)
+      const shape = shapeOf(v)
+      const material = materialOf(v)
+      if (isAir(v) || material === Material.LEAVES || material === Material.WOOD) return
+      if (shape !== Shape.SLOPE && shape !== Shape.CORNERS) return
+      wedges++
+      expect(isAir(organic.map.get(x, y - 1, z))).toBe(false) // supported
+      voxelTopCorners(v).forEach((h, corner) => {
+        if (h === 0) return
+        const cells = neighbours[corner] ?? []
+        const touchesSolid = cells.some(([dx, dz]) => !isAir(organic.map.get(x + dx, y, z + dz)))
+        expect(touchesSolid).toBe(true)
+      })
     })
-    expect(slopes).toBeGreaterThan(50)
+    expect(wedges).toBeGreaterThan(100)
   })
 
   it('grows trees with trunks and leaves', () => {

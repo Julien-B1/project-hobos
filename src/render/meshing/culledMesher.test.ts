@@ -121,6 +121,24 @@ describe('CulledMesher', () => {
     expect(triangleCount(meshOf(map))).toBe(8 - 2 + 12 - 2)
   })
 
+  it('meshes an outer corner wedge: flat and sloped top triangles, 2 triangle sides', () => {
+    const map = new VoxelMap()
+    map.set(3, 3, 3, packVoxel(Material.GRASS, Shape.CORNERS, 0b0001))
+    const m = meshOf(map)
+    // Bottom quad (2) + 2 top triangles + 2 side triangles.
+    expect(triangleCount(m)).toBe(2 + 2 + 2)
+    expectConsistentWinding(m)
+  })
+
+  it('meshes an inner corner wedge with consistent winding', () => {
+    const map = new VoxelMap()
+    map.set(3, 3, 3, packVoxel(Material.GRASS, Shape.CORNERS, 0b1110))
+    const m = meshOf(map)
+    // Bottom (2) + 2 top triangles + 2 full sides (4) + 2 side triangles.
+    expect(triangleCount(m)).toBe(2 + 2 + 4 + 2)
+    expectConsistentWinding(m)
+  })
+
   it('returns an empty mesh for an all-hidden interior', () => {
     const map = new VoxelMap()
     for (let x = 0; x < 3; x++)

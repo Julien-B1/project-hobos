@@ -6,7 +6,7 @@
  */
 import { BufferAttribute, BufferGeometry, DoubleSide, Mesh, MeshBasicMaterial } from 'three/webgpu'
 import { VOXEL_HEIGHT } from '@/core/coords'
-import type { CornerHeights } from '@/core/shapes'
+import { topDiagonal, type CornerHeights } from '@/core/shapes'
 
 /**
  * Small lift above the surface, in world units, so the quad does not
@@ -27,11 +27,19 @@ export class SurfaceHighlight {
   /** Scene object to add to the scene once. */
   readonly mesh: Mesh
   private readonly positions = new Float32Array(4 * 3)
+  /**
+   * Index buffers for the two possible top splits (see `topDiagonal`), so
+   * the quad bends exactly like the terrain triangles under it.
+   */
+  private readonly splits = [
+    new BufferAttribute(new Uint16Array([0, 2, 1, 0, 3, 2]), 1),
+    new BufferAttribute(new Uint16Array([1, 3, 2, 1, 0, 3]), 1),
+  ] as const
 
   constructor(color = 0xffe066) {
     const geometry = new BufferGeometry()
     geometry.setAttribute('position', new BufferAttribute(this.positions, 3))
-    geometry.setIndex([0, 2, 1, 0, 3, 2]) // up-facing, but drawn double-sided anyway
+    geometry.setIndex(this.splits[0])
     const material = new MeshBasicMaterial({
       color,
       transparent: true,
@@ -58,6 +66,8 @@ export class SurfaceHighlight {
       this.positions.set([x + dx, (y + h) * VOXEL_HEIGHT + LIFT, z + dz], i * 3)
     })
     const geometry = this.mesh.geometry
+    const split = this.splits[topDiagonal(corners)]
+    if (geometry.getIndex() !== split) geometry.setIndex(split)
     const position = geometry.getAttribute('position')
     position.needsUpdate = true
     geometry.computeBoundingSphere()

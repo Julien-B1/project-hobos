@@ -26,6 +26,8 @@ import {
   FaceProfile,
   SIDE_FACE_CORNERS,
   faceProfile,
+  isPlanarTop,
+  topDiagonal,
   oppositeFace,
   profileFromCorners,
   voxelTopCorners,
@@ -163,31 +165,47 @@ export class CulledMesher implements ChunkMesher {
 
       const shade = FACE_SHADE[face] * jitter
       const color: Vec3 = [base[0] * shade, base[1] * shade, base[2] * shade]
-      out.polygon(facePolygon(face, corners, x, y, z), FACE_NORMALS[face] ?? [0, 1, 0], color)
+      const outward = FACE_NORMALS[face] ?? [0, 1, 0]
+      for (const polygon of facePolygons(face, corners, x, y, z))
+        out.polygon(polygon, outward, color)
     }
   }
 }
 
 /**
- * Polygon of one face in world units. Vertical faces go from the voxel
+ * Polygons of one face in world units. Vertical faces go from the voxel
  * bottom up to the corner heights; a corner at height 0 collapses, turning
- * the quad into a triangle (slope sides).
+ * the quad into a triangle (slope sides). A non-planar top (corner wedge,
+ * saddle) is split into two triangles along `topDiagonal()`, the same split
+ * used by picking and the highlight.
  */
-function facePolygon(
+function facePolygons(
   face: FaceId,
   corners: CornerHeights,
   x: number,
   y: number,
   z: number,
-): Vec3[] {
+): Vec3[][] {
   const y0 = y * VOXEL_HEIGHT
   const corner = (i: number, h: number): Vec3 => {
     const [dx, dz] = CORNER_XZ[i] ?? [0, 0]
     return [x + dx, y0 + h * VOXEL_HEIGHT, z + dz]
   }
 
-  if (face === Face.NY) return ALL_CORNERS.map((i) => corner(i, 0))
-  if (face === Face.PY) return ALL_CORNERS.map((i) => corner(i, corners[i]))
+  if (face === Face.NY) return [ALL_CORNERS.map((i) => corner(i, 0))]
+  if (face === Face.PY) {
+    const top = (i: CornerIndex): Vec3 => corner(i, corners[i])
+    if (isPlanarTop(corners)) return [ALL_CORNERS.map(top)]
+    return topDiagonal(corners) === 0
+      ? [
+          [top(0), top(1), top(2)],
+          [top(0), top(2), top(3)],
+        ]
+      : [
+          [top(1), top(2), top(3)],
+          [top(1), top(3), top(0)],
+        ]
+  }
 
   const pair = SIDE_FACE_CORNERS[face]
   if (!pair) return []
@@ -195,7 +213,7 @@ function facePolygon(
   const vertices: Vec3[] = [corner(a, 0), corner(b, 0)]
   if (corners[b] > 0) vertices.push(corner(b, corners[b]))
   if (corners[a] > 0) vertices.push(corner(a, corners[a]))
-  return vertices
+  return [vertices]
 }
 
 /**

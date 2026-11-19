@@ -5,23 +5,25 @@
  * `noise.ts`), so a seed reproduces exactly the same map.
  *
  * Pipeline:
- * 1. Height field: fractal value noise shaped into plains and hills, as
- *    integer surface levels (one level = one half-height voxel).
+ * 1. Height field: fractal value noise shaped into plains and hills,
+ *    blurred, then rounded to integer surface levels (one level = one
+ *    half-height voxel).
  * 2. River: a meandering channel carved across the map, with banks blended
  *    into the terrain; everything below the water level is filled with water
  *    (river and natural lakes).
  * 3. Columns: stone core, dirt under the top, top material chosen from
  *    height and steepness (sand on shores, grass, rock on steep or high
  *    ground).
- * 4. Slopes: wherever a column is exactly one level below a horizontal
- *    neighbour, a slope voxel is added on top, rising towards it. Gentle
- *    terrain becomes smooth ramps; steep terrain keeps vertical steps.
+ * 4. Wedges: every dry column next to higher ground gets a wedge on top
+ *    whose raised corners follow the surrounding cells (slopes, outer and
+ *    inner corners). Gentle terrain becomes continuous; steps of 2+ levels
+ *    keep a vertical part.
  * 5. Trees: trunks and leaf canopies on flat grass, denser in forest patches.
  */
 import { CHUNK_SIZE } from '../coords'
 import { Material } from '../materials'
 import { fbm2, hash01, smoothstep } from '../noise'
-import { ORIENTATION_OFFSETS, Shape } from '../shapes'
+import { ORIENTATION_OFFSETS, shapeForCornerMask } from '../shapes'
 import { isAir, materialOf, packVoxel } from '../voxel'
 import { VoxelMap } from '../voxelMap'
 
@@ -50,9 +52,9 @@ const WATER_LEVEL = 10
 const MIN_LEVEL = 3
 const MAX_LEVEL = 2 * CHUNK_SIZE + 8
 /** Levels at and above which the top turns to bare stone. */
-const PEAK_LEVEL = 30
+const PEAK_LEVEL = 27
 /** Height difference to a neighbour (in levels) that counts as steep. */
-const STEEP_STEP = 3
+const STEEP_STEP = 2
 
 /** Build the organic map. Deterministic for a given seed and size. */
 export function createOrganicMap(options: OrganicMapOptions = {}): OrganicMap {
@@ -63,17 +65,17 @@ export function createOrganicMap(options: OrganicMapOptions = {}): OrganicMap {
     heights[clampIndex(x, size) + clampIndex(z, size) * size] ?? MIN_LEVEL
 
   const map = new VoxelMap()
-  const slopeColumns = new Set<number>()
+  const wedgeColumns = new Set<number>()
   fillColumns(map, size, heightAt)
-  placeSlopes(map, size, heightAt, slopeColumns)
-  placeTrees(map, size, seed, heightAt, slopeColumns)
+  placeWedges(map, size, heightAt, wedgeColumns)
+  placeTrees(map, size, seed, heightAt, wedgeColumns)
 
   return { map, size, seed, waterLevel: WATER_LEVEL, heightAt }
 }
 
 /** Step 1 + 2: integer surface levels with the river carved in. */
 function buildHeightField(size: number, seed: number): Int32Array {
-  const heights = new Int32Array(size * size)
+  const raw = new Float64Array(size * size)
   for (let z = 0; z < size; z++) {
     // River centre line along Z: a slow sine for the main bends, plus noise so
     // no two bends look alike.
@@ -85,22 +87,46 @@ function buildHeightField(size: number, seed: number): Int32Array {
 
     for (let x = 0; x < size; x++) {
       // Large-scale relief: plains where the noise is low, hills where high.
-      const n = fbm2(x / 46, z / 46, seed, { octaves: 5 })
-      const relief = Math.pow(smoothstep(0.28, 0.82, n), 1.6)
-      // A little high-frequency roughness so plains are not perfectly flat.
-      const detail = (fbm2(x / 9, z / 9, seed + 31, { octaves: 2 }) - 0.5) * 2
-      let h = 8.5 + relief * 26 + detail
+      const n = fbm2(x / 72, z / 72, seed, { octaves: 4 })
+      const relief = Math.pow(smoothstep(0.2, 0.9, n), 1.4)
+      // Gentle undulation so plains are not perfectly flat.
+      const detail = (fbm2(x / 14, z / 14, seed + 31, { octaves: 2 }) - 0.5) * 1.2
+      let h = 9 + relief * 20 + detail
 
       // Carve the river: bed below water, banks blending back to the terrain.
       const dist = Math.abs(x - riverX)
       const bed = WATER_LEVEL - 3
-      const t = smoothstep(riverHalfWidth, riverHalfWidth + 10, dist)
+      const t = smoothstep(riverHalfWidth, riverHalfWidth + 16, dist)
       h = bed + (h - bed) * t
 
-      heights[x + z * size] = Math.max(MIN_LEVEL, Math.min(MAX_LEVEL, Math.round(h)))
+      raw[x + z * size] = h
     }
   }
+
+  // Blur before rounding: removes one-cell spikes and pits that would show as
+  // a checkerboard of cubes once quantised to half-height levels.
+  const smooth = boxBlur(boxBlur(boxBlur(raw, size), size), size)
+  const heights = new Int32Array(size * size)
+  for (let i = 0; i < heights.length; i++) {
+    heights[i] = Math.max(MIN_LEVEL, Math.min(MAX_LEVEL, Math.round(smooth[i] ?? MIN_LEVEL)))
+  }
   return heights
+}
+
+/** 3 x 3 box blur of a square field, edges clamped. */
+function boxBlur(field: Float64Array, size: number): Float64Array {
+  const out = new Float64Array(field.length)
+  for (let z = 0; z < size; z++) {
+    for (let x = 0; x < size; x++) {
+      let sum = 0
+      for (let dz = -1; dz <= 1; dz++)
+        for (let dx = -1; dx <= 1; dx++) {
+          sum += field[clampIndex(x + dx, size) + clampIndex(z + dz, size) * size] ?? 0
+        }
+      out[x + z * size] = sum / 9
+    }
+  }
+  return out
 }
 
 /** Step 3: solid columns and water. */
@@ -155,29 +181,61 @@ function maxNeighbourDrop(
 }
 
 /**
- * Step 4: add a slope on top of every dry column that is exactly one level
- * below a neighbour, rising towards that neighbour. Skipped when the opposite
- * neighbour is also higher (a one-cell trench): a slope cannot rise both ways.
+ * Cells sharing each top corner of a column, besides the column itself:
+ * offsets (dx, dz) indexed by corner (c00 = north-west, c10 = north-east,
+ * c11 = south-east, c01 = south-west; see `shapes.ts`).
  */
-function placeSlopes(
+const CORNER_NEIGHBOURS: readonly (readonly (readonly [number, number])[])[] = [
+  [
+    [-1, 0],
+    [0, -1],
+    [-1, -1],
+  ],
+  [
+    [1, 0],
+    [0, -1],
+    [1, -1],
+  ],
+  [
+    [1, 0],
+    [0, 1],
+    [1, 1],
+  ],
+  [
+    [-1, 0],
+    [0, 1],
+    [-1, 1],
+  ],
+]
+
+/**
+ * Step 4: smooth the steps with wedges. For each dry column at level h, a
+ * top corner is raised to h + 1 when any of the 3 other cells sharing that
+ * corner is higher. The raised corners select the voxel added on top: slope,
+ * outer or inner corner, saddle, or a full block (see
+ * `shapeForCornerMask`). Two neighbours compute the same raised height for a
+ * shared corner, so wedges join without gaps around corners and diagonals.
+ * Steps of 2 levels or more keep a vertical part above the wedge.
+ */
+function placeWedges(
   map: VoxelMap,
   size: number,
   heightAt: (x: number, z: number) => number,
-  slopeColumns: Set<number>,
+  wedgeColumns: Set<number>,
 ): void {
   for (let z = 0; z < size; z++) {
     for (let x = 0; x < size; x++) {
       const h = heightAt(x, z)
       if (h < WATER_LEVEL) continue // under water: keep the bed flat
-      for (let o = 0; o < ORIENTATION_OFFSETS.length; o++) {
-        const [dx, dz] = ORIENTATION_OFFSETS[o] ?? [0, 0]
-        if (!inside(x + dx, z + dz, size) || heightAt(x + dx, z + dz) !== h + 1) continue
-        if (inside(x - dx, z - dz, size) && heightAt(x - dx, z - dz) > h) continue
-        const top = map.get(x, h - 1, z)
-        map.set(x, h, z, packVoxel(materialOf(top), Shape.SLOPE, o))
-        slopeColumns.add(x + z * size)
-        break
-      }
+      let mask = 0
+      CORNER_NEIGHBOURS.forEach((cells, corner) => {
+        if (cells.some(([dx, dz]) => heightAt(x + dx, z + dz) > h)) mask |= 1 << corner
+      })
+      const wedge = shapeForCornerMask(mask)
+      if (!wedge) continue
+      const top = materialOf(map.get(x, h - 1, z))
+      map.set(x, h, z, packVoxel(top, wedge.shape, wedge.orientation))
+      wedgeColumns.add(x + z * size)
     }
   }
 }
@@ -192,7 +250,7 @@ function placeTrees(
   size: number,
   seed: number,
   heightAt: (x: number, z: number) => number,
-  slopeColumns: Set<number>,
+  wedgeColumns: Set<number>,
 ): void {
   const BLOCK = 5
   const trunk = packVoxel(Material.WOOD)
@@ -209,7 +267,7 @@ function placeTrees(
 
       const h = heightAt(x, z)
       const ground = materialOf(map.get(x, h - 1, z))
-      if (ground !== Material.GRASS || slopeColumns.has(x + z * size)) continue
+      if (ground !== Material.GRASS || wedgeColumns.has(x + z * size)) continue
       if (maxNeighbourDrop(x, z, size, heightAt) > 1) continue
 
       // Trunk of 4 to 6 voxels (2 to 3 world units).
@@ -229,11 +287,6 @@ function placeTrees(
       }
     }
   }
-}
-
-/** True when (x, z) lies on the map. */
-function inside(x: number, z: number, size: number): boolean {
-  return x >= 0 && z >= 0 && x < size && z < size
 }
 
 /** Clamp a coordinate into [0, size). */

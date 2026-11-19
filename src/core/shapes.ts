@@ -18,6 +18,14 @@
  * - FULL: all corners at 1 (a cube).
  * - SLOPE: rises from 0 to 1 across the cell; `orientation` is the compass
  *   direction of the high side.
+ * - CORNERS: generic wedge; `orientation` is a 4-bit mask of the corners at
+ *   height 1 (bit i = corner i), the others at 0. Covers outer corners
+ *   (1 bit), inner corners (3 bits), slopes and saddles (2 bits). Used by
+ *   terrain smoothing to join slopes around corners and diagonals.
+ *
+ * Non-planar tops (corners, saddles) are made of two triangles; the split
+ * diagonal is chosen by {@link topDiagonal} and shared by meshing, picking
+ * and the highlight so they all agree on the surface.
  *
  * Face profiles (what a face looks like from the neighbour's side) are
  * derived from the corner heights, so a new height-field shape (half slab,
@@ -31,6 +39,7 @@ import { isAir, orientationOf, shapeOf, type Voxel } from './voxel'
 export const Shape = {
   FULL: 0,
   SLOPE: 1,
+  CORNERS: 2,
 } as const
 
 /** A shape id from {@link Shape}. */
@@ -145,7 +154,34 @@ export const SHAPES: readonly ShapeDefinition[] = [
     // Orientation bits come from data: values 4..15 are invalid for slopes.
     topCorners: (o) => SLOPE_CORNERS[o] ?? SLOPE_CORNERS[Orientation.NORTH] ?? FULL_CORNERS,
   },
+  {
+    name: 'corners',
+    topCorners: (mask) => cornersFromMask(mask),
+  },
 ]
+
+/** Corner heights for a CORNERS mask: bit i set = corner i at height 1. */
+export function cornersFromMask(mask: number): CornerHeights {
+  return [mask & 1 ? 1 : 0, mask & 2 ? 1 : 0, mask & 4 ? 1 : 0, mask & 8 ? 1 : 0]
+}
+
+/**
+ * Best voxel (shape and orientation) for a set of 0/1 corner heights given
+ * as a mask (bit i = corner i high): null for mask 0 (nothing to add), FULL
+ * for 15, SLOPE when the mask is one straight slope, CORNERS otherwise.
+ * Prefers named shapes so the debug HUD stays readable.
+ */
+export function shapeForCornerMask(mask: number): { shape: ShapeId; orientation: number } | null {
+  const m = mask & 0xf
+  if (m === 0) return null
+  if (m === 0xf) return { shape: Shape.FULL, orientation: 0 }
+  const slope = SLOPE_MASKS.indexOf(m)
+  if (slope >= 0) return { shape: Shape.SLOPE, orientation: slope }
+  return { shape: Shape.CORNERS, orientation: m }
+}
+
+/** Corner masks of the 4 slope orientations, indexed by orientation id. */
+const SLOPE_MASKS: readonly number[] = [0b0011, 0b0110, 0b1100, 0b1001]
 
 const FULL_DEFINITION: ShapeDefinition = { name: 'full', topCorners: () => FULL_CORNERS }
 
@@ -200,15 +236,47 @@ export function faceProfile(voxel: Voxel, face: FaceId): FaceProfileId {
 }
 
 /**
- * Height of the top surface at a point inside the cell, in voxel units (0..1).
- * Bilinear interpolation of the corners; exact for flat tops and slopes.
+ * Diagonal used to split a top face into two triangles:
+ * - 0: diagonal c00 - c11 (triangles [0, 1, 2] and [0, 2, 3]);
+ * - 1: diagonal c10 - c01 (triangles [1, 2, 3] and [1, 3, 0]).
+ *
+ * When exactly one corner differs from the other three (outer or inner
+ * corner), the diagonal avoiding that corner is used, so one triangle stays
+ * flat and the other slopes. For a saddle (two opposite corners high), the
+ * diagonal joins the high corners (a ridge). Otherwise 0.
+ */
+export function topDiagonal(corners: CornerHeights): 0 | 1 {
+  const [c0, c1, c2, c3] = corners
+  const values = [c0, c1, c2, c3]
+  for (let i = 0; i < 4; i++) {
+    const others = values.filter((_, j) => j !== i)
+    const [first] = others
+    if (others.every((v) => v === first) && values[i] !== first) return i % 2 === 0 ? 1 : 0
+  }
+  if (c0 === c2 && c1 === c3 && c0 !== c1) return c0 > c1 ? 0 : 1
+  return 0
+}
+
+/** True when the 4 top corners lie on one plane (flat tops and slopes). */
+export function isPlanarTop(corners: CornerHeights): boolean {
+  return corners[0] + corners[2] === corners[1] + corners[3]
+}
+
+/**
+ * Height of the top surface at a point inside the cell, in voxel units (0..1),
+ * following the same two-triangle split as the mesh ({@link topDiagonal}).
  *
  * @param fx Position across the cell along X, in [0, 1].
  * @param fz Position across the cell along Z, in [0, 1].
  */
 export function topHeightAt(corners: CornerHeights, fx: number, fz: number): number {
-  const [c00, c10, c11, c01] = corners
-  const north = c00 + (c10 - c00) * fx
-  const south = c01 + (c11 - c01) * fx
-  return north + (south - north) * fz
+  const [h00, h10, h11, h01] = corners
+  if (topDiagonal(corners) === 0) {
+    // Triangles (c00, c10, c11) where fz <= fx, and (c00, c11, c01) elsewhere.
+    if (fz <= fx) return h00 + (h10 - h00) * (fx - fz) + (h11 - h00) * fz
+    return h00 + (h01 - h00) * (fz - fx) + (h11 - h00) * fx
+  }
+  // Triangles (c00, c10, c01) where fx + fz <= 1, and (c11, c01, c10) elsewhere.
+  if (fx + fz <= 1) return h00 + (h10 - h00) * fx + (h01 - h00) * fz
+  return h11 + (h01 - h11) * (1 - fx) + (h10 - h11) * (1 - fz)
 }

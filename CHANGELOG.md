@@ -16,8 +16,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   banks and lakes, sand shores, rocky steep ground and peaks, automatic
   slopes on one-level steps, and trees (trunk + leaf canopy) denser in
   forest patches. New `LEAVES` material.
+- `CORNERS` shape: wedge whose orientation bits select the raised corners
+  (outer and inner corners, saddles), with a shared top triangulation rule
+  (`topDiagonal`) for meshing, picking and the highlight;
+  `shapeForCornerMask` picks FULL / SLOPE / CORNERS for a mask.
 
 ### Changed
+
+- Organic map smoothing: wider relief, blurred height field and wider river
+  banks (no height step above 2 levels), and corner-aware wedges instead of
+  single-axis slopes, so diagonals and corners no longer show notches.
 
 - Culled mesher reads in-chunk neighbours directly instead of through the
   map (about 3x fewer chunk lookups when meshing large maps).

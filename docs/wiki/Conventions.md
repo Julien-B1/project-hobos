@@ -43,12 +43,17 @@ Defined in `src/core/shapes.ts`.
   bottom up to a top surface given by 4 corner heights
   `[c00, c10, c11, c01]` (voxel units, 0..1; `c00` = north-west corner).
 
-| Shape   | Id  | Top corners                                  | Faces                                                                 |
-| ------- | --- | -------------------------------------------- | --------------------------------------------------------------------- |
-| `FULL`  | 0   | all 1                                        | 6 full faces.                                                         |
-| `SLOPE` | 1   | 1 on the high side (orientation), 0 opposite | Full bottom and high side, no low side, triangular sides, sloped top. |
+| Shape     | Id  | Top corners                                  | Faces                                                                                 |
+| --------- | --- | -------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `FULL`    | 0   | all 1                                        | 6 full faces.                                                                         |
+| `SLOPE`   | 1   | 1 on the high side (orientation), 0 opposite | Full bottom and high side, no low side, triangular sides, sloped top.                 |
+| `CORNERS` | 2   | bit i of the orientation = corner i at 1     | Generic wedge: outer corner (1 bit), inner corner (3 bits), saddle (2 opposite bits). |
 
 A slope rises by one voxel (0.5 world unit) across one cell.
+
+Non-planar tops (corners, saddles) are two triangles split along
+`topDiagonal()`: away from the odd corner for outer/inner corners, along the
+high ridge for saddles. Meshing, `topHeightAt()` and the highlight share it.
 
 **Face profiles** (`NONE`, `PARTIAL`, `FULL`) are derived from the corners.
 Culling rule: a face is hidden only when the neighbour's touching face is

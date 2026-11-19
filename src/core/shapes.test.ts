@@ -8,7 +8,11 @@ import {
   Orientation,
   SHAPES,
   Shape,
+  cornersFromMask,
   faceProfile,
+  isPlanarTop,
+  shapeForCornerMask,
+  topDiagonal,
   oppositeFace,
   topHeightAt,
   voxelTopCorners,
@@ -92,5 +96,89 @@ describe('orientation offsets', () => {
     expect(ORIENTATION_OFFSETS[Orientation.EAST]).toEqual([1, 0])
     expect(ORIENTATION_OFFSETS[Orientation.SOUTH]).toEqual([0, 1])
     expect(ORIENTATION_OFFSETS[Orientation.WEST]).toEqual([-1, 0])
+  })
+})
+
+describe('CORNERS shape', () => {
+  const corners = (mask: number): number => packVoxel(3, Shape.CORNERS, mask)
+
+  it('maps mask bits to corner heights', () => {
+    expect(cornersFromMask(0b0101)).toEqual([1, 0, 1, 0])
+    expect(voxelTopCorners(corners(0b1000))).toEqual([0, 0, 0, 1])
+  })
+
+  it('gives an outer corner two triangular sides and no other side', () => {
+    const v = corners(0b0010) // only c10 (north-east) high
+    expect(faceProfile(v, Face.PX)).toBe(FaceProfile.PARTIAL)
+    expect(faceProfile(v, Face.NZ)).toBe(FaceProfile.PARTIAL)
+    expect(faceProfile(v, Face.NX)).toBe(FaceProfile.NONE)
+    expect(faceProfile(v, Face.PZ)).toBe(FaceProfile.NONE)
+  })
+
+  it('gives an inner corner two full sides and two triangles', () => {
+    const v = corners(0b1011) // all but c11 (south-east)
+    expect(faceProfile(v, Face.NX)).toBe(FaceProfile.FULL)
+    expect(faceProfile(v, Face.NZ)).toBe(FaceProfile.FULL)
+    expect(faceProfile(v, Face.PX)).toBe(FaceProfile.PARTIAL)
+    expect(faceProfile(v, Face.PZ)).toBe(FaceProfile.PARTIAL)
+  })
+})
+
+describe('shapeForCornerMask', () => {
+  it('prefers named shapes', () => {
+    expect(shapeForCornerMask(0)).toBeNull()
+    expect(shapeForCornerMask(0b1111)).toEqual({ shape: Shape.FULL, orientation: 0 })
+    expect(shapeForCornerMask(0b0011)).toEqual({
+      shape: Shape.SLOPE,
+      orientation: Orientation.NORTH,
+    })
+    expect(shapeForCornerMask(0b0110)).toEqual({
+      shape: Shape.SLOPE,
+      orientation: Orientation.EAST,
+    })
+    expect(shapeForCornerMask(0b1100)).toEqual({
+      shape: Shape.SLOPE,
+      orientation: Orientation.SOUTH,
+    })
+    expect(shapeForCornerMask(0b1001)).toEqual({
+      shape: Shape.SLOPE,
+      orientation: Orientation.WEST,
+    })
+    expect(shapeForCornerMask(0b0100)).toEqual({ shape: Shape.CORNERS, orientation: 0b0100 })
+  })
+
+  it('round-trips through the shape registry', () => {
+    for (let mask = 1; mask < 16; mask++) {
+      const s = shapeForCornerMask(mask)
+      if (!s) throw new Error('unexpected null')
+      const top = voxelTopCorners(packVoxel(3, s.shape, s.orientation))
+      expect(top).toEqual(cornersFromMask(mask))
+    }
+  })
+})
+
+describe('top triangulation', () => {
+  it('splits away from the odd corner', () => {
+    expect(topDiagonal([1, 0, 0, 0])).toBe(1)
+    expect(topDiagonal([0, 1, 0, 0])).toBe(0)
+    expect(topDiagonal([1, 1, 0, 1])).toBe(1)
+  })
+
+  it('makes a ridge between high opposite corners', () => {
+    expect(topDiagonal([1, 0, 1, 0])).toBe(0)
+    expect(topDiagonal([0, 1, 0, 1])).toBe(1)
+  })
+
+  it('detects planar tops', () => {
+    expect(isPlanarTop([1, 1, 1, 1])).toBe(true)
+    expect(isPlanarTop([1, 1, 0, 0])).toBe(true)
+    expect(isPlanarTop([1, 0, 0, 0])).toBe(false)
+  })
+
+  it('samples an outer corner: flat half and sloped half', () => {
+    const c = cornersFromMask(0b0001) // c00 high, split on diagonal c10-c01
+    expect(topHeightAt(c, 0, 0)).toBeCloseTo(1)
+    expect(topHeightAt(c, 0.25, 0.25)).toBeCloseTo(0.5)
+    expect(topHeightAt(c, 0.8, 0.8)).toBeCloseTo(0) // far triangle is flat
   })
 })
