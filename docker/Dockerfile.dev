@@ -1,0 +1,43 @@
+# Development image for the project.
+#
+# Purpose: run every Node/pnpm command (install, dev server, tests, lint, build)
+# inside a container so the host only needs Docker and a browser.
+#
+# - The project directory is bind-mounted at /app by compose.yaml (no source is
+#   copied into the image).
+# - The container runs as CONTAINER_UID/CONTAINER_GID (computed by the Makefile,
+#   see compose.yaml) so files created in the bind mount (node_modules,
+#   lockfile, build output) are owned by the host user.
+# - pnpm is pinned here AND in package.json ("packageManager"); keep them equal.
+
+FROM node:24.22.3-bookworm-slim
+
+ARG PNPM_VERSION=12.18.0
+
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
+    # Shared pnpm content-addressable store, backed by a named volume.
+    npm_config_store_dir=/pnpm-store \
+    # Corepack keeps downloaded package managers here; must be writable by any uid.
+    COREPACK_HOME=/opt/corepack \
+    HOME=/home/node
+
+# git: used by some tooling (e.g. lint-staged later, version info).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN corepack enable \
+    && corepack prepare "pnpm@${PNPM_VERSION}" --activate \
+    # pnpm >= 11 fetches its native binary on first run: do it at build time
+    # so containers start offline and fast.
+    && pnpm --version \
+    && mkdir -p /pnpm-store /app \
+    # The container may run with a uid other than 1000 on another machine:
+    # make the shared locations writable for any user (dev image only).
+    && chmod -R a+rwX /pnpm-store /opt/corepack /home/node /app
+
+WORKDIR /app
+
+EXPOSE 5173
+
+CMD ["pnpm", "dev"]

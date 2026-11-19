@@ -1,0 +1,15 @@
+node_modules/
+dist/
+coverage/
+*.log
+.vite/
+.DS_Store
+.env
+.env.*
+!.env.example
+# Local Claude Code settings (may hold machine-specific permissions)
+.claude/settings.local.json
+# Agent guides are versioned on purpose (they may be ignored by a global
+# gitignore on contributor machines).
+!AGENTS.md
+!CLAUDE.md

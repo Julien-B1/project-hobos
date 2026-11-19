@@ -1,0 +1,4 @@
+# The image never copies the source (it is bind-mounted), so keep the build
+# context minimal.
+*
+!docker/

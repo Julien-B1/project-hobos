@@ -1,0 +1,23 @@
+// VS Code Dev Container definition.
+// Optional: "Reopen in Container" runs the editor tooling inside the same
+// `app` service used by the Makefile. Not needed on Linux/WSL, where
+// node_modules is bind-mounted and visible to host extensions.
+{
+  "name": "project-hobos",
+  "dockerComposeFile": ["../compose.yaml"],
+  "service": "app",
+  "workspaceFolder": "/app",
+  // Keep the container alive without starting the dev server automatically.
+  "overrideCommand": true,
+  "forwardPorts": [5173],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "Vue.volar",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "vitest.explorer"
+      ]
+    }
+  }
+}

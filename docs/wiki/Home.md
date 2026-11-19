@@ -1,0 +1,23 @@
+# project-hobos wiki
+
+Browser-first HD-2D voxel RPG prototype. This wiki is the in-depth
+documentation; the repository README only covers setup and daily usage.
+
+> Source of truth: `docs/wiki/` in the main repository. Edit the files there
+> and publish with `make wiki-publish`. Edits made directly in the GitHub wiki
+> UI are overwritten on the next publish.
+
+## Pages
+
+- [[Development Environment|Development-Environment]]: Docker stack, `make`
+  targets, dev container, troubleshooting.
+- [[Decisions]]: architecture decision records (engine, UI framework, Docker).
+
+## Status
+
+See `CHANGELOG.md` in the repository. Roadmap source: `BOOTSTRAP.md`.
+
+| Step | Content | Status |
+| --- | --- | --- |
+| 1 | Foundation: scaffold, WebGPU scene, RO-style camera, grid picking | In progress |
+| 2 | Multi-level voxel map: chunks, reference map, meshing, surface picking, targeted rebuild | Planned |
