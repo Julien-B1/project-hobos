@@ -12,7 +12,8 @@
  * checked here; navigation will add that later.
  */
 import { VOXEL_HEIGHT, type VoxelCoord } from './coords'
-import { isAir, shapeOf, type Voxel } from './voxel'
+import { Material } from './materials'
+import { isAir, materialOf, shapeOf, type Voxel } from './voxel'
 import type { VoxelMap } from './voxelMap'
 
 /**
@@ -188,4 +189,26 @@ function surfaceBelow(map: VoxelMap, x: number, fromY: number, z: number): numbe
 /** Shape id of the surface voxel, for display. */
 export function surfaceShape(hit: SurfaceHit): number {
   return shapeOf(hit.surfaceValue)
+}
+
+/** Deepest water (levels) whose bed is targeted instead of its surface. */
+export const WADING_DEPTH = 2
+
+/**
+ * Target the bed of shallow water: when `hit` targets a water surface and
+ * the ground lies at most {@link WADING_DEPTH} levels below it (a ford, a
+ * shallow bank), the surface becomes that ground, where one walks. Deeper
+ * water keeps its surface. Other hits are returned unchanged.
+ */
+export function wadeThrough(map: VoxelMap, hit: SurfaceHit): SurfaceHit {
+  if (materialOf(hit.surfaceValue) !== Material.WATER) return hit
+  const { x, y, z } = hit.surface
+  for (let below = y - 1; below >= y - WADING_DEPTH; below--) {
+    const v = map.get(x, below, z)
+    if (isAir(v)) return hit
+    if (materialOf(v) !== Material.WATER) {
+      return { ...hit, surface: { x, y: below, z }, surfaceValue: v }
+    }
+  }
+  return hit
 }

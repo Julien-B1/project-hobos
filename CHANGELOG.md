@@ -208,6 +208,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Ford: boulders rest on the gravel (no longer floating) in line with the
+  marker posts, on one extra gravel cell each side, so the whole crossing
+  width stays clear.
+- Hover over shallow water (2 levels or less: fords, shallow banks)
+  targets the bed, where one walks (`wadeThrough`); deep water keeps its
+  surface.
 - Ground decoration needs 4 free levels above the ground and its
   neighbours (water and canopies aside) and stays out of structures'
   bounds: reeds no longer poke through bridge decks.

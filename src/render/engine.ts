@@ -11,7 +11,13 @@ import { CHUNK_SIZE, VOXEL_HEIGHT, type VoxelCoord } from '@/core/coords'
 import { TerrainField } from '@/core/terrainSurface'
 import { isTerrainMaterial, materialName } from '@/core/materials'
 import { shapeDefinition, topHeightAt, voxelTopCorners } from '@/core/shapes'
-import { resolveColumnHit, resolveHit, type HitFacing, type SurfaceHit } from '@/core/surface'
+import {
+  resolveColumnHit,
+  resolveHit,
+  wadeThrough,
+  type HitFacing,
+  type SurfaceHit,
+} from '@/core/surface'
 import { materialOf, shapeOf } from '@/core/voxel'
 import { defaultStructureKinds } from '@/core/structures/kinds'
 import type { StructureSet } from '@/core/structures/structureSet'
@@ -462,6 +468,8 @@ export class Engine {
           : resolveHit(this.options.map, hit.point, hit.face.normal)
       }
     }
+    // Shallow water (a ford): the cursor goes to the bed, where one walks.
+    if (resolved) resolved = wadeThrough(this.options.map, resolved)
     this.hit = resolved
 
     const hover = resolved ? toHoverInfo(resolved) : null

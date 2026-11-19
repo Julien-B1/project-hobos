@@ -109,3 +109,28 @@ describe('resolveColumnHit', () => {
     expect(resolveColumnHit(map, { x: -10.5, y: 3, z: -10.5 })).toBeNull()
   })
 })
+
+describe('wadeThrough', () => {
+  it('targets the bed of shallow water and the surface of deep water', async () => {
+    const { wadeThrough } = await import('./surface')
+    const { Material } = await import('./materials')
+    const { packVoxel } = await import('./voxel')
+    const { VoxelMap } = await import('./voxelMap')
+    const map = new VoxelMap()
+    // Shallow: gravel at y 3, water at y 4 (one level deep).
+    map.set(0, 3, 0, packVoxel(Material.PATH))
+    map.set(0, 4, 0, packVoxel(Material.WATER))
+    // Deep: sand at y 0, water at y 1..4 (four levels deep).
+    map.set(1, 0, 0, packVoxel(Material.SAND))
+    for (let y = 1; y <= 4; y++) map.set(1, y, 0, packVoxel(Material.WATER))
+    const hitAt = (x: number) => ({
+      voxel: { x, y: 4, z: 0 },
+      voxelValue: map.get(x, 4, 0),
+      facing: 'top' as const,
+      surface: { x, y: 4, z: 0 },
+      surfaceValue: map.get(x, 4, 0),
+    })
+    expect(wadeThrough(map, hitAt(0)).surface.y).toBe(3)
+    expect(wadeThrough(map, hitAt(1)).surface.y).toBe(4)
+  })
+})
