@@ -2,7 +2,7 @@
 """
 Shrink a skinned, animated GLB (characters exported by Tripo / Mixamo).
 
-Usage: python3 -I tooling/compress_glb.py in.glb out.glb [--flat N]
+Usage: python3 -I tooling/compress_glb.py in.glb out.glb [--flat N] [--texture-only]
 
 Needs Python 3 with numpy, and ffmpeg (texture to WebP). Run on the host:
 it is a one-off asset step, not part of the build, and the dev image has
@@ -19,6 +19,10 @@ decoder to ship):
   into flat colours for cel shading (edge-preserving smoothing, then N
   colours without dithering: the painted shading becomes plain areas).
 Positions, joints and indices are kept as they are.
+
+With `--texture-only`, only the texture step runs: the geometry and the
+animations are copied untouched, for `gltfpack` to compress next (meshopt,
+`make models`), which does better than the steps above.
 """
 import json
 import struct
@@ -147,8 +151,52 @@ def webp(jpeg, flat=None):
         return open(dst, "rb").read()
 
 
-def main(src, dst, flat=None):
+def texture_only(gltf, binary, flat):
+    """Copy every buffer view as it is, except the images (flattened, WebP)."""
+    out = Writer()
+    images = {image["bufferView"]: image for image in gltf.get("images", [])}
+    for index, view in enumerate(gltf["bufferViews"]):
+        raw = binary[view.get("byteOffset", 0) : view.get("byteOffset", 0) + view["byteLength"]]
+        image = images.get(index)
+        if image is not None and image.get("mimeType") == "image/jpeg":
+            raw = webp(raw, flat)
+            image["mimeType"] = "image/webp"
+        out.view(raw, view.get("target"))
+        if "byteStride" in view:
+            out.views[-1]["byteStride"] = view["byteStride"]
+    if any(i.get("mimeType") == "image/webp" for i in images.values()):
+        used = set(gltf.get("extensionsUsed", [])) | {"EXT_texture_webp"}
+        gltf["extensionsUsed"] = sorted(used)
+        gltf["extensionsRequired"] = sorted(set(gltf.get("extensionsRequired", [])) | {"EXT_texture_webp"})
+        for texture in gltf.get("textures", []):
+            if "source" in texture:
+                texture.setdefault("extensions", {})["EXT_texture_webp"] = {"source": texture.pop("source")}
+    return out
+
+
+def write(gltf, out, dst):
+    gltf["bufferViews"] = out.views
+    if out.accessors:
+        gltf["accessors"] = out.accessors
+    blob = b"".join(out.chunks)
+    blob += b"\0" * ((-len(blob)) % 4)
+    gltf["buffers"] = [{"byteLength": len(blob)}]
+    text = json.dumps(gltf, separators=(",", ":")).encode()
+    text += b" " * ((-len(text)) % 4)
+    total = 12 + 8 + len(text) + 8 + len(blob)
+    with open(dst, "wb") as f:
+        f.write(struct.pack("<III", 0x46546C67, 2, total))
+        f.write(struct.pack("<II", len(text), 0x4E4F534A) + text)
+        f.write(struct.pack("<II", len(blob), 0x004E4942) + blob)
+    return total
+
+
+def main(src, dst, flat=None, only_texture=False):
     gltf, binary = load(src)
+    if only_texture:
+        total = write(gltf, texture_only(gltf, binary, flat), dst)
+        print(f"{src}: texture only -> {dst}: {total} bytes")
+        return
     out = Writer()
 
     # Mesh attributes.
@@ -231,18 +279,7 @@ def main(src, dst, flat=None):
     gltf["extensionsUsed"] = sorted(used)
     gltf["extensionsRequired"] = sorted(used)
 
-    gltf["bufferViews"] = out.views
-    gltf["accessors"] = out.accessors
-    blob = b"".join(out.chunks)
-    blob += b"\0" * ((-len(blob)) % 4)
-    gltf["buffers"] = [{"byteLength": len(blob)}]
-    text = json.dumps(gltf, separators=(",", ":")).encode()
-    text += b" " * ((-len(text)) % 4)
-    total = 12 + 8 + len(text) + 8 + len(blob)
-    with open(dst, "wb") as f:
-        f.write(struct.pack("<III", 0x46546C67, 2, total))
-        f.write(struct.pack("<II", len(text), 0x4E4F534A) + text)
-        f.write(struct.pack("<II", len(blob), 0x004E4942) + blob)
+    total = write(gltf, out, dst)
     print(f"{src}: {len(open(src, 'rb').read())} bytes -> {dst}: {total} bytes")
 
 
@@ -253,4 +290,7 @@ if __name__ == "__main__":
         at = args.index("--flat")
         flat = int(args[at + 1])
         del args[at : at + 2]
-    main(args[0], args[1], flat)
+    only_texture = "--texture-only" in args
+    if only_texture:
+        args.remove("--texture-only")
+    main(args[0], args[1], flat, only_texture)

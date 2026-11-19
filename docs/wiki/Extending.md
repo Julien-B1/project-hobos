@@ -73,12 +73,14 @@ generators do not change.
 
 1. Export a skinned glTF binary (Y up, facing +Z, feet at the origin,
    clips in place: no root motion).
-2. Shrink it on the host: `python3 -I tooling/compress_glb.py in.glb
-src/assets/models/name.glb --flat 12` (needs numpy and ffmpeg; `--flat N`
-   turns the painted texture into N flat colours for the cel shading). The
-   output loads
-   with the stock `GLTFLoader` (`KHR_mesh_quantization`,
-   `EXT_texture_webp`).
+2. Put it in `assets-src/models/name.glb` and run `make models`: on the
+   host, `tooling/compress_glb.py --flat 12 --texture-only` turns the
+   painted texture into 12 flat colours for the cel shading, as WebP
+   (needs Python 3, numpy, ffmpeg); in the container, `gltfpack -cc -vpf
+-vtf` compresses geometry and animations (meshopt; positions and UVs
+   stay floats: the outline offset and the shade tint read them raw). The
+   result lands in `src/assets/models/name.glb`; the engine's loader has
+   the meshopt decoder.
 3. Import it with `?url` and pass the idle and walk clip names to
    `Engine.spawnCharacter` (see `GameCanvas.vue`). If the model is not
    about 1 unit tall, or its walk is faster or slower, adjust

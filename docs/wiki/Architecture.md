@@ -376,14 +376,14 @@ trees and grid. Shadow quality barely changes GPU time; `high` costs about
 
 ## Tooling
 
-| Concern      | Tool and config                                                                                       |
-| ------------ | ----------------------------------------------------------------------------------------------------- |
-| Type-check   | `vue-tsc --build`: `tsconfig.app.json` (src, browser) + `tsconfig.node.json` (`vite.config.ts`).      |
-| Strictness   | `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride`, `noUnused*`.                              |
-| Lint         | ESLint flat config, `typescript-eslint` strict + stylistic type-checked, `eslint-plugin-vue`.         |
-| Format       | Prettier (`.prettierrc.json`); ESLint formatting rules disabled via `eslint-config-prettier`.         |
-| Tests        | Vitest, Node environment, files `src/**/*.test.ts` next to the module under test.                     |
-| Import alias | `@/` maps to `src/` (Vite `resolve.alias` and tsconfig `paths`).                                      |
-| Dev server   | `tooling/gzip.ts`: gzip for dev and preview; pre-bundled deps minified, inline maps stripped.         |
-| Screenshots  | `make screenshots` (`scripts/screenshots.mjs`): headless Chromium (Playwright) into `screenshots/`.   |
-| Models       | `tooling/compress_glb.py` (host: Python 3, numpy, ffmpeg): shrinks skinned glTF models, stock loader. |
+| Concern      | Tool and config                                                                                                                   |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| Type-check   | `vue-tsc --build`: `tsconfig.app.json` (src, browser) + `tsconfig.node.json` (`vite.config.ts`).                                  |
+| Strictness   | `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride`, `noUnused*`.                                                          |
+| Lint         | ESLint flat config, `typescript-eslint` strict + stylistic type-checked, `eslint-plugin-vue`.                                     |
+| Format       | Prettier (`.prettierrc.json`); ESLint formatting rules disabled via `eslint-config-prettier`.                                     |
+| Tests        | Vitest, Node environment, files `src/**/*.test.ts` next to the module under test.                                                 |
+| Import alias | `@/` maps to `src/` (Vite `resolve.alias` and tsconfig `paths`).                                                                  |
+| Dev server   | `tooling/gzip.ts`: gzip for dev and preview; pre-bundled deps minified, inline maps stripped.                                     |
+| Screenshots  | `make screenshots` (`scripts/screenshots.mjs`): headless Chromium (Playwright) into `screenshots/`.                               |
+| Models       | `make models`: `assets-src/models/` to `src/assets/models/` (flat WebP texture on the host, `gltfpack` meshopt in the container). |

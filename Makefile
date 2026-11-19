@@ -69,6 +69,14 @@ check: lint format-check typecheck test ## Lint + format check + type-check + te
 screenshots: ## Screenshots of the app in headless Chromium into screenshots/ (VIEWS=file.json for custom views)
 	$(RUN) node scripts/screenshots.mjs $(VIEWS)
 
+models: ## Rebuild src/assets/models/ from assets-src/models/ (host: python3 + numpy + ffmpeg for the texture, then gltfpack in the container)
+	@mkdir -p tooling/.build
+	for f in assets-src/models/*.glb; do \
+	  name=$$(basename $$f); \
+	  python3 -I tooling/compress_glb.py $$f tooling/.build/$$name --flat 12 --texture-only && \
+	  $(RUN) pnpm exec gltfpack -i tooling/.build/$$name -o src/assets/models/$$name -cc -vpf -vtf || exit 1; \
+	done
+
 sh: ## Open a shell inside the dev container
 	$(RUN) bash
 

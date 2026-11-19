@@ -185,10 +185,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   foliage, 4 free levels above, shallow water allowed), 8-way moves of at
   most 2 levels without corner cutting, A* paths, connected regions, spawn
   point.
-- `tooling/compress_glb.py`: shrinks skinned glTF models without a
-  decoder to ship (key reduction, quantized rotations, weights, UVs and
-  normals, WebP texture): the fighter went from 1060 kB to 522 kB (259 kB
-  gzipped; the dev server now gzips `model/gltf-binary`).
+- Model pipeline `make models`: sources in `assets-src/models/` (the
+  original exports), texture flattened and turned to WebP on the host
+  (`tooling/compress_glb.py --flat 12 --texture-only`: Python, numpy,
+  ffmpeg), then meshopt compression by `gltfpack` 1.3.0 (new dev
+  dependency) in the container (`-cc -vpf -vtf`: positions and UVs stay
+  floats, which the outline and the shade tint rely on). The loader has
+  Three's meshopt decoder. The fighter went from 1060 kB to 211 kB
+  (159 kB downloaded; the dev server now gzips `model/gltf-binary`).
+  `compress_glb.py` alone (without `--texture-only`) still shrinks a model
+  without any decoder: 515 kB.
 - Foot IK (`render/actors/footIk.ts`): each foot is planted on the ground
   under it (body lowered for the lowest foot, two-bone leg IK with a pole
   in front of the knee, planted feet turned along the slope); standing,

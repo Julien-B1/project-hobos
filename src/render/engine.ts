@@ -8,6 +8,7 @@
  */
 import { Raycaster, Vector2, Vector3, type Mesh, type Scene } from 'three/webgpu'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 import { CHUNK_SIZE, VOXEL_HEIGHT, type VoxelCoord } from '@/core/coords'
 import { TerrainField } from '@/core/terrainSurface'
 import { isTerrainMaterial, materialName } from '@/core/materials'
@@ -413,7 +414,8 @@ export class Engine {
   ): Promise<boolean> {
     const stand = this.walking().spawnPoint(near.x, near.z)
     if (!stand) return false
-    const gltf = await new GLTFLoader().loadAsync(url)
+    // Models are meshopt-compressed (`make models`).
+    const gltf = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(url)
     const character = new Character(
       gltf.scene,
       gltf.animations,

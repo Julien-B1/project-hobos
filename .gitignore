@@ -16,3 +16,6 @@ coverage/
 
 # Screenshots from `make screenshots`
 screenshots/
+
+# Intermediate model files (make models)
+tooling/.build/
