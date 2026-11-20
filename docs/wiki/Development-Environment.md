@@ -80,7 +80,8 @@ camera). Playwright is pinned in `package.json` and in the Dockerfile
 dependency; runtime 6.10.0, `neutralino.config.json`): a small native
 window around the system web view, the game files embedded in the
 executable. Output in `release/hobos/` (git-ignored): `hobos-win_x64.exe`
-(about 4 MB), Linux and macOS binaries, and a zip of them all. The
+(about 4 MB), Linux and macOS binaries, a Linux AppImage
+(`hobos-x86_64.AppImage`, about 2.3 MB) and a zip of them all. The
 runtimes are downloaded once into `bin/` (git-ignored). The build skips
 the precompressed `.br` / `.gz` files (`PRECOMPRESS=off`): the window
 serves files locally.
@@ -88,7 +89,14 @@ serves files locally.
 On Windows the web view is WebView2 (Edge, Chromium): WebGPU works,
 WebView2 ships with Windows 11 and up-to-date Windows 10. On Linux the
 binary needs WebKitGTK (`libwebkit2gtk-4.1`), whose WebGPU support is
-limited: the WebGL 2 fallback is used. macOS builds are unsigned
+limited: the WebGL 2 fallback is used. The AppImage
+(`scripts/appimage.mjs`) wraps that same binary with a desktop entry and
+an icon (`tooling/appimage/hobos.png`) for desktop integration; it does
+not bundle WebKitGTK (about 100 MB), so the system one is still needed.
+appimagetool 1.9.1 and the type2 runtime are downloaded into
+`bin/appimage/`, pinned by SHA-256, and run extracted
+(`APPIMAGE_EXTRACT_AND_RUN`: no FUSE in containers); the dev image
+provides the `file` command they need. macOS builds are unsigned
 (right click, Open, the first time).
 
 Publishing a demo: `make release`, tag the commit (`vX.Y.Z-demo.N`), push

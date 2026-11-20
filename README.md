@@ -94,7 +94,8 @@ Camera settings (pitch, FOV, zoom bounds, speeds) live in `src/app/config.ts`.
 
 `make release` builds desktop executables (Neutralino) into
 `release/hobos/`: `hobos-win_x64.exe` for Windows 10/11 (about 4 MB, no
-install), plus Linux and macOS binaries. Demo builds are published as
+install), a Linux AppImage `hobos-x86_64.AppImage` (needs WebKitGTK,
+`libwebkit2gtk-4.1`), plus Linux and macOS binaries. Demo builds are published as
 GitHub pre-releases.
 
 ## Branches

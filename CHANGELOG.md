@@ -13,7 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Neutralino (`@neutralinojs/neu` 11.8.0, runtime 6.10.0,
   `neutralino.config.json`) into `release/hobos/`: Windows executable
   (about 4 MB, files embedded, WebView2 so WebGPU), Linux and macOS
-  binaries. `pnpm-workspace.yaml` leaves the build scripts of neu's
+  binaries, plus a Linux AppImage (`hobos-x86_64.AppImage`, about
+  2.3 MB: `scripts/appimage.mjs`, appimagetool 1.9.1 and type2 runtime
+  20251108 pinned by SHA-256, icon in `tooling/appimage/`; the dev image
+  gains the `file` package it needs). `make screenshots` steps accept a
+  key press (`{ "key": "h" }`). `pnpm-workspace.yaml` leaves the build scripts of neu's
   optional dependencies off. `make models` and `make release` are phony
   targets.
 - Structures (ADR-007): parametric map objects that stamp gameplay voxels

@@ -77,8 +77,8 @@ models: ## Rebuild src/assets/models/ from assets-src/models/ (host: python3 + n
 	  $(RUN) pnpm exec gltfpack -i tooling/.build/$$name -o src/assets/models/$$name -cc -vpf -vtf || exit 1; \
 	done
 
-release: ## Desktop demo (Neutralino): build, then executables for Windows, Linux and macOS into release/hobos/
-	$(RUN) sh -c "PRECOMPRESS=off pnpm build && { [ -d bin ] || pnpm exec neu update; } && pnpm exec neu build --release --embed-resources"
+release: ## Desktop demo (Neutralino): build, then executables for Windows, Linux (+ AppImage) and macOS into release/hobos/
+	$(RUN) sh -c "PRECOMPRESS=off pnpm build && { [ -f bin/neutralino-win_x64.exe ] || pnpm exec neu update; } && pnpm exec neu build --release --embed-resources && node scripts/appimage.mjs"
 
 sh: ## Open a shell inside the dev container
 	$(RUN) bash

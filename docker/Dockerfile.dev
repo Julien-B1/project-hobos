@@ -24,8 +24,9 @@ ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
     HOME=/home/node
 
 # git: used by some tooling (e.g. lint-staged later, version info).
+# file: required by appimagetool (`make release`, Linux AppImage).
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git ca-certificates \
+    && apt-get install -y --no-install-recommends git ca-certificates file \
     && rm -rf /var/lib/apt/lists/*
 
 RUN corepack enable \

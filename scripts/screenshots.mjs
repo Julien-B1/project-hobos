@@ -12,7 +12,8 @@
  * e.g. "map=bridges&cam=47,12,14,35"), with optional "steps": mouse
  * clicks played before the capture, each { "click": [x, y], "button":
  * "left" | "right", "wait": ms } in viewport pixels (1280 x 800), or a
- * burst of captures { "frames": n, "every": ms } saved as name-NN.png. Without a
+ * burst of captures { "frames": n, "every": ms } saved as name-NN.png, or a
+ * key press { "key": "h" }. Without a
  * views file, the default views show every crossing of the bridges map.
  */
 import { mkdir, readFile } from 'node:fs/promises'
@@ -72,6 +73,12 @@ try {
           await page.screenshot({ path: burst })
           await page.waitForTimeout(step.every ?? 100)
         }
+        continue
+      }
+      if (step.key) {
+        // A key press, e.g. "h" to hide the overlays.
+        await page.keyboard.press(step.key)
+        await page.waitForTimeout(step.wait ?? 300)
         continue
       }
       const [x, y] = step.click
