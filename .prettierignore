@@ -6,3 +6,4 @@ BOOTSTRAP.md
 tooling/.build/
 bin/
 release/
+src/assets/animations/humanoid.clips.json

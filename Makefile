@@ -23,7 +23,7 @@ RUN     := $(COMPOSE) run --rm app
 
 .DEFAULT_GOAL := help
 
-.PHONY: help image install up down test test-watch lint format format-check typecheck build preview check screenshots models release deploy deploy-status deploy-logs deploy-restart deploy-down deploy-prune sh wiki-publish clean
+.PHONY: help image install up down test test-watch lint format format-check typecheck build preview check screenshots models clip-check clip-preview release deploy deploy-status deploy-logs deploy-restart deploy-down deploy-prune sh wiki-publish clean
 
 help: ## List available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -81,10 +81,18 @@ models: ## Rebuild src/assets/models/ from assets-src/models/ (Blender script pe
 	  python3 -I tooling/compress_glb.py $$src tooling/.build/$$name --flat 12 --max-size 1024 --no-animations --texture-only && \
 	  $(RUN) pnpm exec gltfpack -i tooling/.build/$$name -o src/assets/models/$$name -cc -vpf -vtf || exit 1; \
 	done
-	# Shared animation library: the wizard's skeleton and clips, no mesh.
+	# Shared animation library: the reference skeleton and every clip, no
+	# mesh, and the description of the combat clips for the game.
 	@mkdir -p src/assets/animations
-	$(RUN) blender -b --factory-startup --python tooling/blender/humanoid_library.py -- assets-src/models/wizard.glb tooling/.build/humanoid.glb >/dev/null
+	$(RUN) blender -b --factory-startup --python tooling/blender/humanoid_library.py -- assets-src/models/wizard.glb tooling/.build/humanoid.glb src/assets/animations/humanoid.clips.json | grep -E "^(combat_clips|humanoid|library)" || true
 	$(RUN) pnpm exec gltfpack -i tooling/.build/humanoid.glb -o src/assets/animations/humanoid.glb -cc -kn
+
+clip-check: ## Numbers of the combat clips (wrists, reach, arms in the trunk): CLIPS="sword_draw ..." for a table per frame
+	$(RUN) blender -b --factory-startup --python tooling/blender/check_clips.py -- $(CLIPS) | grep -E "^(check|combat_clips|humanoid)"
+
+clip-preview: ## Render frames of the combat clips into tooling/.build/preview/ (CLIPS="sword_draw:1,10,20", MODEL=fighter, VIDEO=1 for every frame)
+	@mkdir -p tooling/.build/preview
+	$(RUN) env PREVIEW_MODEL=$(or $(MODEL),wizard) $(if $(VIDEO),PREVIEW_VIDEO=1) blender -b --factory-startup --python tooling/blender/preview_clips.py -- tooling/.build/preview $(CLIPS) >/dev/null
 
 release: ## Desktop demo (Neutralino): build, then executables for Windows, Linux (+ AppImage) and macOS into release/hobos/
 	$(RUN) sh -c "PRECOMPRESS=off pnpm build && { [ -f bin/neutralino-win_x64.exe ] || pnpm exec neu update; } && pnpm exec neu build --release --embed-resources && node scripts/appimage.mjs"

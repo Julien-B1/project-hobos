@@ -1,5 +1,5 @@
 """
-Spring bones for the wizard model (Tripo export, VRM-style bone names).
+The wizard model: reference skeleton (humanoid.py) and spring bones.
 
 Usage (in the dev container, see `make models`):
     blender -b --python tooling/blender/wizard.py -- in.glb out.glb
@@ -18,23 +18,38 @@ chains, fading into the body bones where the cloth is attached:
   the sleeve hanging below the arm;
 - hair: 3 chains of 3 bones down the back, from the head.
 
-It also keeps only the base colour texture (the game's toon material uses
-no normal or metal-roughness map) and removes a stray icosphere of the
-export. Coordinates below are Blender's (Z up, the model faces -Y), in
+The model is first brought to the reference skeleton; only the base
+colour texture is kept (see `humanoid.export_model`). Coordinates below are Blender's (Z up, the model faces -Y), in
 model units (the model is about 1 unit tall).
 """
 import math
 import sys
 
 import bmesh
+import os
+
 import bpy
 from mathutils import Vector
 from mathutils.geometry import intersect_point_line
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import humanoid  # noqa: E402
+
 ARGS = sys.argv[sys.argv.index("--") + 1 :]
 SOURCE, TARGET = ARGS[0], ARGS[1]
 
-PREFIX = "J_Bip_"
+# Bones of the reference skeleton (humanoid.py), by the short labels used
+# below: C centre, L left, R right.
+PREFIX = ""
+NAMES = {
+    "C_Hips": "Hips", "C_Head": "Head", "C_Neck": "Neck",
+    "L_UpperLeg": "LeftUpLeg", "L_LowerLeg": "LeftLeg", "L_Foot": "LeftFoot",
+    "R_UpperLeg": "RightUpLeg", "R_LowerLeg": "RightLeg", "R_Foot": "RightFoot",
+    "L_LowerArm": "LeftForeArm", "L_Hand": "LeftHand",
+    "R_LowerArm": "RightForeArm", "R_Hand": "RightHand",
+}
+# Bone segments: from a bone's head to its child's head.
+SEGMENTS = {"L_UpperLeg": "L_LowerLeg", "L_LowerLeg": "L_Foot", "R_UpperLeg": "R_LowerLeg", "R_LowerLeg": "R_Foot", "L_LowerArm": "L_Hand", "R_LowerArm": "R_Hand"}
 LEGS = ["L_UpperLeg", "L_LowerLeg", "R_UpperLeg", "R_LowerLeg"]
 
 # Skirt: loose parts below the waist that stand away from the legs (the
@@ -70,12 +85,7 @@ def smoothstep(e0, e1, x):
 
 
 def load():
-    bpy.ops.wm.read_factory_settings(use_empty=True)
-    bpy.ops.import_scene.gltf(filepath=SOURCE)
-    for o in list(bpy.data.objects):
-        if o.type == "MESH" and o.name.startswith("Icosphere"):
-            bpy.data.objects.remove(o)
-    arm = next(o for o in bpy.data.objects if o.type == "ARMATURE")
+    arm = humanoid.load_normalised(SOURCE)
     mesh = max((o for o in bpy.data.objects if o.type == "MESH"), key=lambda o: len(o.data.vertices))
     return arm, mesh
 
@@ -181,7 +191,10 @@ def along(joints_z, z, names):
 def main():
     arm, mesh = load()
     mw = mesh.matrix_world
-    bones = {b.name: (arm.matrix_world @ b.head_local, arm.matrix_world @ b.tail_local) for b in arm.data.bones}
+    real = {label: humanoid.PREFIX + name for label, name in NAMES.items()}
+    head = lambda label: arm.matrix_world @ arm.data.bones[real[label]].head_local  # noqa: E731
+    bones = {label: (head(label), head(SEGMENTS[label]) if label in SEGMENTS else head(label)) for label in NAMES}
+    dominant_label = {v: k for k, v in real.items()}
     hips = bones[PREFIX + "C_Hips"][0]
     pos = [mw @ v.co for v in mesh.data.vertices]
 
@@ -189,7 +202,7 @@ def main():
     skirt, sleeve, hair = [], {"L": [], "R": []}, []
     for part in loose_parts(mesh):
         pts = [pos[i] for i in part]
-        dom = {dominant_group(mesh, i) for i in part}
+        dom = {dominant_label.get(dominant_group(mesh, i), "") for i in part}
         lowest = min(p.z for p in pts)
         mean_leg = sum(min(segment_distance(p, *bones[PREFIX + n]) for n in LEGS) for p in pts) / len(pts)
         if 0.05 < lowest < SKIRT_PART_LOWEST_TOP and mean_leg >= SKIRT_PART_MIN_MEAN_LEG_DISTANCE:
@@ -237,18 +250,18 @@ def main():
             to_local @ Vector((hips.x + r * math.cos(theta), hips.y + r * math.sin(theta), z))
             for r, z in zip(joints, levels)
         ]
-        skirt_chains.append((theta, add_chain(arm, PREFIX + "C_Hips", f"Spring_Skirt{c}", points)))
+        skirt_chains.append((theta, add_chain(arm, real["C_Hips"], f"Spring_Skirt{c}", points)))
 
     sleeve_chains = {}
     for side, sign in (("L", 1), ("R", -1)):
         x, y, _ = SLEEVE_HEAD
         points = [to_local @ Vector((sign * x, y, z)) for z in SLEEVE_JOINTS_Z]
-        sleeve_chains[side] = add_chain(arm, PREFIX + side + "_LowerArm", f"Spring_Sleeve{side}", points)
+        sleeve_chains[side] = add_chain(arm, real[side + "_LowerArm"], f"Spring_Sleeve{side}", points)
 
     hair_chains = []
     for k, x in enumerate(HAIR_CHAINS_X):
         points = [to_local @ Vector((x, HAIR_Y, z)) for z in HAIR_JOINTS_Z]
-        hair_chains.append((x, add_chain(arm, PREFIX + "C_Head", f"Spring_Hair{k}", points)))
+        hair_chains.append((x, add_chain(arm, real["C_Head"], f"Spring_Hair{k}", points)))
     bpy.ops.object.mode_set(mode="OBJECT")
 
     # 3. Weights.
@@ -261,7 +274,7 @@ def main():
         f = (a - c0 * step) / step
         chain = blend(along(levels, p.z, skirt_chains[c0][1]), along(levels, p.z, skirt_chains[c1][1]), f)
         waist = smoothstep(WAIST_FULL_SKIRT, WAIST_FULL_HIPS, p.z)
-        set_weights(mesh, i, blend(chain, {PREFIX + "C_Hips": 1.0}, waist))
+        set_weights(mesh, i, blend(chain, {real["C_Hips"]: 1.0}, waist))
 
     for side, ids in sleeve.items():
         lower = bones[PREFIX + side + "_LowerArm"]
@@ -286,31 +299,6 @@ def main():
 
     print(f"wizard: skirt {len(set(skirt))}, sleeves {sum(len(set(v)) for v in sleeve.values())}, hair {len(set(hair))} vertices")
 
-    # 4. Base colour only.
-    for mat in bpy.data.materials:
-        if mat.node_tree is None:
-            continue
-        tree = mat.node_tree
-        bsdf = next((n for n in tree.nodes if n.type == "BSDF_PRINCIPLED"), None)
-        keep = set()
-        if bsdf:
-            for link in bsdf.inputs["Base Color"].links:
-                keep.add(link.from_node)
-        for n in list(tree.nodes):
-            if n.type in ("TEX_IMAGE", "NORMAL_MAP", "SEPARATE_COLOR") and n not in keep:
-                tree.nodes.remove(n)
-
-    bpy.ops.export_scene.gltf(
-        filepath=TARGET,
-        export_format="GLB",
-        export_yup=True,
-        export_skins=True,
-        export_animations=True,
-        export_animation_mode="ACTIONS",
-        export_force_sampling=True,
-        export_def_bones=False,
-        export_all_influences=False,
-    )
-
+    humanoid.export_model(TARGET)
 
 main()
