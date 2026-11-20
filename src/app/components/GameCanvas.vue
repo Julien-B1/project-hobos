@@ -29,9 +29,11 @@ import { createTestMap } from '@/core/generators/catalog'
 import type { SessionInfo } from '@/app/session'
 import fighterUrl from '@/assets/models/fighter.glb?url'
 import wizardUrl from '@/assets/models/wizard.glb?url'
+import humanoidUrl from '@/assets/animations/humanoid.glb?url'
 
 /**
- * Character models: file, clips (idle: looking around, and walk) and arm
+ * Character models: file, clips of the shared animation library (idle:
+ * looking around, walk, run) and arm
  * style (the wizard holds her arms clear of the skirt; both swing loosely).
  */
 const CHARACTERS = {
@@ -49,6 +51,7 @@ const CHARACTERS = {
     clips: {
       idle: 'look_around.001',
       walk: 'walk.001',
+      run: 'run.001',
       arms: { abduction: 0, elbowFlex: 0.1, forwardFlex: 0.3, followThrough: 0.5, lag: 0.1 },
     },
   },
@@ -149,6 +152,7 @@ onMounted(async () => {
     const feet = await engine
       .spawnCharacter(
         CHARACTERS[character].url,
+        humanoidUrl,
         CHARACTERS[character].clips,
         flags.spawn ?? world.home,
       )

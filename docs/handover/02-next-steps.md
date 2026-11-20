@@ -5,9 +5,9 @@ State on **2026-11-20**, after the `v0.3.0` milestone.
 ## In progress
 
 - **Wizard character** with spring bones (skirt, sleeves, hair): owner's
-  visual check pending (tune `DEFAULT_SPRING_PROFILE` from feedback). Its
-  other clips (run, cast a spell, fall, defeat, stairs) are in the model,
-  not used by the game yet.
+  visual check pending (tune `DEFAULT_SPRING_PROFILE` and the `arms`
+  styles from feedback). Clips come from the shared animation library;
+  cast a spell, fall, defeat and stairs are in it, not used yet.
 
 ## Next topic (owner, 2026-11-20)
 

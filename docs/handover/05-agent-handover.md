@@ -43,7 +43,7 @@ Read this first, then [`AGENTS.md`](../../AGENTS.md). Talk to the owner in
 | `src/app/`                                                                 | Vue shell, HUD, map picker, time of day, cut slider, input bindings, `config.ts`.                      |
 | `scripts/screenshots.mjs`, `tooling/gzip.ts`                               | Headless screenshots; gzip dev server.                                                                 |
 | `assets-src/models/`, `tooling/blender/`, `tooling/compress_glb.py`        | Model sources; Blender scripts per model (spring bones); texture step of `make models`.                |
-| `src/render/actors/`                                                       | Character, foot IK, spring bones (cloth, hair), toon material, cut support.                            |
+| `src/render/actors/`                                                       | Character, foot IK, arm style, spring bones, clip retargeting (animation library), toon material.      |
 | `docs/wiki/`                                                               | Architecture, Conventions, Decisions (ADR-001 to 010), Extending, Structures, maps, dev environment.   |
 
 ## URL switches

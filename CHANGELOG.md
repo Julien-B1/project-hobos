@@ -16,9 +16,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   simulated root to tip at a fixed 60 Hz step (inertia, pull to rest,
   gravity, capsule colliders on the legs and spine).
 - Character choice in the map picker and `?character=wizard|fighter`.
-- Running: a move of more than 2 cells is run (run clip, or the walk clip
-  played faster without one) at 1.8 times the walking speed; 1 or 2 cells
-  are walked (`gaitFor`, `RUN_SPEED`).
+- Running: a move of more than 2 cells is run at twice the walking speed
+  (a jog; D&D's Dash doubles the speed too); 1 or 2 cells are walked
+  (`gaitFor`, `RUN_SPEED`).
+- Shared animation library (`src/assets/animations/humanoid.glb`, 157 kB,
+  seven clips, built by `make models` from the wizard's export with
+  `tooling/blender/humanoid_library.py`): every character takes its clips
+  from it, baked at load for its own skeleton (`render/actors/retarget.ts`:
+  Mixamo or VRM-style names, other bone rolls, A-pose or T-pose rest,
+  hips scaled to the leg length). The fighter now runs with the wizard's
+  run. Clips whose feet never touch the ground (the run) are lowered so
+  they do. Character models carry no clips any more
+  (`compress_glb.py --no-animations`): wizard 214 kB, fighter 165 kB.
 - Arm style per character (`render/actors/armPose.ts`, `ArmStyle`), on
   top of the clips: arms held away from the body (the wizard's hands no
   longer go through her skirt), a little elbow bend growing with the

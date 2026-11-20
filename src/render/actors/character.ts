@@ -56,7 +56,7 @@ const WALK_TIME_SCALE = 1.5
 export const WALK_SPEED = CLIP_STRIDE_SPEED * (CHARACTER_HEIGHT / MODEL_HEIGHT) * WALK_TIME_SCALE
 
 /** Running speed: walking speed times this. */
-const RUN_FACTOR = 1.8
+const RUN_FACTOR = 2
 
 /** Running speed, in world units per second. */
 export const RUN_SPEED = WALK_SPEED * RUN_FACTOR

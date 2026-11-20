@@ -78,9 +78,13 @@ models: ## Rebuild src/assets/models/ from assets-src/models/ (Blender script pe
 	    $(RUN) blender -b --factory-startup --python $$script -- $$f tooling/.build/$${name%.glb}.blend.glb >/dev/null || exit 1; \
 	    src=tooling/.build/$${name%.glb}.blend.glb; \
 	  fi; \
-	  python3 -I tooling/compress_glb.py $$src tooling/.build/$$name --flat 12 --max-size 1024 --texture-only && \
+	  python3 -I tooling/compress_glb.py $$src tooling/.build/$$name --flat 12 --max-size 1024 --no-animations --texture-only && \
 	  $(RUN) pnpm exec gltfpack -i tooling/.build/$$name -o src/assets/models/$$name -cc -vpf -vtf || exit 1; \
 	done
+	# Shared animation library: the wizard's skeleton and clips, no mesh.
+	@mkdir -p src/assets/animations
+	$(RUN) blender -b --factory-startup --python tooling/blender/humanoid_library.py -- assets-src/models/wizard.glb tooling/.build/humanoid.glb >/dev/null
+	$(RUN) pnpm exec gltfpack -i tooling/.build/humanoid.glb -o src/assets/animations/humanoid.glb -cc -kn
 
 release: ## Desktop demo (Neutralino): build, then executables for Windows, Linux (+ AppImage) and macOS into release/hobos/
 	$(RUN) sh -c "PRECOMPRESS=off pnpm build && { [ -f bin/neutralino-win_x64.exe ] || pnpm exec neu update; } && pnpm exec neu build --release --embed-resources && node scripts/appimage.mjs"

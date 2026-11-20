@@ -27,6 +27,7 @@ import type { VoxelMap } from '@/core/voxelMap'
 import { WalkArea, type Stand } from '@/core/navigation/walkArea'
 import { Character, type CharacterClips, type WalkPoint } from './actors/character'
 import { applyCut } from './actors/cutSupported'
+import { retargetClip } from './actors/retarget'
 import { CameraRig, type CameraRigSettings } from './cameraRig'
 import { ChunkRenderer } from './chunkRenderer'
 import { NO_CUT, createLayerMaterials, type LayerMaterialSet } from './materials'
@@ -458,18 +459,27 @@ export class Engine {
    * Load a character model and put it on grass, in the largest walkable
    * region of the map, as close as possible to (x, z) (world units).
    * Resolves to where its feet are (world units), or null when the map has
-   * no such spot.
+   * no such spot. `libraryUrl` is the shared animation library: the clips
+   * named in `clips` are taken from it and baked for the model's skeleton
+   * (`actors/retarget.ts`).
    */
   async spawnCharacter(
     url: string,
+    libraryUrl: string,
     clips: CharacterClips,
     near: { readonly x: number; readonly z: number },
   ): Promise<{ readonly x: number; readonly y: number; readonly z: number } | null> {
     const stand = this.walking().spawnPoint(near.x, near.z)
     if (!stand) return null
     // Models are meshopt-compressed (`make models`).
-    const gltf = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(url)
-    const character = new Character(gltf.scene, gltf.animations, clips)
+    const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder)
+    const [gltf, library] = await Promise.all([loader.loadAsync(url), loader.loadAsync(libraryUrl)])
+    // Clips come from the shared library, baked for this skeleton.
+    const names = [clips.idle, clips.walk, ...(clips.run ? [clips.run] : [])]
+    const baked = library.animations
+      .filter((clip) => names.includes(clip.name))
+      .map((clip) => retargetClip(clip, library.scene, gltf.scene))
+    const character = new Character(gltf.scene, baked, clips)
     character.placeAt(walkPoint(stand))
     this.character?.dispose()
     this.character = character

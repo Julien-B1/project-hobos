@@ -84,8 +84,13 @@ generators do not change.
    stay floats: the outline offset and the shade tint read them raw). The
    result lands in `src/assets/models/name.glb`; the engine's loader has
    the meshopt decoder.
-3. Import it with `?url` and pass the idle and walk clip names to
-   `Engine.spawnCharacter` (see `GameCanvas.vue`). If the model is not
+3. Import it with `?url` and pass it to `Engine.spawnCharacter` with the
+   animation library and the names of its idle, walk and run clips (see
+   `GameCanvas.vue`). Models carry no clips: `make models` drops them
+   (`--no-animations`) and every character plays the library's
+   (`render/actors/retarget.ts`); a rig needs Mixamo or VRM-style bone
+   names (`HUMANOID_BONES`). New clips go into the library: today it is
+   built from the wizard's export (`tooling/blender/humanoid_library.py`). If the model is not
    about 1 unit tall, or its walk is faster or slower, adjust
    `MODEL_HEIGHT` and `CLIP_STRIDE_SPEED` in `render/actors/character.ts`
    (the stride speed is how fast a planted foot slides back in the walk

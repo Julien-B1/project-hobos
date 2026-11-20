@@ -9,7 +9,7 @@ describe('gaitFor', () => {
     expect(gaitFor(3)).toBe('run')
   })
 
-  it('runs 1.8 times as fast as it walks', () => {
-    expect(RUN_SPEED / WALK_SPEED).toBeCloseTo(1.8)
+  it('runs twice as fast as it walks', () => {
+    expect(RUN_SPEED / WALK_SPEED).toBeCloseTo(2)
   })
 })

@@ -2,7 +2,7 @@
 """
 Shrink a skinned, animated GLB (characters exported by Tripo / Mixamo).
 
-Usage: python3 -I tooling/compress_glb.py in.glb out.glb [--flat N] [--max-size PX] [--texture-only]
+Usage: python3 -I tooling/compress_glb.py in.glb out.glb [--flat N] [--max-size PX] [--no-animations] [--texture-only]
 
 Needs Python 3 with numpy, and ffmpeg (texture to WebP). Run on the host:
 it is a one-off asset step, not part of the build, and the dev image has
@@ -15,6 +15,8 @@ decoder to ship):
   (core glTF);
 - mesh: weights as normalized bytes, UVs as normalized shorts (core glTF),
   normals as normalized bytes (KHR_mesh_quantization);
+- with `--no-animations`, the clips are dropped (characters take theirs
+  from the shared animation library, `make models`);
 - texture: JPEG to WebP (EXT_texture_webp), at most `--max-size` pixels
   wide when given (area downscale); with `--flat N`, first turned
   into flat colours for cel shading (edge-preserving smoothing, then N
@@ -196,8 +198,11 @@ def write(gltf, out, dst):
     return total
 
 
-def main(src, dst, flat=None, only_texture=False, max_size=None):
+def main(src, dst, flat=None, only_texture=False, max_size=None, no_animations=False):
     gltf, binary = load(src)
+    if no_animations:
+        # Clips come from the shared library; gltfpack drops the orphan data.
+        gltf.pop("animations", None)
     if only_texture:
         total = write(gltf, texture_only(gltf, binary, flat, max_size), dst)
         print(f"{src}: texture only -> {dst}: {total} bytes")
@@ -303,4 +308,7 @@ if __name__ == "__main__":
     only_texture = "--texture-only" in args
     if only_texture:
         args.remove("--texture-only")
-    main(args[0], args[1], flat, only_texture, max_size)
+    no_animations = "--no-animations" in args
+    if no_animations:
+        args.remove("--no-animations")
+    main(args[0], args[1], flat, only_texture, max_size, no_animations)

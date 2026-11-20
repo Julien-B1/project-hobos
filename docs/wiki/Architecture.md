@@ -390,10 +390,20 @@ trees and grid. Shadow quality barely changes GPU time; `high` costs about
   clip's first frame. A hop (stepping stones) fades the IK out. Leg bones
   are found by Mixamo (`LeftUpLeg`) or VRM-style (`J_Bip_L_UpperLeg`)
   names.
-  Moves of more than `RUN_FROM_CELLS` (2) cells are run at 1.8 times the
-  walking speed (run clip when the model has one, else the walk clip
-  played faster), shorter ones walked; the run clip's playback speed
+  Moves of more than `RUN_FROM_CELLS` (2) cells are run at twice the
+  walking speed, shorter ones walked; the run clip's playback speed
   matches its measured stride (`RUN_CLIP_STRIDE_SPEED`).
+  Clips come from the shared animation library
+  (`src/assets/animations/humanoid.glb`: a skeleton and its clips, no
+  mesh), baked at load for each character by `retargetClip`
+  (`actors/retarget.ts`): bones matched by canonical name
+  (`HUMANOID_BONES`: Mixamo and VRM-style suffixes); the character's rest
+  bones first turned to point like the library's (T-pose vs A-pose);
+  then, per frame, each library bone's turn from its rest pose in model
+  space applied to the matching bone, local rotations derived from the
+  parents; hips offset scaled by the hip height ratio; a clip whose
+  lowest foot never reaches the rest pose's lowest foot is lowered by the
+  gap (grounding: the Tripo run floats otherwise).
   Before the foot IK, `ArmPose` (`actors/armPose.ts`) adjusts the arms of
   the clip pose with the character's `ArmStyle`: upper arms turned out
   about the forward axis (clear of a wide outfit), extra elbow bend
