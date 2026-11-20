@@ -9,7 +9,10 @@
  * canvas `key`, so Vue unmounts GameCanvas (disposing its engine and input
  * bindings) and mounts a fresh one. Time of day, cut and grid are held here
  * too, so they carry over to the new map. `H` shows or hides all the
- * overlays (screenshots, a clean view).
+ * overlays (screenshots, a clean view). The debug HUD is hidden by
+ * default: the round "?" button at the top left shows or hides it. A
+ * loading screen covers the canvas until it reports `ready`, at launch and
+ * at each map change.
  */
 import { onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import type { EngineHudState } from '@/render/engine'
@@ -22,6 +25,7 @@ import DebugHud from './components/DebugHud.vue'
 import TimeOfDayPicker from './components/TimeOfDayPicker.vue'
 import CutSlider from './components/CutSlider.vue'
 import MapPicker from './components/MapPicker.vue'
+import LoadingScreen from './components/LoadingScreen.vue'
 
 const flags = readUrlFlags()
 
@@ -51,12 +55,16 @@ const cutHeight = ref<number | null>(null)
 // Replaced as a whole by the map picker.
 const mapSettings = shallowRef<MapSettings>({ map: flags.map, seed: flags.seed, size: flags.size })
 
+/** Whether a map is loading (the loading screen covers the canvas). */
+const loading = ref(true)
+
 /** Bumped on each load so even identical settings regenerate the map. */
 const canvasKey = ref(0)
 
 /** Load another map: remount the canvas and record the choice in the URL. */
 function onApplyMap(settings: MapSettings): void {
   mapSettings.value = settings
+  loading.value = true
   hud.value = null
   session.value = null
   canvasKey.value += 1
@@ -69,6 +77,9 @@ function onApplyMap(settings: MapSettings): void {
     pathname + withMapParams(search, settings) + hash,
   )
 }
+
+/** Whether the debug HUD is shown (the "?" button flips it; `?hud=on` at start). */
+const debugHud = ref(flags.hud)
 
 /** Whether the overlays (HUD, pickers, cut slider) are shown; `H` flips it. */
 const overlays = ref(true)
@@ -88,7 +99,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <main class="app">
+  <main class="app" :data-ready="!loading">
     <GameCanvas
       :key="canvasKey"
       :map-settings="mapSettings"
@@ -97,9 +108,24 @@ onBeforeUnmount(() => {
       :cut-height="cutHeight"
       @hud="onHud"
       @session="onSession"
+      @ready="loading = false"
     />
+    <Transition name="fade">
+      <LoadingScreen v-if="loading" :settings="mapSettings" />
+    </Transition>
     <template v-if="overlays">
-      <DebugHud :state="hud" :session="session" />
+      <button
+        type="button"
+        class="debug-toggle"
+        :class="{ on: debugHud }"
+        :aria-pressed="debugHud"
+        :title="debugHud ? 'Hide debug info' : 'Show debug info'"
+        aria-label="Debug info"
+        @click="debugHud = !debugHud"
+      >
+        ?
+      </button>
+      <DebugHud v-if="debugHud" :state="hud" :session="session" />
       <TimeOfDayPicker v-model="timeOfDay" />
       <CutSlider v-model="cutHeight" />
       <MapPicker :settings="mapSettings" :session="session" @apply="onApplyMap" />
@@ -111,5 +137,40 @@ onBeforeUnmount(() => {
 .app {
   position: relative;
   height: 100%;
+}
+
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-leave-to {
+  opacity: 0;
+}
+
+/* Round button at the top left, right of the cut slider. */
+.debug-toggle {
+  position: absolute;
+  top: 12px;
+  left: 60px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid rgb(255 255 255 / 25%);
+  border-radius: 50%;
+  background: rgb(0 0 0 / 55%);
+  color: inherit;
+  font:
+    bold 16px/1 ui-monospace,
+    monospace;
+  cursor: pointer;
+}
+
+.debug-toggle:hover {
+  background: rgb(255 255 255 / 15%);
+}
+
+.debug-toggle.on {
+  border-color: rgb(255 214 140 / 80%);
+  background: rgb(255 214 140 / 20%);
 }
 </style>

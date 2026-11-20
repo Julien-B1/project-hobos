@@ -12,6 +12,12 @@
  * disposes the engine and input bindings and builds fresh ones on a new
  * canvas element. Regenerating in place would need an engine API to swap
  * the map; a remount reuses the existing create/dispose path instead.
+ *
+ * Start-up order, behind the loading screen (App.vue): let the screen
+ * paint (map generation blocks the main thread), generate the map, create
+ * the engine, frame the whole map as the farthest zoom, load the
+ * character and centre the camera on it, draw a first frame, then emit
+ * `ready`.
  */
 import { onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from 'vue'
 import type { TimeOfDay } from '@/render/timeOfDay'
@@ -42,6 +48,8 @@ const emit = defineEmits<{
   hud: [state: EngineHudState]
   /** Fired once at mount with the settings this map runs with. */
   session: [info: SessionInfo]
+  /** Fired once everything is loaded and drawn (or failed): hide the loading screen. */
+  ready: []
 }>()
 
 const canvas = useTemplateRef<HTMLCanvasElement>('canvas')
@@ -51,8 +59,26 @@ let engine: Engine | null = null
 let unbindInputs: (() => void) | null = null
 let unmounted = false
 
+/** Whether the component was unmounted (read through a call: it changes across awaits). */
+function isUnmounted(): boolean {
+  return unmounted
+}
+
+/** Resolves after the browser has painted at least one frame. */
+function painted(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        resolve()
+      })
+    })
+  })
+}
+
 onMounted(async () => {
-  if (!canvas.value) return
+  // Generating the map blocks the main thread: show the loading screen first.
+  await painted()
+  if (!canvas.value || isUnmounted()) return
   const flags = readUrlFlags()
   const { map, seed, size } = props.mapSettings
   const world = createTestMap(map, {
@@ -83,36 +109,42 @@ onMounted(async () => {
       },
     })
     // The component may have been unmounted while the GPU was initialising.
-    if (unmounted) {
+    if (isUnmounted()) {
       created.dispose()
       return
     }
     engine = created
     engine.setCutHeight(props.cutHeight)
-    // Frame the map (also the reset view) and keep the target over it.
-    engine.cameraRig.setHome(world.home.x, world.home.y, world.home.z)
-    engine.cameraRig.setTargetBounds({ minX: 0, maxX: world.width, minZ: 0, maxZ: world.depth })
-    // Optional start-up view (`?cam=`), e.g. for reproducible screenshots.
-    const view = flags.camera
-    if (view) {
-      const rig = engine.cameraRig
-      rig.setTarget(view.x, world.home.y, view.z)
-      if (view.distance !== undefined) rig.zoomBy(view.distance / rig.currentDistance)
-      if (view.yawDeg !== undefined) rig.rotateBy(((view.yawDeg - rig.yawDeg) * Math.PI) / 180)
-    }
+    const rig = engine.cameraRig
+    // Keep the target over the map; the farthest zoom shows it whole.
+    rig.setHome(world.home.x, world.home.y, world.home.z)
+    rig.setTargetBounds({ minX: 0, maxX: world.width, minZ: 0, maxZ: world.depth })
+    rig.setFitRadius(Math.hypot(world.width, world.depth) / 2)
     const engineRef = engine
     const edits = createDebugEdits(world.map, () => engineRef.hoveredHit)
     unbindInputs = bindInputs(canvas.value, engine, config.input, edits)
     engine.start()
-    // The character loads in the background: the map shows meanwhile.
-    engine
+    const feet = await engine
       .spawnCharacter(fighterUrl, FIGHTER_CLIPS, flags.spawn ?? world.home)
       .catch((e: unknown) => {
         console.warn('Character failed to load:', e)
+        return null
       })
+    if (isUnmounted()) return
+    // Start on the character (also the reset view, see Engine.resetView).
+    if (feet) rig.setHome(feet.x, feet.y, feet.z)
+    // Optional start-up view (`?cam=`), e.g. for reproducible screenshots.
+    const view = flags.camera
+    if (view) {
+      rig.setTarget(view.x, world.home.y, view.z)
+      if (view.distance !== undefined) rig.zoomBy(view.distance / rig.currentDistance)
+      if (view.yawDeg !== undefined) rig.rotateBy(((view.yawDeg - rig.yawDeg) * Math.PI) / 180)
+    }
+    await engine.rendered()
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
   }
+  if (!isUnmounted()) emit('ready')
 })
 
 watch(

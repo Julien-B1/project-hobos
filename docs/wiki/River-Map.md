@@ -7,8 +7,8 @@ integer) and its size with `&size=24` (8 to 128 cells). The same seed and
 size always give the same map.
 
 Scale: one cell is one battle-map square (5 ft, 1.5 m). The default
-32 x 32 map (160 ft square) sits in the usual tabletop range (20 x 30 to
-30 x 30 squares, 24 x 36 posters). Features are sized in cells for that
+40 x 40 map (200 ft square) is a large tabletop battle map (usual ones are
+20 x 30 to 30 x 30 squares, 24 x 36 posters). Features are sized in cells for that
 scale: a stream a few squares wide, a hill, a rocky outcrop, a copse.
 
 ## Pipeline
@@ -32,8 +32,8 @@ every platform.
 
 ## Numbers
 
-The default 32 x 32 map spans 2 x 2 columns of chunks (about 8 chunks with
-the vertical layers). A 128 x 128 map (`&size=128`, the former default) is
+The default 40 x 40 map spans 3 x 3 columns of chunks (about 12 to 14
+chunks with the vertical layers). A 128 x 128 map (`&size=128`, the former default) is
 about 130 chunks and meshes in about 0.7 s in Node; the encounter size is
 16 times smaller. Every step renders as a facet; cliff zones give steep
 faces with bare dirt or rock colours.
@@ -53,3 +53,7 @@ from the edges, deck meeting both banks, level approaches rather than the
 foot of a slope or a cliff), of a kind picked with the seed among those
 fitting the site. Trees and bushes keep clear of it. A map flooded from edge to edge
 has no banks to join and gets no crossing.
+
+Crossing placement scores every row's site, best first; a site where no
+kind fits once measured at its width (an islet one row wide) gives way to
+the next one.

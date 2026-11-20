@@ -45,6 +45,8 @@ export interface InputTarget {
   setGridVisible(visible: boolean): void
   /** Flip a performance probe (debug). */
   toggleProbe(id: ProbeId): void
+  /** Animate back to the initial view (centred on the character when there is one). */
+  resetView(): void
   /** Select the character under the cursor, or clear the selection. */
   select(): void
   /** Send the selected character to the surface under the cursor. */
@@ -144,7 +146,7 @@ export function bindInputs(
       return
     }
     if (RESET_KEYS.includes(e.code)) {
-      if (!e.repeat) rig.reset()
+      if (!e.repeat) target.resetView()
       e.preventDefault() // Home would scroll the page otherwise
       return
     }

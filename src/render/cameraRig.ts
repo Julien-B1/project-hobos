@@ -4,7 +4,8 @@
  * Layer: render. Wraps a `PerspectiveCamera` orbiting a ground target with:
  * - a locked pitch (set once from config),
  * - free yaw rotation plus fixed-step snaps (e.g. 45 degrees), animated,
- * - bounded, animated zoom (distance to the target),
+ * - bounded, animated zoom (distance to the target); the farthest zoom
+ *   can follow the map size (`setFitRadius`),
  * - target panning, by drag (instant) or by held keys (velocity, per frame),
  * - keyboard zoom (held keys, per frame),
  * - an animated reset to the initial view (home target, initial yaw and zoom).
@@ -17,6 +18,7 @@ import { PerspectiveCamera } from 'three/webgpu'
 import {
   clamp,
   dampTowards,
+  fitDistance,
   groundAxes,
   nearestEquivalentAngle,
   nextSnapYaw,
@@ -39,7 +41,7 @@ export interface CameraRigSettings {
   readonly initialDistance: number
   /** Closest allowed distance to the target. */
   readonly minDistance: number
-  /** Farthest allowed distance to the target. */
+  /** Farthest allowed distance to the target (until `setFitRadius` sets one from the map). */
   readonly maxDistance: number
   /** Keyboard pan speed, as a fraction of the current distance per second. */
   readonly keyPanSpeed: number
@@ -60,6 +62,9 @@ export interface TargetBounds {
   readonly maxZ: number
 }
 
+/** Room left around the map at the farthest zoom (relief, screen edges). */
+const FIT_MARGIN = 1.15
+
 /** Orbit camera with a locked pitch, used for the whole game view. */
 export class CameraRig {
   /** The Three.js camera driven by this rig. Add it to nothing; just render with it. */
@@ -78,6 +83,10 @@ export class CameraRig {
   /** Keyboard zoom intent: -1 zooms in, +1 zooms out, 0 stops. */
   private zoomIntent = 0
   private bounds: TargetBounds | null = null
+  /** Farthest allowed distance now (settings, or fitted to the map). */
+  private maxDistance: number
+  /** Radius of the area the farthest zoom shows whole, or null (settings bound). */
+  private fitRadius: number | null = null
   /** Target restored by `reset()`. */
   private readonly home: Vec3Like = { x: 0, y: 0, z: 0 }
   /** Animated target destination during a reset; null when idle. */
@@ -89,6 +98,7 @@ export class CameraRig {
     this.target = { x: 0, y: 0, z: 0 }
     this.pitch = settings.pitchDeg * toRad
     this.snapStep = settings.snapStepDeg * toRad
+    this.maxDistance = settings.maxDistance
     this.yaw = this.yawGoal = settings.initialYawDeg * toRad
     this.distance = this.distanceGoal = clamp(
       settings.initialDistance,
@@ -108,6 +118,22 @@ export class CameraRig {
     return this.target
   }
 
+  /** Farthest allowed distance to the target (world units), see {@link setFitRadius}. */
+  get farthestDistance(): number {
+    return this.maxDistance
+  }
+
+  /**
+   * Bound the zoom by the map: the farthest distance shows a disc of
+   * `radius` (world units) around the target whole, with a margin, for the
+   * current aspect ratio (refitted on resize). Never below the closest
+   * distance; the configured `maxDistance` no longer applies.
+   */
+  setFitRadius(radius: number): void {
+    this.fitRadius = radius
+    this.refit()
+  }
+
   /** Current distance from the camera to its target (world units), animated. */
   get currentDistance(): number {
     return this.distance
@@ -125,10 +151,15 @@ export class CameraRig {
 
   /** Set the target restored by `reset()` and move there instantly. */
   setHome(x: number, y: number, z: number): void {
+    this.setHomePoint(x, y, z)
+    this.setTarget(x, y, z)
+  }
+
+  /** Set the target restored by `reset()`, without moving. */
+  setHomePoint(x: number, y: number, z: number): void {
     this.home.x = x
     this.home.y = y
     this.home.z = z
-    this.setTarget(x, y, z)
   }
 
   /**
@@ -136,7 +167,8 @@ export class CameraRig {
    * equivalent angle, no extra spins) and initial distance.
    */
   reset(): void {
-    const { initialYawDeg, initialDistance, minDistance, maxDistance } = this.settings
+    const { initialYawDeg, initialDistance, minDistance } = this.settings
+    const maxDistance = this.maxDistance
     this.yawGoal = nearestEquivalentAngle((initialYawDeg * Math.PI) / 180, this.yaw)
     this.distanceGoal = clamp(initialDistance, minDistance, maxDistance)
     this.targetGoal = { ...this.home }
@@ -175,7 +207,7 @@ export class CameraRig {
     this.distanceGoal = clamp(
       this.distanceGoal * factor,
       this.settings.minDistance,
-      this.settings.maxDistance,
+      this.maxDistance,
     )
   }
 
@@ -211,11 +243,13 @@ export class CameraRig {
   setAspect(aspect: number): void {
     this.camera.aspect = aspect
     this.camera.updateProjectionMatrix()
+    this.refit()
   }
 
   /** Advance animations and keyboard panning by `dt` seconds, then pose the camera. */
   update(dt: number): void {
-    const { smoothing, keyPanSpeed, keyZoomSpeed, minDistance, maxDistance } = this.settings
+    const { smoothing, keyPanSpeed, keyZoomSpeed, minDistance } = this.settings
+    const maxDistance = this.maxDistance
 
     if (this.zoomIntent !== 0) {
       this.distanceGoal = clamp(
@@ -253,6 +287,16 @@ export class CameraRig {
     }
 
     this.applyPose()
+  }
+
+  /** Recompute the farthest distance from the fit radius and aspect; clamp the zoom. */
+  private refit(): void {
+    if (this.fitRadius === null) return
+    const { fovDeg, pitchDeg, minDistance } = this.settings
+    const fitted = FIT_MARGIN * fitDistance(this.fitRadius, fovDeg, pitchDeg, this.camera.aspect)
+    this.maxDistance = Math.max(minDistance, fitted)
+    this.distanceGoal = clamp(this.distanceGoal, minDistance, this.maxDistance)
+    this.distance = Math.min(this.distance, this.maxDistance)
   }
 
   /** Place and orient the Three.js camera from the rig state. */

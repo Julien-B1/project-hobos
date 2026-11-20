@@ -119,3 +119,27 @@ export function worldPerPixel(distance: number, fovDeg: number, viewportHeight: 
   const fovRad = (fovDeg * Math.PI) / 180
   return (2 * distance * Math.tan(fovRad / 2)) / Math.max(1, viewportHeight)
 }
+
+/**
+ * Camera distance at which a disc of `radius` on the ground, centred on the
+ * target, fits in the view whatever the yaw. Vertically the disc is seen
+ * at the pitch angle, so its height on screen shrinks by `sin(pitch)`;
+ * horizontally it spans its full width (affine approximation: the
+ * perspective of a narrow field of view is close to it).
+ *
+ * @param radius Disc radius, world units.
+ * @param fovDeg Vertical field of view, in degrees.
+ * @param pitchDeg Downward tilt of the view, in degrees.
+ * @param aspect Viewport width / height.
+ */
+export function fitDistance(
+  radius: number,
+  fovDeg: number,
+  pitchDeg: number,
+  aspect: number,
+): number {
+  const halfFov = Math.tan((fovDeg * Math.PI) / 360)
+  const vertical = (radius * Math.sin((pitchDeg * Math.PI) / 180)) / halfFov
+  const horizontal = radius / (halfFov * Math.max(1e-3, aspect))
+  return Math.max(vertical, horizontal)
+}

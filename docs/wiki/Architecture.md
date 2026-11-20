@@ -44,7 +44,22 @@ App.vue
 - The engine pushes immutable HUD snapshots (`EngineHudState`) through a
   callback, at most a few times per second. Vue only stores the latest one.
   `GameCanvas.vue` also emits a `SessionInfo` once per map (map, resolved
-  seed, mesher), so screenshots of the HUD are self-describing.
+  seed, mesher), so screenshots of the HUD are self-describing. The HUD is
+  hidden by default: the round `?` button (`App.vue`) shows it, as does
+  `?hud=on` (on for `make screenshots`).
+- **Loading screen** (`LoadingScreen.vue`): covers the canvas from launch
+  and from each map change until `GameCanvas` emits `ready`: it waits for
+  the screen to paint (map generation blocks the main thread), generates
+  the map, creates the engine, loads the character, then waits for a first
+  drawn frame (`Engine.rendered`: chunks built, shaders compiled).
+  `main[data-ready="true"]` marks the end (screenshots wait for it).
+- **Start-up view**: the camera starts on the character
+  (`Engine.spawnCharacter` resolves to its feet) at `initialDistance`;
+  `C` / `Home` returns there (`Engine.resetView`, centred on where the
+  character stands now). The farthest zoom fits the map
+  (`CameraRig.setFitRadius`, `cameraMath.fitDistance`: a disc of half the
+  map's diagonal seen whole at the locked pitch, for the current aspect
+  ratio, with a margin).
 - **Map switching** (`MapPicker.vue`, bottom right): `App.vue` holds the map
   settings (`MapSettings`: map id, seed, size). Loading a map replaces them
   and bumps the `key` of `GameCanvas`, so Vue unmounts it (engine disposed,
@@ -80,8 +95,9 @@ App.vue
   under a still cursor.
 - Debug URL flags are read by the app layer (`src/app/config.ts`):
   `?forceWebGL=1` forces the WebGL 2 backend, `?map=<id>` selects a test map
-  (`reference` by default, `flat`, `river`, `kitchen-sink`; all battle-map
-  sized, `?size=<cells>` for procedural maps), `?time=<id>` sets the time of
+  (`river` by default with a random seed unless `?seed=`, `reference`,
+  `flat`, `kitchen-sink`, `bridges`; all battle-map sized, `?size=<cells>`
+  for procedural maps), `?time=<id>` sets the time of
   day, `?mesher=blocky` shows exact
   blocks, `?shadows=off|low|high` sets the sun shadow quality (`high` by
   default).

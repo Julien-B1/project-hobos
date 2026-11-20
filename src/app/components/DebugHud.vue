@@ -121,8 +121,8 @@ function count(n: number): string {
 <style scoped>
 .hud {
   position: absolute;
-  top: 12px;
-  /* Right of the cut slider. */
+  /* Under the "?" button that shows it, right of the cut slider. */
+  top: 52px;
   left: 60px;
   padding: 8px 12px;
   border-radius: 6px;

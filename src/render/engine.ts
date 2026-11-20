@@ -247,6 +247,8 @@ export class Engine {
   private lastDrawCalls = 0
   private lastTriangles = 0
   private lastFrameTime: number | null = null
+  /** Callbacks waiting for the next rendered frame (see `rendered`). */
+  private frameWaiters: (() => void)[] = []
   /** Where characters can stand and walk (built on first use). */
   private walkArea: WalkArea | null = null
   /** The player's character, once loaded. */
@@ -406,15 +408,16 @@ export class Engine {
   /**
    * Load a character model and put it on grass, in the largest walkable
    * region of the map, as close as possible to (x, z) (world units).
-   * Resolves to false when the map has no such spot.
+   * Resolves to where its feet are (world units), or null when the map has
+   * no such spot.
    */
   async spawnCharacter(
     url: string,
     clips: CharacterClips,
     near: { readonly x: number; readonly z: number },
-  ): Promise<boolean> {
+  ): Promise<{ readonly x: number; readonly y: number; readonly z: number } | null> {
     const stand = this.walking().spawnPoint(near.x, near.z)
-    if (!stand) return false
+    if (!stand) return null
     // Models are meshopt-compressed (`make models`).
     const gltf = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(url)
     const character = new Character(gltf.scene, gltf.animations, clips)
@@ -424,7 +427,19 @@ export class Engine {
     this.characterStand = stand
     this.scene.add(character.root, ...character.decals)
     this.publishCharacter()
-    return true
+    const { x, y, z } = character.root.position
+    return { x, y, z }
+  }
+
+  /**
+   * Back to the initial view (`C`, `Home`): initial yaw and zoom, centred on
+   * the character when there is one (where it stands now), else on the
+   * camera's home point.
+   */
+  resetView(): void {
+    const feet = this.character?.root.position
+    if (feet) this.rig.setHomePoint(feet.x, feet.y, feet.z)
+    this.rig.reset()
   }
 
   /**
@@ -569,6 +584,17 @@ export class Engine {
     })
   }
 
+  /**
+   * Resolves once the next frame has been drawn (after `start`): dirty
+   * chunks rebuilt and everything in the scene drawn once, its shaders
+   * compiled. Used to hold a loading screen until the view is complete.
+   */
+  rendered(): Promise<void> {
+    return new Promise((resolve) => {
+      this.frameWaiters.push(resolve)
+    })
+  }
+
   /** Stop the loop and release GPU resources and observers. */
   dispose(): void {
     void this.handle.renderer.setAnimationLoop(null)
@@ -609,6 +635,11 @@ export class Engine {
     // Pick every frame: the camera may move under a still cursor.
     this.updateHover()
     this.handle.renderer.render(this.scene, this.rig.camera)
+    if (this.frameWaiters.length > 0) {
+      const waiters = this.frameWaiters
+      this.frameWaiters = []
+      for (const resolve of waiters) resolve()
+    }
     const info = this.handle.renderer.info.render
     this.lastDrawCalls = info.drawCalls
     this.lastTriangles = info.triangles

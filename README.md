@@ -56,12 +56,15 @@ gzip otherwise). Over a slow link, prefer `make build` then `make
 preview`: about 0.45 MB on the wire, cached by the browser until the next
 version, against about 1.2 MB in many modules for the dev server.
 
-Maps are battle-map sized (32 x 32 squares, one encounter). URL switches:
-`?forceWebGL=1` forces the WebGL 2 backend; `?map=flat` or `?map=river`
-(with optional `&seed=42` and `&size=24`) or `?map=kitchen-sink` (every
-element in one hand-made map) or `?map=bridges` (100 x 24 river, one
-crossing of each kind) loads another test map instead of the
-reference map. The map picker at the bottom right switches map, seed (🎲 for
+Maps are battle-map sized (one encounter). The app starts on the `river`
+map (40 x 40 squares) with a random seed, the camera close on the
+character, behind a loading screen (also shown at each map change); the
+farthest zoom shows the whole map. URL switches:
+`?forceWebGL=1` forces the WebGL 2 backend; `?seed=42` and `?size=24` fix
+the river map's seed and size; `?map=reference`, `?map=flat`,
+`?map=kitchen-sink` (every element in one hand-made map) or `?map=bridges`
+(100 x 24 river, one crossing of each kind) loads another test map;
+`?hud=on` starts with the debug HUD shown. The map picker at the bottom right switches map, seed (🎲 for
 a random one) and size without reloading, and updates the URL to match; `?cam=x,z,distance,yaw` frames the camera on
 start; `?time=dusk` (or `dawn`, `morning`, `noon`, `afternoon`,
 `evening`, `midnight`, `late-night`) sets the time of day, also chosen with
@@ -80,8 +83,9 @@ Keys are bound by physical position: the same keys work on AZERTY and QWERTY.
 | Free rotation          | Left mouse drag                                                         |
 | Pan                    | Middle mouse drag                                                       |
 | Zoom                   | Mouse wheel, `R` / `F`, numpad `+` / `-`                                |
-| Reset view             | `C` or `Home`                                                           |
+| Reset view             | `C` or `Home` (centred on the character)                                |
 | Show / hide the grid   | `G`                                                                     |
+| Show / hide debug HUD  | The round `?` button at the top left                                    |
 | Show / hide overlays   | `H` (HUD, pickers, cut slider)                                          |
 | Performance probes     | `1` to `6` (shadows, foliage, scatter, water, terrain, half resolution) |
 | Select the character   | Left click on it (left click elsewhere clears the selection)            |

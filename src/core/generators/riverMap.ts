@@ -3,8 +3,8 @@
  * encounter (a battle map), not a journey.
  *
  * Scale: one cell is one battle-map square (5 ft, 1.5 m). The default
- * 32 x 32 map (160 ft square) is in the range of usual tabletop battle maps
- * (20 x 30 to 30 x 30 squares, 24 x 36 posters). Feature sizes are set in
+ * 40 x 40 map (200 ft square) is a large tabletop battle map (usual ones
+ * are 20 x 30 to 30 x 30 squares, 24 x 36 posters). Feature sizes are set in
  * cells for that scale: a stream a few squares wide, a hill or a rocky
  * outcrop, a copse of trees.
  *
@@ -69,7 +69,7 @@ export interface RiverMap {
 }
 
 /** Default edge length of the map, in cells (battle-map squares). */
-export const DEFAULT_RIVER_SIZE = 32
+export const DEFAULT_RIVER_SIZE = 40
 
 /** Horizontal scale of the hills, in cells (about the width of one hill). */
 const RELIEF_SCALE = 26
@@ -441,7 +441,7 @@ function placeCrossing(
   structures: StructureSet,
 ): Set<number> {
   const reserved = new Set<number>()
-  let best: { site: CrossingSite; score: number } | null = null
+  const sites: { site: CrossingSite; score: number }[] = []
   // Every row is tried; the score prefers short spans near the middle.
   for (let z = 1; z <= size - 4; z++) {
     const centre = waterCentre(map, size, z)
@@ -460,36 +460,46 @@ function placeCrossing(
       // A deck meeting its banks beats any fallback crossing.
       (site.flush ? 0 : 500) +
       edge
-    if (!best || score < best.score) best = { site, score }
+    sites.push({ site, score })
   }
-  if (!best) return reserved
+  sites.sort((a, b) => a.score - b.score)
 
-  // Pick a kind, then measure again at its width; fall back on the other
-  // fitting kinds if the wider band does not fit.
-  const first = pickCrossing(best.site, seed)
-  const rules = [first, ...crossingCandidates(best.site)].filter((r) => r !== null)
-  const z = best.site.span.side
-  const centre = waterCentre(map, size, z)
-  for (const rule of rules) {
-    const side = Math.max(0, Math.min(size - rule.width, z - Math.floor((rule.width - 1) / 2)))
-    const site =
-      centre === null
-        ? null
-        : measureCrossing(map, 'x', side, rule.width, centre, WATER_LEVEL, size)
-    if (!site || !rule.fits(site)) continue
-    structures.place(
-      { id: 'river-crossing', kind: rule.kind, params: site.span },
-      map,
-      defaultStructureKinds(),
-    )
-    const { span } = site
-    // Clear of tree trunks and of their canopies (a tall oak reaches 4 cells).
-    for (let x = span.from - 5; x <= span.to + 5; x++)
-      for (let zz = span.side - 4; zz <= span.side + span.width + 3; zz++)
-        reserved.add(x + zz * size)
-    break
+  // Best site first; a site where no kind fits once measured at its width
+  // (an islet only one row wide, for example) gives way to the next one.
+  for (const best of sites) {
+    if (placeAt(best.site)) break
   }
   return reserved
+
+  /** Place a crossing at `best`; false when no fitting kind can be placed there. */
+  function placeAt(best: CrossingSite): boolean {
+    // Pick a kind, then measure again at its width; fall back on the other
+    // fitting kinds if the wider band does not fit.
+    const first = pickCrossing(best, seed)
+    const rules = [first, ...crossingCandidates(best)].filter((r) => r !== null)
+    const z = best.span.side
+    const centre = waterCentre(map, size, z)
+    for (const rule of rules) {
+      const side = Math.max(0, Math.min(size - rule.width, z - Math.floor((rule.width - 1) / 2)))
+      const site =
+        centre === null
+          ? null
+          : measureCrossing(map, 'x', side, rule.width, centre, WATER_LEVEL, size)
+      if (!site || !rule.fits(site)) continue
+      structures.place(
+        { id: 'river-crossing', kind: rule.kind, params: site.span },
+        map,
+        defaultStructureKinds(),
+      )
+      const { span } = site
+      // Clear of tree trunks and of their canopies (a tall oak reaches 4 cells).
+      for (let x = span.from - 5; x <= span.to + 5; x++)
+        for (let zz = span.side - 4; zz <= span.side + span.width + 3; zz++)
+          reserved.add(x + zz * size)
+      return true
+    }
+    return false
+  }
 }
 
 /** Cells beyond each end of a crossing judged as its approach. */

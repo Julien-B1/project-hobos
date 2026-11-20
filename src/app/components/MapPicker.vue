@@ -11,7 +11,7 @@
  */
 import { computed, ref, watch } from 'vue'
 import { TEST_MAP_IDS, type TestMapId } from '@/core/generators/catalog'
-import { MAP_SIZE_RANGE, clampMapSize, type MapSettings } from '@/app/config'
+import { MAP_SIZE_RANGE, clampMapSize, randomSeed, type MapSettings } from '@/app/config'
 import type { SessionInfo } from '@/app/session'
 
 const props = defineProps<{
@@ -74,8 +74,8 @@ function apply(): void {
 }
 
 /** Roll a new seed and load it straight away. */
-function randomSeed(): void {
-  seedText.value = String(Math.floor(Math.random() * 2 ** 31))
+function rollSeed(): void {
+  seedText.value = String(randomSeed())
   apply()
 }
 </script>
@@ -97,7 +97,7 @@ function randomSeed(): void {
           aria-label="Seed"
         />
       </label>
-      <button type="button" title="Random seed" aria-label="Random seed" @click="randomSeed">
+      <button type="button" title="Random seed" aria-label="Random seed" @click="rollSeed">
         🎲
       </button>
       <label>

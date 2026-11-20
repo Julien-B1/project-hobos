@@ -217,6 +217,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Launch: the `river` map, 40 x 40 by default (`DEFAULT_RIVER_SIZE`), with
+  a random seed unless `?seed=` gives one; the camera starts close on the
+  character (`initialDistance` 20), and `C` / `Home` recentres on it
+  (`Engine.resetView`). The farthest zoom follows the map size
+  (`CameraRig.setFitRadius`, `cameraMath.fitDistance`) instead of a fixed 240.
+- The debug HUD is hidden by default; a round `?` button at the top left
+  shows it (`?hud=on` at start; screenshots turn it on).
+- A loading screen covers the canvas at launch and at each map or seed
+  change, until the map, the character and a first frame are ready
+  (`LoadingScreen.vue`, `GameCanvas` `ready` event, `Engine.rendered`).
 - The `organic` test map is renamed `river` (`?map=river`,
   `core/generators/riverMap.ts`, wiki page _River Map_).
 - The cut no longer slices the character: it is shown whole, or hidden
@@ -271,6 +281,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- River maps whose best crossing site was a one-row islet got no crossing
+  at all: `placeCrossing` now tries the next sites by score.
 - Character feet no longer sink into the ground: foot IK keeps the toe
   base above the ground too, and planted feet are turned along the slope
   (the planted test compared the ankle with the ground instead of its

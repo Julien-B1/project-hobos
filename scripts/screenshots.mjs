@@ -59,12 +59,14 @@ try {
     }
   })
   for (const view of views) {
-    const url = `http://127.0.0.1:${PORT}/?forceWebGL=1&${view.query}`
+    // The debug HUD is shown (self-describing captures) unless the view sets `hud`.
+    const hud = /(^|&)hud=/.test(view.query) ? '' : '&hud=on'
+    const url = `http://127.0.0.1:${PORT}/?forceWebGL=1&${view.query}${hud}`
     await page.goto(url, { waitUntil: 'load' })
-    // The HUD shows the backend once the renderer runs; then let the
-    // camera settle and the shadows render.
-    await page.getByText('Backend:').waitFor({ timeout: 120_000 })
-    await page.waitForTimeout(6000)
+    // The loading screen leaves once the map, the character and a first
+    // frame are ready; then let the camera settle and the shadows render.
+    await page.locator('main[data-ready="true"]').waitFor({ timeout: 120_000 })
+    await page.waitForTimeout(3000)
     for (const step of view.steps ?? []) {
       if (step.frames) {
         // A burst of captures (animation checks): name-00.png, name-01.png...

@@ -23,8 +23,10 @@ export const config = {
     pitchDeg: 40,
     initialYawDeg: 45,
     snapStepDeg: 45,
-    initialDistance: 60,
+    /** Start (and reset) view: close on the character, not the closest zoom. */
+    initialDistance: 20,
     minDistance: 10,
+    /** Until the map is known: then the farthest zoom shows the whole map (`setFitRadius`). */
     maxDistance: 240,
     /** Keyboard pan speed, as a fraction of the camera distance per second. */
     keyPanSpeed: 0.9,
@@ -49,14 +51,17 @@ export const config = {
  * Read debug switches from the page URL.
  *
  * - `?forceWebGL=1` forces the WebGL 2 backend to test the fallback path.
- * - `?map=<id>` picks a test map (`reference` by default, `flat`, `river`).
- * - `?seed=<integer>` changes the seed of procedural maps (`river`).
+ * - `?map=<id>` picks a test map (`river` by default, `reference`, `flat`,
+ *   `kitchen-sink`, `bridges`).
+ * - `?seed=<integer>` sets the seed of procedural maps (`river`); without
+ *   it, each launch rolls a random seed (`random`, for tests).
  * - `?size=<cells>` changes the edge length of procedural maps (8 to 128;
- *   default 32, a battle-map sized encounter).
+ *   default 40, a large battle map).
  * - `?mesher=blocky` renders every voxel as its exact block shape instead of
  *   the default faceted terrain.
  * - `?time=<id>` sets the starting time of day (`dawn`, `morning`, `noon`,
  *   `afternoon` (default), `dusk`, `evening`, `midnight`, `late-night`).
+ * - `?hud=on` starts with the debug HUD shown (the "?" button toggles it).
  * - `?grid=off` starts with the battle-map grid hidden (toggle with G).
  * - `?shadows=off|low|high` sets the sun shadow quality (`high` by default:
  *   4096² map; `low`: 2048²; `off`: no shadow pass, no lookups).
@@ -66,34 +71,52 @@ export const config = {
  * - `?spawn=x,z` puts the character near cell (x, z) instead of near the
  *   map's home point (screenshots, debugging a spot).
  */
-export function readUrlFlags(search: string = window.location.search): {
+export function readUrlFlags(
+  search: string = window.location.search,
+  random: () => number = Math.random,
+): {
   forceWebGL: boolean
   map: TestMapId
-  seed: number | undefined
+  seed: number
   size: number | undefined
   mesher: TerrainMesherKind
   shadows: ShadowQuality
   grid: boolean
+  hud: boolean
   timeOfDay: TimeOfDay
   camera: CameraView | undefined
   spawn: { readonly x: number; readonly z: number } | undefined
 } {
   const params = new URLSearchParams(search)
-  const map = params.get('map') ?? 'reference'
+  const map = params.get('map') ?? DEFAULT_MAP
   const seed = Number.parseInt(params.get('seed') ?? '', 10)
   const size = Number.parseInt(params.get('size') ?? '', 10)
   return {
     forceWebGL: params.get('forceWebGL') === '1',
-    map: isTestMapId(map) ? map : 'reference',
-    seed: Number.isFinite(seed) ? seed : undefined,
+    map: isTestMapId(map) ? map : DEFAULT_MAP,
+    seed: Number.isFinite(seed) ? seed : randomSeed(random),
     size: Number.isFinite(size) ? clampMapSize(size) : undefined,
     mesher: params.get('mesher') === 'blocky' ? 'blocky' : 'faceted',
     shadows: parseShadowQuality(params.get('shadows')),
     grid: params.get('grid') !== 'off',
+    hud: params.get('hud') === 'on',
     timeOfDay: parseTimeOfDay(params.get('time')),
     camera: parseCameraView(params.get('cam')),
     spawn: parseCameraView(params.get('spawn')),
   }
+}
+
+/** Map shown at launch when the URL names none (or an unknown one). */
+export const DEFAULT_MAP: TestMapId = 'river'
+
+/**
+ * A random seed for procedural maps: a non-negative 31-bit integer (fits
+ * the signed 32-bit range the noise expects).
+ *
+ * @param random Uniform source in [0, 1) (`Math.random` by default).
+ */
+export function randomSeed(random: () => number = Math.random): number {
+  return Math.floor(random() * 2 ** 31)
 }
 
 /** Start-up camera view (`?cam=x,z[,distance[,yaw]]`): target cell, distance, yaw in degrees. */

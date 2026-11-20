@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   clamp,
   dampTowards,
+  fitDistance,
   groundAxes,
   nearestEquivalentAngle,
   nextSnapYaw,
@@ -94,5 +95,20 @@ describe('nearestEquivalentAngle', () => {
     const turn = 2 * Math.PI
     expect(nearestEquivalentAngle(0.5, 3 * turn + 0.4)).toBeCloseTo(3 * turn + 0.5)
     expect(nearestEquivalentAngle(0.5, -2 * turn)).toBeCloseTo(-2 * turn + 0.5)
+  })
+})
+
+describe('fitDistance', () => {
+  it('is set by the height of the tilted disc on a wide screen', () => {
+    // radius 10, fov 30, pitch 30: 10 * 0.5 / tan(15).
+    expect(fitDistance(10, 30, 30, 2)).toBeCloseTo(5 / Math.tan(15 * DEG), 6)
+  })
+
+  it('is set by the width on a narrow screen', () => {
+    expect(fitDistance(10, 30, 30, 0.5)).toBeCloseTo(10 / (Math.tan(15 * DEG) * 0.5), 6)
+  })
+
+  it('grows linearly with the radius', () => {
+    expect(fitDistance(40, 30, 40, 1.6)).toBeCloseTo(2 * fitDistance(20, 30, 40, 1.6), 6)
   })
 })

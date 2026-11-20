@@ -33,6 +33,21 @@ describe('withMapParams', () => {
   })
 })
 
+describe('readUrlFlags defaults', () => {
+  it('launches the river map with a random seed', () => {
+    const flags = readUrlFlags('', () => 0.5)
+    expect(flags.map).toBe('river')
+    expect(flags.seed).toBe(2 ** 30)
+    expect(flags.size).toBeUndefined()
+  })
+
+  it('falls back to the river map on an unknown id, keeps an explicit seed', () => {
+    const flags = readUrlFlags('?map=nope&seed=12', () => 0.5)
+    expect(flags.map).toBe('river')
+    expect(flags.seed).toBe(12)
+  })
+})
+
 describe('clampMapSize', () => {
   it('clamps into the allowed range and rounds', () => {
     expect(clampMapSize(2)).toBe(8)
