@@ -62,7 +62,16 @@ const UP = new Vector3(0, 1, 0)
 const S = new Vector3()
 const BODY = new Quaternion()
 
-/** Foot placement for one rigged character (Mixamo bone names). */
+/**
+ * Name fragments of each side's leg bones: Mixamo (`mixamorig:LeftUpLeg`)
+ * and VRM-style (`J_Bip_L_UpperLeg`, Tripo's other export).
+ */
+const LEG_SIDES = [
+  ['Left', 'L'],
+  ['Right', 'R'],
+] as const
+
+/** Foot placement for one rigged character (Mixamo or VRM-style bone names). */
 export class FootIk {
   private readonly legs: readonly Leg[]
   /** Current body drop, world units (negative: lowered). */
@@ -89,14 +98,15 @@ export class FootIk {
     model.traverse((o) => {
       nodes.push(o)
     })
-    const bone = (suffix: string): Object3D | null =>
-      nodes.find((o) => o.type === 'Bone' && o.name.endsWith(suffix)) ?? null
+    const bone = (suffixes: readonly string[]): Object3D | null =>
+      nodes.find((o) => o.type === 'Bone' && suffixes.some((s) => o.name.endsWith(s))) ?? null
     const legs: Leg[] = []
-    for (const side of ['Left', 'Right']) {
-      const thigh = bone(`${side}UpLeg`)
-      const shin = bone(`${side}Leg`)
-      const foot = bone(`${side}Foot`)
-      if (thigh && shin && foot) legs.push({ thigh, shin, foot, toe: bone(`${side}ToeBase`) })
+    for (const [mixamo, vrm] of LEG_SIDES) {
+      const thigh = bone([`${mixamo}UpLeg`, `${vrm}_UpperLeg`])
+      const shin = bone([`${mixamo}Leg`, `${vrm}_LowerLeg`])
+      const foot = bone([`${mixamo}Foot`, `${vrm}_Foot`])
+      const toe = bone([`${mixamo}ToeBase`, `${vrm}_ToeBase`])
+      if (thigh && shin && foot) legs.push({ thigh, shin, foot, toe })
     }
     this.legs = legs
   }

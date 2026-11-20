@@ -387,7 +387,19 @@ trees and grid. Shadow quality barely changes GPU time; `high` costs about
   is solved by a two-bone IK whose knee is placed on the front side (pole:
   the animated knee, backward part removed), and planted feet are turned
   along the slope. Standing, the feet are locked on the stance of the idle
-  clip's first frame. A hop (stepping stones) fades the IK out.
+  clip's first frame. A hop (stepping stones) fades the IK out. Leg bones
+  are found by Mixamo (`LeftUpLeg`) or VRM-style (`J_Bip_L_UpperLeg`)
+  names.
+  Last, `SpringBones` (`actors/springBones.ts`) moves cloth and hair: the
+  model's bones named `Spring_*` (added by a Blender script, see
+  _Extending_) form chains simulated root to tip at a fixed 60 Hz step:
+  each tip keeps its velocity (damped), is pulled back towards its rest
+  direction and down, stays at the bone's length and is pushed out of
+  capsules on the legs and the spine; the bone then turns towards it. The
+  clips' tracks on these bones are dropped at load. Walking, turning and
+  the legs' swing move the skirt, the sleeves and the hair. Models:
+  `wizard` (default, spring bones on the skirt, sleeves and hair) and
+  `fighter`, chosen with `?character=` or the map picker.
 - **Walk area** (`core/navigation/walkArea.ts`): a stand is a solid voxel,
   not water or foliage, with 4 free levels above (the character is 1.6 units tall) (shallow water, at most
   `WADING_DEPTH`, counts as free). Moves go to the 8 neighbour columns, at
@@ -422,4 +434,4 @@ trees and grid. Shadow quality barely changes GPU time; `high` costs about
 | Import alias | `@/` maps to `src/` (Vite `resolve.alias` and tsconfig `paths`).                                                                                                                                                      |
 | Dev server   | `tooling/compression.ts`: Brotli (else gzip) for dev and preview, cached; preview caches hashed assets a year, revalidates `index.html`; build writes `.br` / `.gz`; pre-bundled deps minified, inline maps stripped. |
 | Screenshots  | `make screenshots` (`scripts/screenshots.mjs`): headless Chromium (Playwright) into `screenshots/`.                                                                                                                   |
-| Models       | `make models`: `assets-src/models/` to `src/assets/models/` (flat WebP texture on the host, `gltfpack` meshopt in the container).                                                                                     |
+| Models       | `make models`: `assets-src/models/` to `src/assets/models/` (`tooling/blender/<name>.py` in headless Blender when present, flat WebP texture at most 1024 px on the host, `gltfpack` meshopt in the container).       |

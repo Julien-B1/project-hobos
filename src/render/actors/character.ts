@@ -33,6 +33,7 @@ import {
 import { encodeOutput } from '../outputEncoding'
 import type { CutSupported } from './cutSupported'
 import { FootIk } from './footIk'
+import { SPRING_PREFIX, SpringBones } from './springBones'
 import { createOutlineMaterial, createToonMaterial } from './toonMaterial'
 
 /** Character height, in world units (a cell is 1 unit wide). */
@@ -111,6 +112,8 @@ export class Character implements CutSupported {
   private readonly materials: Material[] = []
   /** Plants the feet on uneven ground. */
   private readonly feet: FootIk
+  /** Cloth and hair chains (none on models without spring bones). */
+  private readonly springs: SpringBones
   /** Remaining walk, next point first. */
   private path: WalkPoint[] = []
   /** Feet height the walk expects (between path points), world units. */
@@ -134,10 +137,14 @@ export class Character implements CutSupported {
     this.prepareMaterials()
     this.root.add(this.model)
 
+    // Spring bones read their rest pose: before any clip runs.
+    this.springs = new SpringBones(this.model)
     this.mixer = new AnimationMixer(this.model)
     const clip = (name: string): AnimationClip => {
       const found = clips.find((c) => c.name === name)
       if (!found) throw new Error(`Character clip "${name}" not found`)
+      // The clips hold spring bones at rest: the simulation drives them.
+      found.tracks = found.tracks.filter((t) => !t.name.startsWith(SPRING_PREFIX))
       return found
     }
     this.idle = this.mixer.clipAction(clip(names.idle))
@@ -222,6 +229,7 @@ export class Character implements CutSupported {
     this.hop = null
     this.path = []
     this.setWalking(false)
+    this.springs.reset()
   }
 
   /** Walk through `points` (the first one is the next to reach). */
@@ -271,6 +279,7 @@ export class Character implements CutSupported {
     }
     this.root.updateMatrixWorld(true)
     this.feet.update(dt, this.root.position.y, ground, !this.hop, !this.walking)
+    this.springs.update(dt)
     return moved
   }
 

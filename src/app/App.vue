@@ -56,7 +56,12 @@ const timeOfDay = ref<TimeOfDay>(flags.timeOfDay)
 const cutHeight = ref<number | null>(null)
 
 // Replaced as a whole by the map picker.
-const mapSettings = shallowRef<MapSettings>({ map: flags.map, seed: flags.seed, size: flags.size })
+const mapSettings = shallowRef<MapSettings>({
+  map: flags.map,
+  seed: flags.seed,
+  size: flags.size,
+  character: flags.character,
+})
 
 /** Whether a map is loading (the loading screen covers the canvas). */
 const loading = ref(true)

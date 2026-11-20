@@ -2,7 +2,7 @@
 """
 Shrink a skinned, animated GLB (characters exported by Tripo / Mixamo).
 
-Usage: python3 -I tooling/compress_glb.py in.glb out.glb [--flat N] [--texture-only]
+Usage: python3 -I tooling/compress_glb.py in.glb out.glb [--flat N] [--max-size PX] [--texture-only]
 
 Needs Python 3 with numpy, and ffmpeg (texture to WebP). Run on the host:
 it is a one-off asset step, not part of the build, and the dev image has
@@ -15,7 +15,8 @@ decoder to ship):
   (core glTF);
 - mesh: weights as normalized bytes, UVs as normalized shorts (core glTF),
   normals as normalized bytes (KHR_mesh_quantization);
-- texture: JPEG to WebP (EXT_texture_webp); with `--flat N`, first turned
+- texture: JPEG to WebP (EXT_texture_webp), at most `--max-size` pixels
+  wide when given (area downscale); with `--flat N`, first turned
   into flat colours for cel shading (edge-preserving smoothing, then N
   colours without dithering: the painted shading becomes plain areas).
 Positions, joints and indices are kept as they are.
@@ -134,24 +135,28 @@ def reduce_keys(times, values, rotation):
     return keep
 
 
-def webp(jpeg, flat=None):
+def webp(jpeg, flat=None, max_size=None):
     with tempfile.TemporaryDirectory() as tmp:
         src, dst = f"{tmp}/in.jpg", f"{tmp}/out.webp"
         open(src, "wb").write(jpeg)
         command = ["ffmpeg", "-loglevel", "error", "-i", src]
+        # Downscale first (area average), keeping the aspect ratio.
+        scale = f"scale='min(iw,{max_size})':-1:flags=area," if max_size else ""
         if flat:
             command += [
                 "-filter_complex",
-                "bilateral=sigmaS=6:sigmaR=0.12,split[a][b];"
+                f"{scale}bilateral=sigmaS=6:sigmaR=0.12,split[a][b];"
                 f"[a]palettegen=max_colors={flat}:stats_mode=full:reserve_transparent=0[p];"
                 "[b][p]paletteuse=dither=none,median=radius=1,format=rgb24",
             ]
+        elif scale:
+            command += ["-vf", scale.rstrip(",")]
         command += ["-quality", str(WEBP_QUALITY), dst]
         subprocess.run(command, check=True)
         return open(dst, "rb").read()
 
 
-def texture_only(gltf, binary, flat):
+def texture_only(gltf, binary, flat, max_size=None):
     """Copy every buffer view as it is, except the images (flattened, WebP)."""
     out = Writer()
     images = {image["bufferView"]: image for image in gltf.get("images", [])}
@@ -159,7 +164,7 @@ def texture_only(gltf, binary, flat):
         raw = binary[view.get("byteOffset", 0) : view.get("byteOffset", 0) + view["byteLength"]]
         image = images.get(index)
         if image is not None and image.get("mimeType") == "image/jpeg":
-            raw = webp(raw, flat)
+            raw = webp(raw, flat, max_size)
             image["mimeType"] = "image/webp"
         out.view(raw, view.get("target"))
         if "byteStride" in view:
@@ -191,10 +196,10 @@ def write(gltf, out, dst):
     return total
 
 
-def main(src, dst, flat=None, only_texture=False):
+def main(src, dst, flat=None, only_texture=False, max_size=None):
     gltf, binary = load(src)
     if only_texture:
-        total = write(gltf, texture_only(gltf, binary, flat), dst)
+        total = write(gltf, texture_only(gltf, binary, flat, max_size), dst)
         print(f"{src}: texture only -> {dst}: {total} bytes")
         return
     out = Writer()
@@ -267,7 +272,7 @@ def main(src, dst, flat=None, only_texture=False):
         view = gltf["bufferViews"][image["bufferView"]]
         raw = binary[view.get("byteOffset", 0) : view.get("byteOffset", 0) + view["byteLength"]]
         if image.get("mimeType") == "image/jpeg":
-            raw = webp(raw, flat)
+            raw = webp(raw, flat, max_size)
             image["mimeType"] = "image/webp"
             used.add("EXT_texture_webp")
         image["bufferView"] = out.view(raw)
@@ -290,7 +295,12 @@ if __name__ == "__main__":
         at = args.index("--flat")
         flat = int(args[at + 1])
         del args[at : at + 2]
+    max_size = None
+    if "--max-size" in args:
+        at = args.index("--max-size")
+        max_size = int(args[at + 1])
+        del args[at : at + 2]
     only_texture = "--texture-only" in args
     if only_texture:
         args.remove("--texture-only")
-    main(args[0], args[1], flat, only_texture)
+    main(args[0], args[1], flat, only_texture, max_size)

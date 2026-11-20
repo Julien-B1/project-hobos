@@ -28,9 +28,13 @@ import { createDebugEdits } from '@/app/editing/debugEdits'
 import { createTestMap } from '@/core/generators/catalog'
 import type { SessionInfo } from '@/app/session'
 import fighterUrl from '@/assets/models/fighter.glb?url'
+import wizardUrl from '@/assets/models/wizard.glb?url'
 
-/** Clips of the fighter model: idle (looking around) and walk. */
-const FIGHTER_CLIPS = { idle: 'look_around.001', walk: 'walk.001' } as const
+/** Character models: file and clips (idle: looking around, and walk). */
+const CHARACTERS = {
+  wizard: { url: wizardUrl, clips: { idle: 'look_around.001', walk: 'walk.001' } },
+  fighter: { url: fighterUrl, clips: { idle: 'look_around.001', walk: 'walk.001' } },
+} as const
 
 const props = defineProps<{
   /** Lighting of the scene; changes are applied live. */
@@ -80,7 +84,7 @@ onMounted(async () => {
   await painted()
   if (!canvas.value || isUnmounted()) return
   const flags = readUrlFlags()
-  const { map, seed, size } = props.mapSettings
+  const { map, seed, size, character } = props.mapSettings
   const world = createTestMap(map, {
     ...(seed === undefined ? {} : { seed }),
     ...(size === undefined ? {} : { size }),
@@ -125,7 +129,11 @@ onMounted(async () => {
     unbindInputs = bindInputs(canvas.value, engine, config.input, edits)
     engine.start()
     const feet = await engine
-      .spawnCharacter(fighterUrl, FIGHTER_CLIPS, flags.spawn ?? world.home)
+      .spawnCharacter(
+        CHARACTERS[character].url,
+        CHARACTERS[character].clips,
+        flags.spawn ?? world.home,
+      )
       .catch((e: unknown) => {
         console.warn('Character failed to load:', e)
         return null

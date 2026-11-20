@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Wizard character (`src/assets/models/wizard.glb`, Tripo rig with seven
+  clips), the default: skirt panels, bell sleeves and long hair swing,
+  lag behind and move aside for the legs. Spring bones
+  (`render/actors/springBones.ts`): bone chains named `Spring_*`
+  simulated root to tip at a fixed 60 Hz step (inertia, pull to rest,
+  gravity, capsule colliders on the legs and spine).
+- Character choice in the map picker and `?character=wizard|fighter`.
+- Blender 5.2.3 LTS in the dev image (headless, pinned by SHA-256);
+  `make models` runs `tooling/blender/<model>.py` first when present.
+  `tooling/blender/wizard.py` adds the spring chains and their weights,
+  keeps only the base colour texture.
+- `compress_glb.py --max-size`: textures at most 1024 pixels wide in
+  `make models` (wizard 2048² texture: 500 kB to 359 kB).
+
+### Changed
+
+- Foot IK finds VRM-style leg bones (`J_Bip_L_UpperLeg`) as well as
+  Mixamo ones.
+
 ## [0.3.0] - 2026-11-20
 
 Battle-map prototype: natural terrain, river crossings, one playable

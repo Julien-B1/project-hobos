@@ -42,6 +42,8 @@ Read this first, then [`AGENTS.md`](../../AGENTS.md). Talk to the owner in
 | `src/render/engine.ts`, `chunkRenderer.ts`, `cameraRig.ts`, `highlight.ts` | Engine loop, probes, picking and cursor, chunk meshes per layer, camera.                               |
 | `src/app/`                                                                 | Vue shell, HUD, map picker, time of day, cut slider, input bindings, `config.ts`.                      |
 | `scripts/screenshots.mjs`, `tooling/gzip.ts`                               | Headless screenshots; gzip dev server.                                                                 |
+| `assets-src/models/`, `tooling/blender/`, `tooling/compress_glb.py`        | Model sources; Blender scripts per model (spring bones); texture step of `make models`.                |
+| `src/render/actors/`                                                       | Character, foot IK, spring bones (cloth, hair), toon material, cut support.                            |
 | `docs/wiki/`                                                               | Architecture, Conventions, Decisions (ADR-001 to 010), Extending, Structures, maps, dev environment.   |
 
 ## URL switches
@@ -50,7 +52,7 @@ Read this first, then [`AGENTS.md`](../../AGENTS.md). Talk to the owner in
 (random when absent) `&size=<n>` (river, default 40),
 `?cam=x,z,distance,yaw`, `?spawn=x,z`, `?time=dawn|...|late-night`,
 `?shadows=off|low|high`, `?grid=off`, `?hud=on`, `?mesher=blocky`,
-`?forceWebGL=1`. The map picker (bottom right) switches map, seed and size
+`?character=wizard|fighter`, `?forceWebGL=1`. The map picker (bottom right) switches map, seed and size
 without reload.
 
 ## Builds and versions

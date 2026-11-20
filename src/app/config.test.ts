@@ -7,6 +7,7 @@ describe('withMapParams', () => {
       map: 'river',
       seed: 42,
       size: 24,
+      character: 'wizard',
     })
     const params = new URLSearchParams(search)
     expect(params.get('map')).toBe('river')
@@ -14,6 +15,7 @@ describe('withMapParams', () => {
     expect(params.get('size')).toBe('24')
     expect(params.get('time')).toBe('dusk')
     expect(params.get('grid')).toBe('off')
+    expect(params.get('character')).toBe('wizard')
   })
 
   it('drops seed and size when undefined', () => {
@@ -21,15 +23,23 @@ describe('withMapParams', () => {
       map: 'flat',
       seed: undefined,
       size: undefined,
+      character: 'wizard',
     })
-    expect(search).toBe('?map=flat')
+    expect(search).toBe('?map=flat&character=wizard')
   })
 
   it('round-trips through readUrlFlags', () => {
-    const flags = readUrlFlags(withMapParams('', { map: 'river', seed: -5, size: 64 }))
+    const flags = readUrlFlags(
+      withMapParams('', { map: 'river', seed: -5, size: 64, character: 'fighter' }),
+    )
     expect(flags.map).toBe('river')
     expect(flags.seed).toBe(-5)
     expect(flags.size).toBe(64)
+    expect(flags.character).toBe('fighter')
+  })
+
+  it('falls back to the default character on unknown ids', () => {
+    expect(readUrlFlags('?character=dragon').character).toBe('wizard')
   })
 })
 

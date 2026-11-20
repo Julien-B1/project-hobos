@@ -73,9 +73,12 @@ generators do not change.
 
 1. Export a skinned glTF binary (Y up, facing +Z, feet at the origin,
    clips in place: no root motion).
-2. Put it in `assets-src/models/name.glb` and run `make models`: on the
-   host, `tooling/compress_glb.py --flat 12 --texture-only` turns the
-   painted texture into 12 flat colours for the cel shading, as WebP
+2. Put it in `assets-src/models/name.glb` and run `make models`. First,
+   when `tooling/blender/name.py` exists, headless Blender runs it on the
+   model (see below). Then, on the
+   host, `tooling/compress_glb.py --flat 12 --max-size 1024 --texture-only` turns the
+   painted texture into 12 flat colours for the cel shading, at most
+   1024 pixels wide, as WebP
    (needs Python 3, numpy, ffmpeg); in the container, `gltfpack -cc -vpf
 -vtf` compresses geometry and animations (meshopt; positions and UVs
    stay floats: the outline offset and the shade tint read them raw). The
@@ -86,4 +89,15 @@ generators do not change.
    about 1 unit tall, or its walk is faster or slower, adjust
    `MODEL_HEIGHT` and `CLIP_STRIDE_SPEED` in `render/actors/character.ts`
    (the stride speed is how fast a planted foot slides back in the walk
-   clip, in model units per second).
+   clip, in model units per second). Add its id to `CHARACTER_IDS`
+   (`app/config.ts`) and `CHARACTERS` (`GameCanvas.vue`).
+4. Cloth and hair that should swing: a Blender script
+   (`tooling/blender/name.py`, run as
+   `blender -b --python script.py -- in.glb out.glb`) adds chains of bones
+   named `Spring_<Family><n>_<k>`, each ending with a `..._end` leaf bone,
+   and weights the cloth vertices onto them (see `wizard.py`: skirt panels
+   found as loose parts away from the legs, bell sleeves under the
+   forearm, hair behind the neck). The family (`Skirt`, `Sleeve`, `Hair`)
+   picks the stiffness, gravity and drag in
+   `DEFAULT_SPRING_PROFILE` (`render/actors/springBones.ts`), which also
+   lists the body colliders (capsules between leg and spine bones).

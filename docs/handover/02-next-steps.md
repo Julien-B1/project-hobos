@@ -2,6 +2,13 @@
 
 State on **2026-11-20**, after the `v0.3.0` milestone.
 
+## In progress
+
+- **Wizard character** with spring bones (skirt, sleeves, hair): owner's
+  visual check pending (tune `DEFAULT_SPRING_PROFILE` from feedback). Its
+  other clips (run, cast a spell, fall, defeat, stairs) are in the model,
+  not used by the game yet.
+
 ## Next topic (owner, 2026-11-20)
 
 - **Map archetypes** (milestone `v0.4.0`): add a few new kinds of

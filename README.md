@@ -65,7 +65,8 @@ farthest zoom shows the whole map. URL switches:
 the river map's seed and size; `?map=flat`,
 `?map=kitchen-sink` (every element in one hand-made map) or `?map=bridges`
 (100 x 24 river, one crossing of each kind) loads another test map;
-`?hud=on` starts with the debug HUD shown. The map picker at the bottom right switches map, seed (🎲 for
+`?hud=on` starts with the debug HUD shown; `?character=fighter` swaps the
+wizard for the fighter. The map picker at the bottom right switches map, seed (🎲 for
 a random one) and size without reloading, and updates the URL to match; `?cam=x,z,distance,yaw` frames the camera on
 start; `?time=dusk` (or `dawn`, `morning`, `noon`, `afternoon`,
 `evening`, `midnight`, `late-night`) sets the time of day, also chosen with

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
- * Map picker: bottom-right panel to switch the test map without reloading
- * the page. Procedural maps (`river`) also get a seed field, a random
- * seed button and an optional size field.
+ * Map picker: bottom-right panel to switch the test map and the character
+ * without reloading the page. Procedural maps (`river`) also get a seed
+ * field, a random seed button and an optional size field.
  *
  * Edits a local draft; nothing changes until "Load" (or Enter in a field),
  * which emits `apply` with the new settings. App.vue then regenerates the
@@ -11,7 +11,14 @@
  */
 import { computed, ref, watch } from 'vue'
 import { TEST_MAP_IDS, type TestMapId } from '@/core/generators/catalog'
-import { MAP_SIZE_RANGE, clampMapSize, randomSeed, type MapSettings } from '@/app/config'
+import {
+  CHARACTER_IDS,
+  MAP_SIZE_RANGE,
+  clampMapSize,
+  randomSeed,
+  type CharacterModelId,
+  type MapSettings,
+} from '@/app/config'
 import type { SessionInfo } from '@/app/session'
 
 const props = defineProps<{
@@ -31,12 +38,14 @@ const PROCEDURAL: ReadonlySet<TestMapId> = new Set<TestMapId>(['river'])
 
 // Draft state. Fields are strings so an empty field can mean "default".
 const map = ref<TestMapId>(props.settings.map)
+const character = ref<CharacterModelId>(props.settings.character)
 const seedText = ref('')
 const sizeText = ref('')
 
 /** Reset the draft to the loaded settings (at start and after each load). */
 function syncDraft(settings: MapSettings): void {
   map.value = settings.map
+  character.value = settings.character
   seedText.value = settings.seed === undefined ? '' : String(settings.seed)
   sizeText.value = settings.size === undefined ? '' : String(settings.size)
 }
@@ -68,6 +77,7 @@ function apply(): void {
     // Keep seeds in the signed 32-bit range the noise expects.
     seed: seed === undefined ? undefined : seed | 0,
     size: size === undefined ? undefined : clampMapSize(size),
+    character: character.value,
   })
   // Hand the keyboard back to the camera shortcuts (they ignore focused fields).
   if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
@@ -113,6 +123,9 @@ function rollSeed(): void {
         />
       </label>
     </template>
+    <select v-model="character" aria-label="Character">
+      <option v-for="id in CHARACTER_IDS" :key="id" :value="id">{{ id }}</option>
+    </select>
     <button type="submit" class="load">Load</button>
   </form>
 </template>

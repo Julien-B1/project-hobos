@@ -69,11 +69,16 @@ check: lint format-check typecheck test ## Lint + format check + type-check + te
 screenshots: ## Screenshots of the app in headless Chromium into screenshots/ (VIEWS=file.json for custom views)
 	$(RUN) node scripts/screenshots.mjs $(VIEWS)
 
-models: ## Rebuild src/assets/models/ from assets-src/models/ (host: python3 + numpy + ffmpeg for the texture, then gltfpack in the container)
+models: ## Rebuild src/assets/models/ from assets-src/models/ (Blender script per model if any, then host python3 + numpy + ffmpeg for the texture, then gltfpack)
 	@mkdir -p tooling/.build
 	for f in assets-src/models/*.glb; do \
-	  name=$$(basename $$f); \
-	  python3 -I tooling/compress_glb.py $$f tooling/.build/$$name --flat 12 --texture-only && \
+	  name=$$(basename $$f); src=$$f; \
+	  script=tooling/blender/$${name%.glb}.py; \
+	  if [ -f $$script ]; then \
+	    $(RUN) blender -b --factory-startup --python $$script -- $$f tooling/.build/$${name%.glb}.blend.glb >/dev/null || exit 1; \
+	    src=tooling/.build/$${name%.glb}.blend.glb; \
+	  fi; \
+	  python3 -I tooling/compress_glb.py $$src tooling/.build/$$name --flat 12 --max-size 1024 --texture-only && \
 	  $(RUN) pnpm exec gltfpack -i tooling/.build/$$name -o src/assets/models/$$name -cc -vpf -vtf || exit 1; \
 	done
 

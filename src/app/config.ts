@@ -70,6 +70,8 @@ export const config = {
  *   screenshots.
  * - `?spawn=x,z` puts the character near cell (x, z) instead of near the
  *   map's home point (screenshots, debugging a spot).
+ * - `?character=<id>` picks the character model (`wizard` by default,
+ *   `fighter`).
  */
 export function readUrlFlags(
   search: string = window.location.search,
@@ -86,6 +88,7 @@ export function readUrlFlags(
   timeOfDay: TimeOfDay
   camera: CameraView | undefined
   spawn: { readonly x: number; readonly z: number } | undefined
+  character: CharacterModelId
 } {
   const params = new URLSearchParams(search)
   const map = params.get('map') ?? DEFAULT_MAP
@@ -103,8 +106,23 @@ export function readUrlFlags(
     timeOfDay: parseTimeOfDay(params.get('time')),
     camera: parseCameraView(params.get('cam')),
     spawn: parseCameraView(params.get('spawn')),
+    character: parseCharacter(params.get('character')),
   }
 }
+
+/** Character models (`src/assets/models/<id>.glb`). */
+export const CHARACTER_IDS = ['wizard', 'fighter'] as const
+
+/** One of {@link CHARACTER_IDS}. */
+export type CharacterModelId = (typeof CHARACTER_IDS)[number]
+
+/** Character from a URL value; unknown or missing values give the default. */
+function parseCharacter(value: string | null): CharacterModelId {
+  return CHARACTER_IDS.find((id) => id === value) ?? DEFAULT_CHARACTER
+}
+
+/** Character shown when the URL names none. */
+export const DEFAULT_CHARACTER: CharacterModelId = 'wizard'
 
 /** Map shown at launch when the URL names none (or an unknown one). */
 export const DEFAULT_MAP: TestMapId = 'river'
@@ -161,10 +179,13 @@ export interface MapSettings {
   readonly seed: number | undefined
   /** Edge length of procedural maps, in cells, within {@link MAP_SIZE_RANGE}. */
   readonly size: number | undefined
+  /** Character model standing on the map. */
+  readonly character: CharacterModelId
 }
 
 /**
- * Query string reproducing `settings`: writes `map`, `seed` and `size` into
+ * Query string reproducing `settings`: writes `map`, `seed`, `size` and
+ * `character` into
  * `search` and keeps every other parameter (time, shadows, mesher...). Seed
  * and size are dropped when undefined so the generator defaults apply on
  * reload. Returns the string with its leading `?` (or an empty string).
@@ -176,6 +197,7 @@ export function withMapParams(search: string, settings: MapSettings): string {
   else params.set('seed', String(settings.seed))
   if (settings.size === undefined) params.delete('size')
   else params.set('size', String(settings.size))
+  params.set('character', settings.character)
   const query = params.toString()
   return query === '' ? '' : `?${query}`
 }
