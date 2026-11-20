@@ -474,11 +474,9 @@ export class Engine {
     // Models are meshopt-compressed (`make models`).
     const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder)
     const [gltf, library] = await Promise.all([loader.loadAsync(url), loader.loadAsync(libraryUrl)])
-    // Clips come from the shared library, baked for this skeleton.
-    const names = [clips.idle, clips.walk, ...(clips.run ? [clips.run] : [])]
-    const baked = library.animations
-      .filter((clip) => names.includes(clip.name))
-      .map((clip) => retargetClip(clip, library.scene, gltf.scene))
+    // Clips come from the shared library, baked for this skeleton (all of
+    // them: `playClip` reaches the others).
+    const baked = library.animations.map((clip) => retargetClip(clip, library.scene, gltf.scene))
     const character = new Character(gltf.scene, baked, clips)
     character.placeAt(walkPoint(stand))
     this.character?.dispose()
@@ -488,6 +486,15 @@ export class Engine {
     this.publishCharacter()
     const { x, y, z } = character.root.position
     return { x, y, z }
+  }
+
+  /**
+   * Play a library clip on the character, standing (action bar), with a
+   * cross-fade from its current pose. Returns false when there is no
+   * character, it is walking or the clip is unknown.
+   */
+  playClip(name: string): boolean {
+    return this.character?.play(name) ?? false
   }
 
   /**

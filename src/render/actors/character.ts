@@ -18,10 +18,12 @@ import {
   AnimationMixer,
   DoubleSide,
   Group,
+  LoopOnce,
   LoopRepeat,
   Mesh,
   MeshBasicNodeMaterial,
   RingGeometry,
+  Quaternion,
   SkinnedMesh,
   Vector3,
   type AnimationAction,
@@ -34,6 +36,8 @@ import { encodeOutput } from '../outputEncoding'
 import type { CutSupported } from './cutSupported'
 import { FootIk } from './footIk'
 import { ArmPose, NEUTRAL_ARMS, type ArmStyle } from './armPose'
+import { ArcaneWisps } from './arcaneWisps'
+import { humanoidBones } from './retarget'
 import { SPRING_PREFIX, SpringBones } from './springBones'
 import { createOutlineMaterial, createToonMaterial } from './toonMaterial'
 
@@ -66,6 +70,40 @@ export const RUN_SPEED = WALK_SPEED * RUN_FACTOR
  * second (measured on the wizard's run clip, as for the walk).
  */
 const RUN_CLIP_STRIDE_SPEED = 1.58
+
+/**
+ * Clip that follows a one-shot clip when it ends (none: hold the last
+ * frame, as after a defeat).
+ */
+const FOLLOW_UP: Readonly<Record<string, string>> = {
+  sword_draw: 'sword_idle',
+  sword_slash: 'sword_idle',
+  sword_hit: 'sword_idle',
+  staff_draw: 'staff_idle',
+  staff_strike: 'staff_idle',
+  staff_cast: 'staff_idle',
+  staff_hit: 'staff_idle',
+}
+
+/**
+ * Stance a clip starts from, and the clip that brings the character into
+ * it: a slash asked for with the sword sheathed draws it first.
+ */
+const REQUIRES: Readonly<Record<string, { readonly stance: string; readonly via: string }>> = {
+  sword_slash: { stance: 'sword_idle', via: 'sword_draw' },
+  sword_hit: { stance: 'sword_idle', via: 'sword_draw' },
+  sword_defeat: { stance: 'sword_idle', via: 'sword_draw' },
+  staff_strike: { stance: 'staff_idle', via: 'staff_draw' },
+  staff_cast: { stance: 'staff_idle', via: 'staff_draw' },
+  staff_hit: { stance: 'staff_idle', via: 'staff_draw' },
+  staff_defeat: { stance: 'staff_idle', via: 'staff_draw' },
+}
+
+/** How fast the incantation effects come and go (1/s). */
+const CAST_FADE_RATE = 4
+
+/** Distance from the hand to the staff's head, in model units (held by the middle). */
+const STAFF_HEAD = 0.55
 
 /** Paths of more cells than this are run, shorter ones walked. */
 export const RUN_FROM_CELLS = 2
@@ -130,6 +168,20 @@ export class Character implements CutSupported {
   private readonly model: Object3D
   private readonly mixer: AnimationMixer
   private readonly idle: AnimationAction
+  /** All clips of the character (baked from the animation library). */
+  private readonly clips: readonly AnimationClip[]
+  /** Action playing now (the target of the last cross-fade). */
+  private current: AnimationAction
+  /** Standing clip: idle, or the combat guard after a sword move. */
+  private standing: AnimationAction
+  /** Glow and wisps at the staff's head during an incantation. */
+  private readonly wisps = new ArcaneWisps()
+  /** Incantation strength, 0 to 1 (smoothed while a `*_cast` clip plays). */
+  private casting = 0
+  /** Right hand, and its grip axis in the hand's own space (forward at rest). */
+  private readonly grip: { readonly hand: Object3D; readonly axis: Vector3 } | null
+  /** Clips to play next, each when the current one-shot clip ends. */
+  private queue: string[] = []
   private readonly walkAction: AnimationAction
   /** Run clip's action (the walk's own action when the model has no run clip). */
   private readonly runAction: AnimationAction
@@ -197,6 +249,24 @@ export class Character implements CutSupported {
     for (const action of [this.idle, this.walkAction, this.runAction])
       action.setLoop(LoopRepeat, Infinity)
     this.idle.play()
+    this.current = this.idle
+    this.standing = this.idle
+    this.clips = clips
+    this.mixer.addEventListener('finished', (e) => {
+      if (e.action !== this.current) return
+      const next = this.queue.shift() ?? FOLLOW_UP[e.action.getClip().name]
+      if (next) this.start(next)
+    })
+    // Grip axis: the model's forward direction at rest, in the hand's space
+    // (the combat clips point the weapon along it, see combat_clips.py).
+    const hand = humanoidBones(this.model).get('RightHand')
+    if (hand) {
+      this.model.updateMatrixWorld(true)
+      const inverse = hand.getWorldQuaternion(new Quaternion()).invert()
+      this.grip = { hand, axis: new Vector3(0, 0, 1).applyQuaternion(inverse) }
+    } else {
+      this.grip = null
+    }
     this.arms = new ArmPose(this.model, names.arms ?? NEUTRAL_ARMS)
     this.feet = new FootIk(this.model, this.model)
     // Stance: the idle clip's first frame.
@@ -215,9 +285,12 @@ export class Character implements CutSupported {
     this.ring.visible = false
   }
 
-  /** Decals that lie on the ground (add them to the scene next to {@link root}). */
-  get decals(): readonly Mesh[] {
-    return [this.ring]
+  /**
+   * World-space objects to add to the scene next to {@link root}: the
+   * selection ring on the ground and the incantation effect.
+   */
+  get decals(): readonly Object3D[] {
+    return [this.ring, this.wisps.object]
   }
 
   /** Whether the character is selected (ring shown). */
@@ -329,8 +402,20 @@ export class Character implements CutSupported {
     }
     this.root.updateMatrixWorld(true)
     this.arms.update(dt)
-    this.feet.update(dt, this.root.position.y, ground, !this.hop, !this.walking)
+    // The stance lock only holds the idle clip's foot shuffles still; action
+    // clips (combat guard, steps) place the feet themselves.
+    this.feet.update(
+      dt,
+      this.root.position.y,
+      ground,
+      !this.hop,
+      !this.walking && this.current === this.idle,
+    )
+    const casting = this.current.getClip().name.endsWith('_cast') ? 1 : 0
+    this.casting += (casting - this.casting) * Math.min(1, dt * CAST_FADE_RATE)
+    this.springs.setLift(this.casting)
     this.springs.update(dt)
+    this.updateWisps(dt)
     return moved
   }
 
@@ -363,10 +448,24 @@ export class Character implements CutSupported {
     this.ring.geometry.computeBoundingSphere()
   }
 
+  /** Place the incantation effect on the staff's head (held by its middle). */
+  private updateWisps(dt: number): void {
+    const grip = this.grip
+    if (!grip || this.casting < 0.01 || !this.shownFlag) {
+      this.wisps.object.visible = false
+      return
+    }
+    const head = grip.hand.getWorldPosition(new Vector3())
+    const axis = grip.axis.clone().applyQuaternion(grip.hand.getWorldQuaternion(new Quaternion()))
+    head.addScaledVector(axis, STAFF_HEAD * (CHARACTER_HEIGHT / MODEL_HEIGHT))
+    this.wisps.update(dt, head, this.casting)
+  }
+
   /** Release geometries and materials (textures included). */
   dispose(): void {
     this.mixer.stopAllAction()
     this.ring.geometry.dispose()
+    this.wisps.dispose()
     for (const m of this.materials) m.dispose()
     this.model.traverse((o) => {
       if (o instanceof Mesh) o.geometry.dispose()
@@ -423,23 +522,65 @@ export class Character implements CutSupported {
     this.model.quaternion.setFromAxisAngle(UP, this.yaw)
   }
 
-  /** Action playing for a gait. */
-  private actionFor(gait: Gait): AnimationAction {
-    if (gait === 'idle') return this.idle
-    return gait === 'run' ? this.runAction : this.walkAction
+  /**
+   * Play a clip by name while standing (action menu): cross-faded from the
+   * current pose. The idle clip and clips ending with `_idle` loop and
+   * become the standing clip until the character walks; other clips play
+   * once, hold their last frame and go on with their follow-up (see
+   * {@link FOLLOW_UP}). A clip that needs a stance first plays the clip
+   * leading to it ({@link REQUIRES}). Returns false when the clip is
+   * unknown or the character is walking.
+   */
+  play(name: string): boolean {
+    if (this.walking || !this.clips.some((c) => c.name === name)) return false
+    this.queue = []
+    const need = REQUIRES[name]
+    if (need && this.standing.getClip().name !== need.stance) {
+      this.queue.push(name)
+      return this.start(need.via)
+    }
+    return this.start(name)
+  }
+
+  /** Cross-fade to a clip now (see {@link play}). */
+  private start(name: string): boolean {
+    const clip = this.clips.find((c) => c.name === name)
+    if (!clip) return false
+    const action = this.mixer.clipAction(clip)
+    if (action === this.idle) {
+      this.standing = action
+    } else if (name.endsWith('_idle')) {
+      action.setLoop(LoopRepeat, Infinity)
+      this.standing = action
+    } else {
+      action.setLoop(LoopOnce, 1)
+      action.clampWhenFinished = true
+    }
+    this.fadeTo(action)
+    return true
+  }
+
+  /** Cross-fade from the current action to `to`. */
+  private fadeTo(to: AnimationAction): void {
+    if (to === this.current) return
+    to.reset().play()
+    this.current.crossFadeTo(to, FADE, false)
+    this.current = to
   }
 
   /** Cross-fade to the clip of `gait` (a run keeps running to the end of its path). */
   private setGait(gait: Gait): void {
     if (gait === this.gait) return
-    const from = this.actionFor(this.gait)
-    const to = this.actionFor(gait)
     this.gait = gait
+    // Walking ends the combat stance and drops queued clips.
+    if (gait !== 'idle') {
+      this.standing = this.idle
+      this.queue = []
+    }
+    const to = gait === 'idle' ? this.standing : gait === 'run' ? this.runAction : this.walkAction
     if (gait !== 'idle') to.timeScale = gait === 'run' ? this.runTimeScale : WALK_TIME_SCALE
     // Same action (no run clip): only the playback speed changes.
-    if (from === to) return
-    to.reset().play()
-    from.crossFadeTo(to, FADE, false)
+    this.fadeTo(to)
   }
 
   /**

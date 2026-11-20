@@ -191,6 +191,11 @@ watch(
   },
 )
 
+defineExpose({
+  /** Play a library clip on the character (action bar); false if not played. */
+  playClip: (name: string): boolean => engine?.playClip(name) ?? false,
+})
+
 onBeforeUnmount(() => {
   unmounted = true
   unbindInputs?.()

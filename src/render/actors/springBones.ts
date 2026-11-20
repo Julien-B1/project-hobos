@@ -27,6 +27,12 @@ export const SPRING_PREFIX = 'Spring_'
 /** Fixed simulation step, in seconds. */
 const STEP = 1 / 60
 
+/** Gravity reversal at full magic lift: 1.4 turns it into a lift of 0.4 g. */
+const LIFT_REVERSAL = 1.4
+
+/** Wind push at full magic lift, in world units per second. */
+const LIFT_WIND = 0.35
+
 /** Most steps per frame (a long frame is partly skipped, not exploded). */
 const MAX_STEPS = 4
 
@@ -143,6 +149,9 @@ export class SpringBones {
   private readonly colliders: Collider[] = []
   private leftover = 0
   private ready = false
+  /** Magic lift, 0 to 1: gravity turned upwards and swirling wind (incantation). */
+  private lift = 0
+  private clock = 0
 
   /**
    * @param model The skinned model, at its rest pose (bones found by name).
@@ -191,6 +200,14 @@ export class SpringBones {
     return this.joints.length
   }
 
+  /**
+   * Magic lift, 0 (normal) to 1: the cloth and hair float up and swirl, as
+   * in a gust rising from the ground (incantation).
+   */
+  setLift(amount: number): void {
+    this.lift = Math.min(1, Math.max(0, amount))
+  }
+
   /** Forget the motion: the chains restart at rest (after a teleport). */
   reset(): void {
     this.ready = false
@@ -235,6 +252,7 @@ export class SpringBones {
 
   /** One fixed step for every joint, root to tip. */
   private step(scale: number): void {
+    this.clock += STEP
     for (const j of this.joints) {
       const { settings } = j
       this.restDirection(j)
@@ -244,7 +262,13 @@ export class SpringBones {
       NEXT.copy(j.tip)
         .addScaledVector(A.subVectors(j.tip, j.previous), 1 - settings.drag)
         .addScaledVector(REST_DIR, settings.stiffness * length * STEP)
-      NEXT.y -= settings.gravity * STEP
+      NEXT.y -= settings.gravity * STEP * (1 - LIFT_REVERSAL * this.lift)
+      if (this.lift > 0) {
+        // Swirling wind: a slow rotating push, out of phase per chain height.
+        const phase = this.clock * 2.4 + HEAD.y * 9
+        NEXT.x += Math.sin(phase) * LIFT_WIND * this.lift * STEP
+        NEXT.z += Math.cos(phase * 0.8) * LIFT_WIND * this.lift * STEP
+      }
       // Keep the length, then leave the body.
       B.subVectors(NEXT, HEAD).setLength(length)
       NEXT.copy(HEAD).add(B)

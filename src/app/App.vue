@@ -15,11 +15,11 @@
  * loading screen covers the canvas until it reports `ready`, at launch and
  * at each map change.
  */
-import { onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
+import { onBeforeUnmount, onMounted, ref, shallowRef, useTemplateRef } from 'vue'
 import type { EngineHudState } from '@/render/engine'
 import type { TimeOfDay } from '@/render/timeOfDay'
 import type { SessionInfo } from '@/app/session'
-import { readUrlFlags, withMapParams, type MapSettings } from '@/app/config'
+import { CHARACTER_ACTIONS, readUrlFlags, withMapParams, type MapSettings } from '@/app/config'
 import { isTextEntryTarget } from '@/app/input/bindings'
 import GameCanvas from './components/GameCanvas.vue'
 import DebugHud from './components/DebugHud.vue'
@@ -29,11 +29,14 @@ import MapPicker from './components/MapPicker.vue'
 import LoadingScreen from './components/LoadingScreen.vue'
 import ControlsHelp from './components/ControlsHelp.vue'
 import VersionBadge from './components/VersionBadge.vue'
+import ActionBar from './components/ActionBar.vue'
 
 const flags = readUrlFlags()
 
 // shallowRef: the snapshot is replaced as a whole, never mutated in place.
 const hud = shallowRef<EngineHudState | null>(null)
+/** The canvas, for commands to the engine (action bar). */
+const canvas = useTemplateRef<InstanceType<typeof GameCanvas>>('canvas')
 
 /** Grid visibility, mirrored from the engine (G toggles it) so a new map keeps it. */
 const grid = ref(flags.grid)
@@ -114,6 +117,7 @@ onBeforeUnmount(() => {
 <template>
   <main class="app" :data-ready="!loading">
     <GameCanvas
+      ref="canvas"
       :key="canvasKey"
       :map-settings="mapSettings"
       :grid="grid"
@@ -160,6 +164,11 @@ onBeforeUnmount(() => {
         ?
       </button>
       <DebugHud v-if="panel === 'debug'" :state="hud" :session="session" />
+      <ActionBar
+        v-if="hud?.character?.selected"
+        :actions="CHARACTER_ACTIONS[mapSettings.character]"
+        @play="(clip) => canvas?.playClip(clip)"
+      />
       <ControlsHelp v-if="panel === 'controls'" />
       <TimeOfDayPicker v-model="timeOfDay" />
       <CutSlider v-model="cutHeight" />

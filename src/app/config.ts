@@ -121,6 +121,34 @@ function parseCharacter(value: string | null): CharacterModelId {
   return CHARACTER_IDS.find((id) => id === value) ?? DEFAULT_CHARACTER
 }
 
+/** One entry of the action bar: button label and library clip. */
+export interface CharacterAction {
+  readonly label: string
+  readonly clip: string
+}
+
+/**
+ * Animations each character's class can try from the action bar (clips of
+ * the shared animation library, `src/assets/animations/humanoid.glb`).
+ */
+export const CHARACTER_ACTIONS: Readonly<Record<CharacterModelId, readonly CharacterAction[]>> = {
+  fighter: [
+    { label: 'Rest', clip: 'look_around.001' },
+    { label: 'Draw', clip: 'sword_draw' },
+    { label: 'Slash', clip: 'sword_slash' },
+    { label: 'Hit', clip: 'sword_hit' },
+    { label: 'Defeat', clip: 'sword_defeat' },
+  ],
+  wizard: [
+    { label: 'Rest', clip: 'look_around.001' },
+    { label: 'Draw', clip: 'staff_draw' },
+    { label: 'Strike', clip: 'staff_strike' },
+    { label: 'Cast', clip: 'staff_cast' },
+    { label: 'Hit', clip: 'staff_hit' },
+    { label: 'Defeat', clip: 'staff_defeat' },
+  ],
+}
+
 /** Character shown when the URL names none. */
 export const DEFAULT_CHARACTER: CharacterModelId = 'wizard'
 

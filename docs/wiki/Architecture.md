@@ -411,6 +411,19 @@ trees and grid. Shadow quality barely changes GPU time; `high` costs about
   the upper arm's swing angle lags behind it, and the difference turns
   the forearm (half of it the hand) the other way. What depends on the
   body stays out of the clips, so clips can be shared.
+  Actions (`Character.play`, from the action bar shown while the
+  character is selected, `app/components/ActionBar.vue`, per class in
+  `CHARACTER_ACTIONS`): every change of clip is a cross-fade from the
+  current pose; a clip needing the weapon in hand (`REQUIRES`) plays the
+  draw first; one-shot clips hold their last frame and go on with their
+  follow-up (`FOLLOW_UP`, the guard), a defeat stays down; clips ending in
+  `_idle` loop and become the standing clip until the character walks.
+  The foot IK's stance lock holds only during the idle clip. While a
+  `*_cast` clip plays, the spring bones get a magic lift (gravity turned
+  upwards, swirling wind) and `ArcaneWisps` draws a glow and three wisp
+  trails around the staff's head (one instanced sprite object, additive,
+  positions written on the CPU), placed along the right hand's grip axis
+  (the model's forward direction at rest, in the hand's space).
   Last, `SpringBones` (`actors/springBones.ts`) moves cloth and hair: the
   model's bones named `Spring_*` (added by a Blender script, see
   _Extending_) form chains simulated root to tip at a fixed 60 Hz step:

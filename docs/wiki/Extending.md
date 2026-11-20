@@ -90,7 +90,10 @@ generators do not change.
    (`--no-animations`) and every character plays the library's
    (`render/actors/retarget.ts`); a rig needs Mixamo or VRM-style bone
    names (`HUMANOID_BONES`). New clips go into the library: today it is
-   built from the wizard's export (`tooling/blender/humanoid_library.py`). If the model is not
+   built from the wizard's export (`tooling/blender/humanoid_library.py`)
+   plus clips keyed by script (`tooling/blender/combat_clips.py`: poses as
+   hand, sword and ankle targets solved by a two-bone IK; preview them
+   with Cycles renders of the wizard in the container). If the model is not
    about 1 unit tall, or its walk is faster or slower, adjust
    `MODEL_HEIGHT` and `CLIP_STRIDE_SPEED` in `render/actors/character.ts`
    (the stride speed is how fast a planted foot slides back in the walk

@@ -41,10 +41,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `compress_glb.py --max-size`: textures at most 1024 pixels wide in
   `make models` (wizard 2048² texture: 500 kB to 359 kB).
 
+- Combat clips in the animation library, keyed by script
+  (`tooling/blender/combat_clips.py`: hand, weapon and ankle targets,
+  spine bends, two-bone IK for arms and legs, fingers curled on the grip).
+  Sword (fighter): `sword_draw` (cross draw from the left hip),
+  `sword_idle` (guard, bounce and footwork), `sword_slash` (diagonal cut
+  with a step in). Staff (wizard): `staff_draw` (from the back, over the
+  right shoulder), `staff_idle` (held by the middle, diagonal),
+  `staff_strike` (overhead, straight down on the head), `staff_cast`
+  (staff raised, other hand open). Both: `<weapon>_hit` (shock, half step
+  back, recovery) and `<weapon>_defeat` (fall on the back, stays down).
+  The weapons are not modelled yet: they will follow the right hand's
+  grip axis (forward at rest; sword by the hilt, staff by the middle).
+- Action bar (bottom centre, `ActionBar.vue`) while a character is
+  selected, with its class's actions (`CHARACTER_ACTIONS`): each clip
+  cross-fades from the current pose (`Character.play`); a move that needs
+  the weapon in hand draws it first, one-shot clips go back to the guard,
+  a defeat stays down, walking ends the guard.
+- Incantation (`*_cast` clips): clothes and hair float up and swirl
+  (`SpringBones.setLift`), a glow and three arcane wisps spiral around the
+  staff's head (`render/actors/arcaneWisps.ts`, one instanced sprite draw).
+
 ### Changed
 
 - Foot IK finds VRM-style leg bones (`J_Bip_L_UpperLeg`) as well as
-  Mixamo ones.
+  Mixamo ones; its standing stance lock only holds during the idle clip
+  (action clips place the feet themselves).
 
 ## [0.3.0] - 2026-11-20
 

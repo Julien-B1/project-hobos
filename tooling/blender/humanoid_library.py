@@ -8,11 +8,16 @@ Usage (in the dev container, see `make models`):
 The game loads this file once and transfers its clips onto each
 character's own skeleton (`src/render/actors/retarget.ts`), so every
 character gets every clip whatever its rig (Mixamo or VRM-style names).
-The source is the wizard's Tripo export: seven clips on a VRM-style rig.
+The source is the wizard's Tripo export: seven clips on a VRM-style rig,
+plus the sword and staff clips keyed by `combat_clips.py`.
 """
+import os
 import sys
 
 import bpy
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import combat_clips  # noqa: E402
 
 ARGS = sys.argv[sys.argv.index("--") + 1 :]
 SOURCE, TARGET = ARGS[0], ARGS[1]
@@ -24,6 +29,14 @@ for o in list(bpy.data.objects):
         bpy.data.objects.remove(o)
 for image in list(bpy.data.images):
     bpy.data.images.remove(image)
+# Keyed clips of our own, on the rest pose.
+arm = next(o for o in bpy.data.objects if o.type == "ARMATURE")
+arm.animation_data_create()
+arm.animation_data.action = None
+for pb in arm.pose.bones:
+    pb.rotation_quaternion = (1, 0, 0, 0)
+    pb.location = (0, 0, 0)
+combat_clips.add_clips(arm)
 print("library clips:", ", ".join(sorted(a.name for a in bpy.data.actions)))
 
 bpy.ops.export_scene.gltf(
