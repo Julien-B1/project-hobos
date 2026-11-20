@@ -206,6 +206,13 @@ scatter, props), each layer with its own shared material
   Built voxels also get their own coloured cap over it (`CapMesher`: the
   section of each voxel's solid, slopes and wedges following their top).
   Display only, the map is untouched.
+  Objects standing on the scenery (characters now; furniture, spell
+  effects, props later) are never sliced (ADR-011): their materials have
+  no cut mask, and the engine shows or hides each one whole every frame
+  (`render/actors/cutSupported.ts`, `CutSupported`, `applyCut`), hidden if
+  and only if the surface it rests on lies above the cut
+  (`core/cutSupport.ts`, `shownUnderCut`). A hidden object casts no shadow
+  and cannot be picked.
 - **Openings** (`core/terrainSurface.ts`): around a corner touched by a
   covered run (cave or arch floor), runs only join when they agree on it,
   so the ground stays level in front of a mouth and the hill keeps a

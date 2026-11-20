@@ -3,16 +3,17 @@
  * of cells and follows the ground under its feet.
  *
  * Layer: render. The model's materials are replaced by node materials that
- * end with the scene's output encoding and honour the cut height, like the
- * terrain: toon shading with an ink outline (`toonMaterial.ts`). It casts
+ * end with the scene's output encoding: toon shading with an ink outline (`toonMaterial.ts`). It casts
  * and receives sun shadows (the engine redraws the shadow map every frame
  * while a character is on the map). A ring at the feet shows the selection,
- * draped on the ground around them.
+ * draped on the ground around them. The cut never slices the character: it
+ * is hidden whole when the ground it stands on is cut away
+ * ({@link CutSupported}).
  *
  * Model conventions (Mixamo rig, see `tooling/compress_glb.py`): Y up,
  * facing +Z, feet at the origin, about 1 unit tall, walk clip in place.
  */
-import { positionWorld, uniform } from 'three/tsl'
+import { uniform } from 'three/tsl'
 import {
   AnimationMixer,
   DoubleSide,
@@ -28,9 +29,9 @@ import {
   type Material,
   type Object3D,
   type Texture,
-  type UniformNode,
 } from 'three/webgpu'
 import { encodeOutput } from '../outputEncoding'
+import type { CutSupported } from './cutSupported'
 import { FootIk } from './footIk'
 import { createOutlineMaterial, createToonMaterial } from './toonMaterial'
 
@@ -93,7 +94,7 @@ export type GroundProbe = (
 ) => { y: number; normal: Vector3 } | null
 
 /** One character in the scene. Add {@link Character.root} to the scene. */
-export class Character {
+export class Character implements CutSupported {
   /** Scene object: feet at its origin. */
   readonly root = new Group()
   private readonly model: Object3D
@@ -117,6 +118,7 @@ export class Character {
   private yaw = 0
   private time = 0
   private selectedFlag = false
+  private shownFlag = true
   /** Hop in progress: start point and heights of both ends (world units). */
   private hop: { x: number; z: number; fromY: number; toY: number } | null = null
 
@@ -124,18 +126,12 @@ export class Character {
    * @param scene The model (glTF scene), used as it is (not cloned).
    * @param clips Animations of the model.
    * @param names Which clips are idle and walk.
-   * @param cutHeight Cut height uniform: nothing of the character shows above it.
    */
-  constructor(
-    scene: Object3D,
-    clips: readonly AnimationClip[],
-    names: CharacterClips,
-    cutHeight: UniformNode<'float'>,
-  ) {
+  constructor(scene: Object3D, clips: readonly AnimationClip[], names: CharacterClips) {
     this.root.name = 'character'
     this.model = scene
     this.model.scale.setScalar(CHARACTER_HEIGHT / MODEL_HEIGHT)
-    this.prepareMaterials(cutHeight)
+    this.prepareMaterials()
     this.root.add(this.model)
 
     this.mixer = new AnimationMixer(this.model)
@@ -154,10 +150,7 @@ export class Character {
     this.mixer.update(0)
     this.feet.captureStance()
 
-    this.ring = decal(
-      new RingGeometry(RING_RADIUS * 0.82, RING_RADIUS, 48),
-      this.ringMaterial(cutHeight),
-    )
+    this.ring = decal(new RingGeometry(RING_RADIUS * 0.82, RING_RADIUS, 48), this.ringMaterial())
     this.ring.name = 'character-ring'
     // The ring is draped in world space (see drapeRing): keep its flat shape.
     const flat = this.ring.geometry.getAttribute('position')
@@ -182,8 +175,33 @@ export class Character {
   /** Select (show the ring) or deselect the character. */
   set selected(on: boolean) {
     this.selectedFlag = on
-    this.ring.visible = on
+    this.ring.visible = on && this.shownFlag
     // Laid on the ground on the next update.
+    if (on) this.placed = false
+  }
+
+  /** Height of the ground under the feet (mid-hop: between both ends), world units. */
+  get supportHeight(): number {
+    const hop = this.hop
+    if (!hop) return this.root.position.y
+    const target = this.path[0]
+    const total = target ? Math.hypot(target.x - hop.x, target.z - hop.z) : 0
+    const p = this.root.position
+    const t = total > 1e-6 ? Math.min(1, Math.hypot(p.x - hop.x, p.z - hop.z) / total) : 1
+    return hop.fromY + (hop.toY - hop.fromY) * t
+  }
+
+  /** Whether the character is drawn and pickable (false: hidden by the cut). */
+  get shown(): boolean {
+    return this.shownFlag
+  }
+
+  /** Show or hide the character whole, ring included. */
+  set shown(on: boolean) {
+    this.shownFlag = on
+    this.root.visible = on
+    this.ring.visible = on && this.selectedFlag
+    // The ring may be stale after a hidden walk: lay it again.
     if (on) this.placed = false
   }
 
@@ -218,6 +236,7 @@ export class Character {
    * character's body (a vertical cylinder around the feet).
    */
   hitBy(origin: Vector3, direction: Vector3): boolean {
+    if (!this.shownFlag) return false
     const p = this.root.position
     const radius = RING_RADIUS
     // Closest approach of the ray to the vertical axis, in the ground plane.
@@ -354,10 +373,10 @@ export class Character {
 
   /**
    * Replace the model's materials: same texture, toon shading with the
-   * scene's output encoding, cut at the cut height; add an ink outline
+   * scene's output encoding, never cut; add an ink outline
    * (inverted hull) per skinned mesh. Meshes cast and receive sun shadows.
    */
-  private prepareMaterials(cutHeight: UniformNode<'float'>): void {
+  private prepareMaterials(): void {
     const meshes: Mesh[] = []
     this.model.traverse((o) => {
       if (o instanceof Mesh) meshes.push(o)
@@ -365,8 +384,8 @@ export class Character {
     for (const mesh of meshes) {
       const source = mesh.material as Material & { map?: Texture | null }
       const map = source.map ?? null
-      const material = createToonMaterial(map, source.side, cutHeight)
-      const outline = createOutlineMaterial(map, cutHeight)
+      const material = createToonMaterial(map, source.side)
+      const outline = createOutlineMaterial(map)
       this.materials.push(outline)
       source.dispose()
       mesh.material = material
@@ -390,7 +409,7 @@ export class Character {
   }
 
   /** Material of the selection ring: bright, pulsing, drawn over the ground. */
-  private ringMaterial(cutHeight: UniformNode<'float'>): MeshBasicNodeMaterial {
+  private ringMaterial(): MeshBasicNodeMaterial {
     const material = new MeshBasicNodeMaterial({
       color: 0x5ad2ff,
       transparent: true,
@@ -398,7 +417,6 @@ export class Character {
       side: DoubleSide,
     })
     material.opacityNode = this.ringOpacity
-    material.maskNode = positionWorld.y.lessThan(cutHeight)
     this.materials.push(material)
     return encodeOutput(material)
   }

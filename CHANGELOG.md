@@ -217,6 +217,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The cut no longer slices the character: it is shown whole, or hidden
+  whole when the ground it stands on is cut away (ADR-011,
+  `core/cutSupport.ts`, `render/actors/cutSupported.ts`), the rule every
+  object on the scenery (furniture, spell effects, props) will follow.
 - Dev and preview servers prefer Brotli over gzip (`tooling/compression.ts`,
   was `gzip.ts`; compressed bodies cached by content hash; gzip now level
   9); the production build writes `.br` and `.gz` next to each asset. The

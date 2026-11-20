@@ -14,7 +14,8 @@
  *   pushed out along its normals after skinning, back faces only, coloured
  *   by the texture times {@link OUTLINE_TINT}. One extra draw per character
  *   mesh, no post-processing.
- * Both end with the scene's output encoding and are cut at the cut height.
+ * Both end with the scene's output encoding. Neither is cut: the character
+ * is shown or hidden whole (`cutSupported.ts`).
  */
 import {
   cameraPosition,
@@ -25,7 +26,6 @@ import {
   normalView,
   positionLocal,
   positionViewDirection,
-  positionWorld,
   smoothstep,
   texture,
   uv,
@@ -41,7 +41,6 @@ import {
   RGBAFormat,
   type Side,
   type Texture,
-  type UniformNode,
 } from 'three/webgpu'
 import { encodeOutput } from '../outputEncoding'
 
@@ -84,11 +83,7 @@ function bandTexture(): DataTexture {
 let bands: DataTexture | null = null
 
 /** Toon material of a character mesh, textured with `map`. */
-export function createToonMaterial(
-  map: Texture | null,
-  side: Side,
-  cutHeight: UniformNode<'float'>,
-): MeshToonNodeMaterial {
+export function createToonMaterial(map: Texture | null, side: Side): MeshToonNodeMaterial {
   bands ??= bandTexture()
   const material = new MeshToonNodeMaterial({ map, gradientMap: bands, side })
   const albedo = map ? texture(map, uv()).rgb : vec3(1, 1, 1)
@@ -98,7 +93,6 @@ export function createToonMaterial(
   material.emissiveNode = albedo
     .mul(vec3(...SHADE_TINT))
     .add(vec3(1, 0.96, 0.9).mul(rim.mul(RIM_STRENGTH)))
-  material.maskNode = positionWorld.y.lessThan(cutHeight)
   return encodeOutput(material)
 }
 
@@ -106,16 +100,12 @@ export function createToonMaterial(
  * Outline material: the skinned mesh inflated along its normals, back faces
  * only, in a darker shade of its texture `map`.
  */
-export function createOutlineMaterial(
-  map: Texture | null,
-  cutHeight: UniformNode<'float'>,
-): MeshBasicNodeMaterial {
+export function createOutlineMaterial(map: Texture | null): MeshBasicNodeMaterial {
   const material = new MeshBasicNodeMaterial({ map, color: OUTLINE_TINT, side: BackSide })
   // positionLocal and normalLocal are already skinned here.
   const distance = modelWorldMatrix.mul(vec4(positionLocal, 1)).xyz.distance(cameraPosition)
   material.positionNode = positionLocal.add(
     normalLocal.normalize().mul(distance.mul(OUTLINE_PER_DISTANCE)),
   )
-  material.maskNode = positionWorld.y.lessThan(cutHeight)
   return encodeOutput(material)
 }

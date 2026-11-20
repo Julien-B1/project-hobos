@@ -26,6 +26,7 @@ import type { StructureSet } from '@/core/structures/structureSet'
 import type { VoxelMap } from '@/core/voxelMap'
 import { WalkArea, type Stand } from '@/core/navigation/walkArea'
 import { Character, type CharacterClips, type WalkPoint } from './actors/character'
+import { applyCut } from './actors/cutSupported'
 import { CameraRig, type CameraRigSettings } from './cameraRig'
 import { ChunkRenderer } from './chunkRenderer'
 import { NO_CUT, createLayerMaterials, type LayerMaterialSet } from './materials'
@@ -416,12 +417,7 @@ export class Engine {
     if (!stand) return false
     // Models are meshopt-compressed (`make models`).
     const gltf = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(url)
-    const character = new Character(
-      gltf.scene,
-      gltf.animations,
-      clips,
-      this.layerMaterials.cutHeight,
-    )
+    const character = new Character(gltf.scene, gltf.animations, clips)
     character.placeAt(walkPoint(stand))
     this.character?.dispose()
     this.character = character
@@ -445,7 +441,8 @@ export class Engine {
     }
     const stand = this.characterStand
     const cell = this.hit?.surface
-    if (!on && cell && stand && !character.walking) on = cell.x === stand.x && cell.z === stand.z
+    if (!on && cell && stand && character.shown && !character.walking)
+      on = cell.x === stand.x && cell.z === stand.z
     character.selected = on
     this.publishCharacter()
   }
@@ -597,6 +594,8 @@ export class Engine {
       const walking = character.walking
       character.update(Math.min(dt, MAX_FRAME_DT), (x, z, nearY) => this.groundAt(x, z, nearY))
       if (walking !== character.walking) this.publishCharacter()
+      // Never sliced: hidden whole when the ground under it is cut away.
+      applyCut([character], this.hud.cutHeight)
     }
     const rebuilt = this.rebuildDirtyChunks()
     if (this.capDirty || (rebuilt && this.hud.cutHeight !== null)) {

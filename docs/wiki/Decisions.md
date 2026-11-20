@@ -201,3 +201,24 @@ accepted record: add a new one that supersedes it.
     (SwiftShader), close to but not exactly a real GPU's image; GPU figures
     in those captures mean nothing.
   - The dev image grows by a few hundred MB.
+
+## ADR-011: Objects on the scenery are hidden whole by the cut, never sliced
+
+- **Context.** The cut slider slices the scenery to open caves and look
+  under roofs. Actors, and later furniture, spell effects, props and other
+  gameplay elements, stand on that scenery. Slicing them (a character cut
+  at the waist) reads as a bug and hides what the player needs to see.
+- **Decision.** Such objects implement `CutSupported` (render): the height
+  of the surface they rest on and a `shown` flag. Their materials have no
+  cut mask. Every frame the engine shows each one whole, or hides it whole
+  (shadow and picking included), with the pure rule `shownUnderCut`
+  (core): hidden if and only if the supporting surface lies above the cut
+  height (a surface at the cut height is kept, as the section cap draws
+  it). Mid-hop, the support is the straight line between both ends.
+- **Consequences.**
+  - A character in a cave stays whole when the cut opens the roof, its
+    head above the section plane included.
+  - New kinds of objects only need the two members of `CutSupported` and
+    an entry in the engine's per-frame `applyCut` call.
+  - Objects that hang or fly (no supporting surface) will need their own
+    rule (their anchor's height, for example).
