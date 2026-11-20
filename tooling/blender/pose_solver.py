@@ -22,7 +22,11 @@ every frame of the clip (not only the keys):
    near the hinted direction (`*_pole`): the one that brings the weapon
    closest to the asked axis and keeps the arm out of the trunk, close to
    the previous frame's;
-4. every bone is keyed on every frame, with quaternions kept on the same
+4. joint limits (`TRUNK_LIMITS` and the constants after it): the trunk,
+   elbow, knee, forearm and wrist stay in their ranges by construction; the
+   shoulder, hip and ankle are checked and reported, and the shoulder's
+   range also guides the elbow's swivel;
+5. every bone is keyed on every frame, with quaternions kept on the same
    hemisphere from frame to frame (no flip when they are interpolated).
 
 Body axes (Blender world, the armature is at the origin, T-pose rest,
@@ -77,6 +81,33 @@ FOREARM_TWIST_SHARE = 0.6
 # towards the palm.
 GRIP_ALONG = 0.036
 GRIP_PALM = 0.012
+# Joint limits, in degrees, after the usual ranges of a healthy adult.
+# Enforced by construction: the trunk bends are clamped, the elbow and the
+# knee cannot fold further than their range (the hand or foot target is
+# moved out), the forearm roll and the wrist bend are bounded (above).
+# Checked and reported (`make clip-check`), because moving them would move a
+# hand or a planted foot: the shoulder, the hip and the ankle.
+TRUNK_LIMITS = {
+    # (yaw, pitch, roll): lowest and highest of each.
+    "spine": ((-20, 20), (-15, 30), (-15, 15)),
+    "chest": ((-25, 25), (-20, 25), (-15, 15)),
+    "head": ((-70, 70), (-45, 45), (-30, 30)),
+}
+# Largest fold of the elbow and of the knee (0: straight).
+ELBOW_FOLD = 150.0
+KNEE_FOLD = 150.0
+# Upper arm, in the chest's frame: how far it may point backwards and
+# across the body (cosines towards the back and towards the other side).
+SHOULDER_BACK = math.cos(math.radians(40))
+SHOULDER_ACROSS = math.cos(math.radians(50))
+# Thigh, in the hips' frame: forward lift, backward reach, sideways out and in.
+HIP_FLEXION = 125.0
+HIP_EXTENSION = 30.0
+HIP_ABDUCTION = 55.0
+HIP_ADDUCTION = 30.0
+# Angle between the foot and the shin (90: standing).
+ANKLE_RANGE = (58.0, 145.0)
+
 # Trunk section for the arm checks: half width, depth in front and behind.
 TRUNK_HALF_WIDTH = 0.1
 TRUNK_FRONT = 0.1
@@ -118,15 +149,21 @@ def frame(a, b):
     return Matrix((a, b, a.cross(b))).transposed()
 
 
-def two_bone(root, target, l1, l2, pole):
-    """Middle joint of a two-bone limb; returns (joint, reached target, side the joint points to)."""
+def two_bone(root, target, l1, l2, pole, fold=150.0):
+    """
+    Middle joint of a two-bone limb; returns (joint, reached target, side
+    the joint points to). The target is moved along its line when it is out
+    of reach, or so close that the joint would fold more than `fold` degrees.
+    """
     d = target - root
     reach = (l1 + l2) * 0.998
+    inner = math.radians(180 - fold)
+    closest = math.sqrt(l1 * l1 + l2 * l2 - 2 * l1 * l2 * math.cos(inner))
     dist = d.length
-    if dist > reach:
-        target = root + d * (reach / dist)
-        dist = reach
-    dist = max(dist, abs(l1 - l2) + 1e-4)
+    if dist > reach or dist < closest:
+        dist = min(reach, max(closest, dist))
+        u = d.normalized() if d.length > 1e-6 else Vector((0, 0, -1))
+        target = root + u * dist
     u = (target - root).normalized()
     a = (l1 * l1 - l2 * l2 + dist * dist) / (2 * dist)
     h = math.sqrt(max(0.0, l1 * l1 - a * a))
@@ -251,6 +288,7 @@ class Rig:
         self.scale = self.head("C_Hips").z / REFERENCE_HIPS
         self.overreach = 0.0
         self.warnings = []
+        self.label = ""
         # Elbow swivel chosen at the previous frame, per side (continuity).
         self.swivel = {}
         # Forearm roll chosen at the previous frame, per side (continuity).
@@ -317,13 +355,21 @@ class Rig:
     def trunk(self, spec):
         """Rotations (from rest, model space) and head positions of the trunk bones."""
         delta, heads = {}, {}
+
+        def limited(name):
+            angles = tuple(max(lo, min(hi, a)) for a, (lo, hi) in zip(spec[name], TRUNK_LIMITS[name]))
+            if angles != tuple(spec[name]):
+                self.warnings.append(f"{self.label}: {name} bend beyond its range by {max(abs(a - b) for a, b in zip(angles, spec[name])):.0f}")
+            return angles
+
         d_hips = euler(spec["hips"])
-        d_spine = d_hips @ euler(spec["spine"])
-        half = tuple(a * 0.5 for a in spec["chest"])
+        d_spine = d_hips @ euler(limited("spine"))
+        half = tuple(a * 0.5 for a in limited("chest"))
         d_chest = d_spine @ euler(half)
         d_upper = d_chest @ euler(half)
-        d_neck = d_upper @ euler(tuple(a * 0.4 for a in spec["head"]))
-        d_head = d_neck @ euler(tuple(a * 0.6 for a in spec["head"]))
+        head = limited("head")
+        d_neck = d_upper @ euler(tuple(a * 0.4 for a in head))
+        d_head = d_neck @ euler(tuple(a * 0.6 for a in head))
         delta = {
             B + "C_Hips": d_hips,
             B + "C_Spine": d_spine,
@@ -358,7 +404,7 @@ class Rig:
         # forearm: a few rounds settle it.
         wrist = grip
         for _ in range(4):
-            elbow, reached, side = two_bone(root, wrist, l1, l2, side_dir)
+            elbow, reached, side = two_bone(root, wrist, l1, l2, side_dir, ELBOW_FOLD)
             forearm = (reached - elbow).normalized()
             upper = (elbow - root).normalized()
             # The forearm folds away from the side the elbow points to.
@@ -371,6 +417,10 @@ class Rig:
         d_upper = frame(upper, bend) @ self.limb_rest[ua].transposed()
         d_lower = frame(forearm, thumb) @ self.limb_rest[la].transposed()
         d_hand = hand @ self.hand_rest[s].transposed()
+        # Shoulder range: not too far behind the back nor across the chest.
+        local = chest.transposed() @ upper
+        outward = 1 if s == "L" else -1
+        shoulder = max(0.0, -local.dot(F) - SHOULDER_BACK, -local.dot(L) * outward - SHOULDER_ACROSS)
         inside = max(
             self.trunk_depth(elbow, chest, delta, heads),
             self.trunk_depth(elbow.lerp(reached, 0.5), chest, delta, heads),
@@ -379,7 +429,7 @@ class Rig:
         return {
             "elbow": elbow, "wrist": reached, "hand": hand, "forearm": forearm, "over": over,
             "d_upper": d_upper, "d_lower": d_lower, "d_hand": d_hand, "twist": roll, "inside": inside,
-            "error": error,
+            "error": error, "shoulder": shoulder,
         }
 
     def solve_arm(self, s, spec, root, hint, chest, delta, heads):
@@ -402,6 +452,7 @@ class Rig:
             # elbow near the hint; the previous frame only breaks ties (the
             # rate is limited below).
             c = (arm["error"] / 20) ** 2 + (arm["inside"] / 0.01) ** 2 + 0.6 * (arm["twist"] / ROLL_LIMIT) ** 2
+            c += (arm["shoulder"] / 0.1) ** 2
             if base is not None:
                 c += 0.3 * side_dir.angle(base) ** 2
             if previous is not None:
@@ -449,6 +500,7 @@ class Rig:
 
     def solve(self, spec, label=""):
         """Model-space rotation from rest and head position of every bone."""
+        self.label = label
         delta, heads = self.trunk(spec)
         chest, hips = delta[B + "C_UpperChest"], delta[B + "C_Hips"]
 
@@ -473,6 +525,8 @@ class Rig:
                 self.warnings.append(f"{label}: {s} hand out of reach by {arm['over']:.3f}")
             if arm["inside"] > 0.012:
                 self.warnings.append(f"{label}: {s} arm inside the trunk by {arm['inside']:.3f}")
+            if arm["shoulder"] > 0.08:
+                self.warnings.append(f"{label}: {s} shoulder beyond its range by {math.degrees(math.asin(min(1.0, arm['shoulder']))):.0f}")
             if arm["error"] > 12:
                 self.warnings.append(f"{label}: {s} weapon axis off the asked one by {arm['error']:.0f}")
             la = f"{s}_LowerArm"
@@ -494,13 +548,20 @@ class Rig:
             l1, l2 = self.lengths[s + "leg"]
             ankle = spec[s + "_ankle"]
             pole = hips @ spec[s + "_knee"]
-            knee, reached, side = two_bone(root, ankle, l1, l2, pole)
+            knee, reached, side = two_bone(root, ankle, l1, l2, pole, KNEE_FOLD)
             over = (ankle - root).length - (l1 + l2)
             if over > 0.004:
                 self.overreach = max(self.overreach, over)
                 self.warnings.append(f"{label}: {s} foot out of reach by {over:.3f}")
             thigh = (knee - root).normalized()
             shin = (reached - knee).normalized()
+            # Hip range, in the hips' frame.
+            local = hips.transposed() @ thigh
+            lift = math.degrees(math.atan2(local.dot(F), -local.dot(U)))
+            out = math.degrees(math.asin(max(-1.0, min(1.0, local.dot(L) * (1 if s == "L" else -1)))))
+            beyond = max(lift - HIP_FLEXION, -lift - HIP_EXTENSION, out - HIP_ABDUCTION, -out - HIP_ADDUCTION)
+            if beyond > 4:
+                self.warnings.append(f"{label}: {s} hip beyond its range by {beyond:.0f}")
             # The shin folds away from the side the knee points to.
             bend = -perp(side, thigh)
             hinge = thigh.cross(bend.normalized())
@@ -508,6 +569,11 @@ class Rig:
             delta[B + ll] = frame(shin, hinge.cross(shin)) @ self.limb_rest[ll].transposed()
             yaw, pitch = spec[s + "_foot"]
             delta[B + s + "_Foot"] = axis_rot(L, pitch) @ axis_rot(U, yaw)
+            toes = delta[B + s + "_Foot"] @ F
+            ankle_angle = math.degrees(toes.angle(-shin))
+            beyond = max(ANKLE_RANGE[0] - ankle_angle, ankle_angle - ANKLE_RANGE[1])
+            if beyond > 4:
+                self.warnings.append(f"{label}: {s} ankle beyond its range by {beyond:.0f}")
             # Toes stay flat on the ground while the heel lifts.
             delta[B + s + "_ToeBase"] = axis_rot(L, min(pitch, 0.0)) @ axis_rot(U, yaw)
             heads[B + ll], heads[B + s + "_Foot"] = knee, reached

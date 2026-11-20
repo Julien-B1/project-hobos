@@ -51,8 +51,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   hand as two bounded joint angles (forearm roll within 85 degrees of
   neutral, wrist bend), elbow swivel chosen per frame (weapon on its
   asked axis, arm out of the trunk, continuity), every bone keyed on
-  every frame without quaternion flips. `make clip-check` prints the
-  numbers (wrists, reach, arms in the trunk, largest step per frame),
+  every frame without quaternion flips. Joint limits after the usual
+  human ranges: trunk bends, elbow and knee folds, forearm roll and wrist
+  bend are kept in range by construction; shoulder, hip and ankle are
+  checked and reported. `make clip-check` prints the
+  numbers (wrists, reach, arms in the trunk, joints beyond their range,
+  largest step per frame),
   `make clip-preview` renders frames or a video, weapons attached, on any
   model.
   Sword (fighter): `sword_draw` (lean and turn to the hilt at the left

@@ -3,6 +3,22 @@
 State on **2026-11-20**, after the `v0.3.0` milestone and the wizard
 character (validated by the owner).
 
+## In progress: characters in combat (2026-11-20)
+
+- Done: one reference skeleton for every human (Mixamo names, T-pose;
+  `tooling/blender/humanoid.py`), shared animation library played as it
+  is, weapons on sockets, combat clips keyed by script and solved per
+  frame with joint limits (`pose_solver.py`, `combat_clips.py`), action
+  bar. The owner validated the preview video of the clips.
+- To do: polish the poses `make clip-check` still reports (weapon on the
+  ground in the defeats, hip and ankle in the fall, the slash's middle
+  frames, the elbow near the belly at the sword's grab); owner's check of
+  the clips in the game on both characters.
+- Decided by the owner: always rig in Mixamo; joint limits at authoring
+  time; as little live recomputation as possible in the game (feet on the
+  ground excepted); runtime joint limits only later, for procedural
+  layers.
+
 ## Next topic (owner, 2026-11-20)
 
 - **Map archetypes** (milestone `v0.4.0`): add a few new kinds of
