@@ -78,6 +78,15 @@ pnpm. Everything runs in Docker through `make`. Rationale: wiki page
 | `1e1c980` | Water shader fixed for Firefox WebGPU (Naga); `b749387`: version badge.                                                |
 | (release) | Reference map and `BOOTSTRAP.md` removed, CHANGELOG reorganised, version 0.3.0, tag `v0.3.0`.                          |
 
+### After v0.3.0: wizard, spring bones, animation library (2026-11-20)
+
+| Commit    | Content                                                                                                      |
+| --------- | ------------------------------------------------------------------------------------------------------------ |
+| `9e5e63e` | Blender 5.2.3 LTS in the dev image (headless).                                                               |
+| `e597cdf` | Wizard character: spring bones for skirt, sleeves and hair; character choice in the map picker.              |
+| `83065b0` | Running beyond 2 cells; per-character arm style (spacing, follow-through).                                   |
+| `7ba28f7` | Shared animation library retargeted per skeleton (A-pose / T-pose, Mixamo / VRM); run at 2x, grounded clips. |
+
 ## Current state in one paragraph
 
 The voxel grid is the truth for terrain and gameplay. Terrain materials are
@@ -86,7 +95,7 @@ relief is marked; trees as round trunks and leaf cards; water as a flat
 plane; built voxels as patterned blocks. Structures (bridges now, buildings
 later) are parametric map objects: their kind stamps gameplay voxels, a
 mesher per kind draws them from closed primitives. Every generated river
-gets one crossing of a kind fitting the site. One character walks the map
+gets one crossing of a kind fitting the site. One character (wizard or fighter) walks or runs on the map
 (A* on the voxels, foot IK, cel shading); the cut hides it whole when its
 ground is cut away. The app starts on a random 40 x 40 river map behind a
 loading screen. It runs in the browser (web host at

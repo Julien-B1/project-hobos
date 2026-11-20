@@ -62,3 +62,12 @@ Each entry: symptom, root cause, fix, and where the fix lives.
 | Late night to morning went backwards through the whole day. | Linear blend between preset indices.                                                              | `timePath`: the shorter way round, through the presets on the way.                   |
 | Production pages answered 206 Partial Content.              | Caddy 2.10.2 bug with precompressed files.                                                        | nginx (Alpine, Brotli module) instead.                                               |
 | No water on Firefox WebGPU.                                 | Naga rejects a built-in whose arguments are all abstract literals (`smoothstep(0.12, 0.3, 1.0)`). | Constant resolved on the CPU (`applyGrid` takes a number).                           |
+
+## Characters (2026-11-20, later)
+
+| Symptom                                                        | Root cause                                                                                 | Fix                                                                             |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| Skirt panels glued to one thigh each.                          | Tripo's auto-weights.                                                                      | Spring bone chains (Blender script) and run-time simulation with leg colliders. |
+| Runners float above the ground.                                | Tripo's run clip: lowest foot never below 9 cm.                                            | Clips lowered at bake time by the gap to the rest foot height.                  |
+| Fighter's arms crossed behind the back with the library clips. | Fighter rest pose is an A-pose, the library's a T-pose: turns applied from the wrong rest. | Rest bones aligned to the library's directions before retargeting.              |
+| Headless screenshots too slow to follow a walk.                | Software WebGL (SwiftShader).                                                              | Check single frames; motion is checked by the owner.                            |

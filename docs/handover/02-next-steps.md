@@ -1,13 +1,7 @@
 # 2. What to continue
 
-State on **2026-11-20**, after the `v0.3.0` milestone.
-
-## In progress
-
-- **Wizard character** with spring bones (skirt, sleeves, hair): owner's
-  visual check pending (tune `DEFAULT_SPRING_PROFILE` and the `arms`
-  styles from feedback). Clips come from the shared animation library;
-  cast a spell, fall, defeat and stairs are in it, not used yet.
+State on **2026-11-20**, after the `v0.3.0` milestone and the wizard
+character (validated by the owner).
 
 ## Next topic (owner, 2026-11-20)
 
@@ -31,9 +25,9 @@ State on **2026-11-20**, after the `v0.3.0` milestone.
 - Several wind intensities for foliage and grass.
 - GPU optimisation beyond the direct-to-canvas output (ADR-009); measure
   with the probes (keys `1` to `6`) on a real GPU, in WebGPU.
-- More character animations (slopes and stairs, run, jump), or an
-  animation library (Mixamo-compatible packs); alternative: planned
-  footsteps on top of the foot IK.
+- More character animations (slopes and stairs, jump): add them to the
+  shared animation library; alternative: planned footsteps on top of the
+  foot IK. Unused library clips: cast a spell, fall, defeat, stairs.
 
 ## Settled decisions (do not reopen)
 
