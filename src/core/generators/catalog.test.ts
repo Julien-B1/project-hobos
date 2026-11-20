@@ -18,7 +18,7 @@ describe('test map catalog', () => {
   })
 
   it('validates ids from untrusted input', () => {
-    expect(isTestMapId('reference')).toBe(true)
+    expect(isTestMapId('reference')).toBe(false)
     expect(isTestMapId('flat')).toBe(true)
     expect(isTestMapId('river')).toBe(true)
     expect(isTestMapId('nope')).toBe(false)

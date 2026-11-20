@@ -51,7 +51,7 @@ export const config = {
  * Read debug switches from the page URL.
  *
  * - `?forceWebGL=1` forces the WebGL 2 backend to test the fallback path.
- * - `?map=<id>` picks a test map (`river` by default, `reference`, `flat`,
+ * - `?map=<id>` picks a test map (`river` by default, `flat`,
  *   `kitchen-sink`, `bridges`).
  * - `?seed=<integer>` sets the seed of procedural maps (`river`); without
  *   it, each launch rolls a random seed (`random`, for tests).

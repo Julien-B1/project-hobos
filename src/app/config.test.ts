@@ -18,11 +18,11 @@ describe('withMapParams', () => {
 
   it('drops seed and size when undefined', () => {
     const search = withMapParams('?map=river&seed=7&size=40', {
-      map: 'reference',
+      map: 'flat',
       seed: undefined,
       size: undefined,
     })
-    expect(search).toBe('?map=reference')
+    expect(search).toBe('?map=flat')
   })
 
   it('round-trips through readUrlFlags', () => {

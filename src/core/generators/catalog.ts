@@ -11,10 +11,9 @@ import { StructureSet } from '../structures/structureSet'
 import { BRIDGES_LAYOUT, createBridgesWorld } from './bridgesShowcaseMap'
 import { KITCHEN_SINK_LAYOUT, createKitchenSinkWorld } from './kitchenSinkMap'
 import { createRiverMap } from './riverMap'
-import { REFERENCE_LAYOUT, createReferenceMap } from './referenceMap'
 
 /** Identifiers of the available test maps. */
-export const TEST_MAP_IDS = ['reference', 'flat', 'river', 'kitchen-sink', 'bridges'] as const
+export const TEST_MAP_IDS = ['flat', 'river', 'kitchen-sink', 'bridges'] as const
 
 /** One of {@link TEST_MAP_IDS}. */
 export type TestMapId = (typeof TEST_MAP_IDS)[number]
@@ -51,17 +50,6 @@ export interface TestMapOptions {
 /** Generate a test map by id. */
 export function createTestMap(id: TestMapId, options: TestMapOptions = {}): TestMap {
   switch (id) {
-    case 'reference': {
-      const { width, depth } = REFERENCE_LAYOUT.size
-      return {
-        id,
-        map: createReferenceMap(),
-        structures: new StructureSet(),
-        width,
-        depth,
-        home: { x: width / 2, y: REFERENCE_LAYOUT.groundTop * VOXEL_HEIGHT, z: depth / 2 },
-      }
-    }
     case 'river': {
       const river = createRiverMap({
         ...(options.seed === undefined ? {} : { seed: options.seed }),

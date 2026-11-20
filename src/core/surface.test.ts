@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { REFERENCE_LAYOUT as L, createReferenceMap } from './generators/referenceMap'
-import { Shape } from './shapes'
+import { Material } from './materials'
+import { Orientation, Shape } from './shapes'
 import { columnSurfaces, resolveColumnHit, resolveHit, surfaceShape } from './surface'
 import { packVoxel } from './voxel'
 import { VoxelMap } from './voxelMap'
@@ -29,8 +29,50 @@ describe('columnSurfaces', () => {
   })
 })
 
-describe('resolveHit on the reference map', () => {
-  const map = createReferenceMap()
+/**
+ * Small picking fixture, in voxel coordinates (surface level L = standing on
+ * voxel L - 1): ground at level 6, a lowered path at level 4 under a wooden
+ * deck at voxel level 10, one ramp slope, a cliff face and a tunnel.
+ */
+const L = {
+  groundTop: 6,
+  path: { x: { min: 12, max: 14 }, top: 4 },
+  bridge: { x: { min: 11, max: 15 }, z: { min: 9, max: 10 }, deckLevel: 10 },
+  slope: { x: 8, z: 9 },
+  cliff: { x: { min: 23, max: 25 }, z: { min: 24, max: 26 }, top: 14 },
+  tunnel: { x: 5, z: 25, floorTop: 6, ceilingLevel: 10, top: 14 },
+}
+
+function createPickingFixture(): VoxelMap {
+  const map = new VoxelMap()
+  const stack = (x: number, z: number, from: number, to: number, material = Material.STONE) => {
+    for (let y = from; y <= to; y++) map.set(x, y, z, packVoxel(material))
+  }
+  for (let z = 0; z < 28; z++)
+    for (let x = 0; x < 28; x++) {
+      const lowered = x >= L.path.x.min && x <= L.path.x.max
+      stack(x, z, 0, (lowered ? L.path.top : L.groundTop) - 1)
+    }
+  for (let z = L.bridge.z.min; z <= L.bridge.z.max; z++)
+    for (let x = L.bridge.x.min; x <= L.bridge.x.max; x++)
+      map.set(x, L.bridge.deckLevel, z, packVoxel(Material.WOOD))
+  // Ramp step two voxels above the ground, rising towards +X.
+  stack(L.slope.x, L.slope.z, L.groundTop, L.groundTop + 1)
+  map.set(
+    L.slope.x,
+    L.groundTop + 2,
+    L.slope.z,
+    packVoxel(Material.WOOD, Shape.SLOPE, Orientation.EAST),
+  )
+  for (let z = L.cliff.z.min; z <= L.cliff.z.max; z++)
+    for (let x = L.cliff.x.min; x <= L.cliff.x.max; x++) stack(x, z, 0, L.cliff.top - 1)
+  // Hill column with a tunnel: floor, air gap, ceiling.
+  stack(L.tunnel.x, L.tunnel.z, L.tunnel.ceilingLevel, L.tunnel.top - 1)
+  return map
+}
+
+describe('resolveHit on the picking fixture', () => {
+  const map = createPickingFixture()
 
   it('gives two different surfaces for the same column: bridge deck and path below', () => {
     const deck = resolveHit(map, { x: 13.5, y: (L.bridge.deckLevel + 1) * 0.5, z: 9.5 }, UP)
@@ -41,12 +83,12 @@ describe('resolveHit on the reference map', () => {
   })
 
   it('picks a slope from a hit on its sloped top', () => {
-    // West bridge ramp, third step: slope voxel at level 8, rising towards +X.
+    // Ramp step: slope voxel at level 8, rising towards +X.
     const level = L.groundTop + 2
     const n = { x: -0.5, y: 1, z: 0 }
     const len = Math.hypot(n.x, n.y)
     const normal = { x: n.x / len, y: n.y / len, z: 0 }
-    const x = L.bridgeRampWest.x.min + 2
+    const x = L.slope.x
     const hit = resolveHit(map, { x: x + 0.5, y: (level + 0.5) * 0.5, z: 9.5 }, normal)
     expect(hit?.voxel).toEqual({ x, y: level, z: 9 })
     expect(hit?.surface).toEqual({ x, y: level, z: 9 })
@@ -93,7 +135,7 @@ describe('resolveHit with negative coordinates', () => {
 })
 
 describe('resolveColumnHit', () => {
-  const map = createReferenceMap()
+  const map = createPickingFixture()
 
   it('picks the column surface closest to the hit height', () => {
     // Bridge column over the path: near the deck -> deck; near the path -> path.

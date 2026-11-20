@@ -97,7 +97,7 @@ App.vue
   under a still cursor.
 - Debug URL flags are read by the app layer (`src/app/config.ts`):
   `?forceWebGL=1` forces the WebGL 2 backend, `?map=<id>` selects a test map
-  (`river` by default with a random seed unless `?seed=`, `reference`,
+  (`river` by default with a random seed unless `?seed=`,
   `flat`, `kitchen-sink`, `bridges`; all battle-map sized, `?size=<cells>`
   for procedural maps), `?time=<id>` sets the time of
   day, `?mesher=blocky` shows exact
