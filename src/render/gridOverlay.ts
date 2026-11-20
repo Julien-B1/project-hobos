@@ -25,6 +25,16 @@ const MIN_LINE_PIXELS = 0.75
 /** How much a line darkens the ground at full coverage (0..1). */
 const LINE_STRENGTH = 0.38
 
+/** Facing (|normal y|) below which the grid fades out, and above which it is full. */
+const FACING_FROM = 0.12
+const FACING_FULL = 0.3
+
+/** `smoothstep` on numbers (same curve as the shader's). */
+function smoothstepNumber(edge0: number, edge1: number, x: number): number {
+  const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)))
+  return t * t * (3 - 2 * t)
+}
+
 /** Shared grid opacity uniform: 1 shows the grid, 0 hides it. */
 export type GridOpacity = UniformNode<'float'>
 
@@ -37,12 +47,14 @@ export function createGridOpacity(visible = true): GridOpacity {
  * Darken `color` along the grid lines.
  *
  * @param position World position of the pixel.
- * @param up How much the surface faces up (0..1, e.g. |geometric normal y|).
+ * @param up How much the surface faces up (0..1, e.g. |geometric normal y|),
+ *   per pixel, or a number for surfaces that always face the same way
+ *   (water: 1).
  */
 export function applyGrid(
   color: Node<'vec3'>,
   position: Node<'vec3'>,
-  up: Node<'float'>,
+  up: Node<'float'> | number,
   opacity: GridOpacity,
 ): Node<'vec3'> {
   // Cells covered by one pixel along x and z (the filter footprint).
@@ -60,7 +72,13 @@ export function applyGrid(
     .sub(integral(p.sub(w.mul(0.5))))
     .div(w)
   const line = float(1).sub(float(1).sub(cover.x).mul(float(1).sub(cover.y)))
-  const facing = smoothstep(0.12, 0.3, up)
+  // A constant `up` is resolved here: `smoothstep` of literals only is
+  // rejected by Firefox's WebGPU shader compiler (Naga: abstract types
+  // outside a constant expression).
+  const facing =
+    typeof up === 'number'
+      ? float(smoothstepNumber(FACING_FROM, FACING_FULL, up))
+      : smoothstep(FACING_FROM, FACING_FULL, up)
   const amount = line.mul(facing).mul(opacity).mul(LINE_STRENGTH)
   // Darken, with a small floor so lines still read on dark ground.
   return mix(color, color.mul(0.35).add(0.012), amount)

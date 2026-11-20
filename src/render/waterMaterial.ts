@@ -122,12 +122,7 @@ export function createWaterMaterial(
   const foam = smoothstep(0.35, 0.08, depth.add(a.g.sub(0.5).mul(0.3))).mul(shore)
 
   const water = mix(color(SHALLOW), color(DEEP), deep)
-  material.colorNode = applyGrid(
-    mix(water, color(FOAM), foam.mul(0.7)),
-    positionWorld,
-    float(1),
-    grid,
-  )
+  material.colorNode = applyGrid(mix(water, color(FOAM), foam.mul(0.7)), positionWorld, 1, grid)
   material.opacityNode = max(
     shore.mul(mix(float(SHALLOW_OPACITY), float(DEEP_OPACITY), deep)),
     foam.mul(0.85),

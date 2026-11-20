@@ -294,6 +294,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- No water on Firefox (WebGPU): its shader compiler (Naga) rejected the
+  water shader, whose grid fade was a `smoothstep` of literals only
+  (`smoothstep(0.12, 0.3, 1.0)`, abstract types outside a constant
+  expression). `applyGrid` now resolves a constant facing on the CPU.
 - Dark triangles on steep river banks and grassy slopes: weak crags were
   shaded with the flat normal of the undisplaced triangle. Crag pieces now
   keep the face's smooth shading normal, mixed with the facet normal in
