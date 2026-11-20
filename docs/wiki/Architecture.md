@@ -80,7 +80,7 @@ App.vue
   under a still cursor.
 - Debug URL flags are read by the app layer (`src/app/config.ts`):
   `?forceWebGL=1` forces the WebGL 2 backend, `?map=<id>` selects a test map
-  (`reference` by default, `flat`, `organic`, `kitchen-sink`; all battle-map
+  (`reference` by default, `flat`, `river`, `kitchen-sink`; all battle-map
   sized, `?size=<cells>` for procedural maps), `?time=<id>` sets the time of
   day, `?mesher=blocky` shows exact
   blocks, `?shadows=off|low|high` sets the sun shadow quality (`high` by
@@ -287,7 +287,7 @@ scatter, props), each layer with its own shared material
 
 ### Rendering budget
 
-Measured reference: Intel Arc integrated GPU (Core Ultra 7 165H), organic
+Measured reference: Intel Arc integrated GPU (Core Ultra 7 165H), river
 map at 1368 x 911: about 3.1 ms of GPU time per frame (19 % at 60 FPS, HUD
 figure) with shadows and the depth-based water, before the detail texture,
 trees and grid. Shadow quality barely changes GPU time; `high` costs about

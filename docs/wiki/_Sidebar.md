@@ -3,7 +3,7 @@
 - [[Home]]
 - [[Architecture]]
 - [[Conventions]]
-- [[Organic Map|Organic-Map]]
+- [[River Map|River-Map]]
 - [[Extending]]
 - [[Reference Map|Reference-Map]]
 - [[Kitchen Sink Map|Kitchen-Sink-Map]]

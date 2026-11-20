@@ -96,7 +96,7 @@ describe('WalkArea.findPath', () => {
 
 describe('WalkArea.spawnPoint', () => {
   it('picks grass with walkable ground all around', () => {
-    for (const id of ['organic', 'reference', 'kitchen-sink'] as const) {
+    for (const id of ['river', 'reference', 'kitchen-sink'] as const) {
       const world = createTestMap(id)
       const area = new WalkArea(world.map)
       const spawn = area.spawnPoint(world.home.x, world.home.z)

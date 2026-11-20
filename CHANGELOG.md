@@ -217,6 +217,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The `organic` test map is renamed `river` (`?map=river`,
+  `core/generators/riverMap.ts`, wiki page _River Map_).
 - The cut no longer slices the character: it is shown whole, or hidden
   whole when the ground it stands on is cut away (ADR-011,
   `core/cutSupport.ts`, `render/actors/cutSupported.ts`), the rule every

@@ -57,7 +57,7 @@ preview`: about 0.45 MB on the wire, cached by the browser until the next
 version, against about 1.2 MB in many modules for the dev server.
 
 Maps are battle-map sized (32 x 32 squares, one encounter). URL switches:
-`?forceWebGL=1` forces the WebGL 2 backend; `?map=flat` or `?map=organic`
+`?forceWebGL=1` forces the WebGL 2 backend; `?map=flat` or `?map=river`
 (with optional `&seed=42` and `&size=24`) or `?map=kitchen-sink` (every
 element in one hand-made map) or `?map=bridges` (100 x 24 river, one
 crossing of each kind) loads another test map instead of the

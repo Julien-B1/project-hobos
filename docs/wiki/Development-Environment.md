@@ -69,7 +69,7 @@ Without a GPU, the page runs on the WebGL 2 backend rendered in software
 Default views: the bridges map and each of its crossings. Custom views:
 `make screenshots VIEWS=screenshots/views.json`, a JSON array of
 `{ "name", "query" }` where the query is the page's URL query, e.g.
-`map=organic&seed=7&cam=16,16,30,35` (`cam=x,z,distance,yaw` frames the
+`map=river&seed=7&cam=16,16,30,35` (`cam=x,z,distance,yaw` frames the
 camera). Playwright is pinned in `package.json` and in the Dockerfile
 (`PLAYWRIGHT_VERSION`); keep them equal, then `make image`.
 

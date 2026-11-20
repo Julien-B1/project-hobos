@@ -4,12 +4,12 @@ import { clampMapSize, readUrlFlags, withMapParams } from './config'
 describe('withMapParams', () => {
   it('writes map, seed and size and keeps other parameters', () => {
     const search = withMapParams('?time=dusk&map=flat&grid=off', {
-      map: 'organic',
+      map: 'river',
       seed: 42,
       size: 24,
     })
     const params = new URLSearchParams(search)
-    expect(params.get('map')).toBe('organic')
+    expect(params.get('map')).toBe('river')
     expect(params.get('seed')).toBe('42')
     expect(params.get('size')).toBe('24')
     expect(params.get('time')).toBe('dusk')
@@ -17,7 +17,7 @@ describe('withMapParams', () => {
   })
 
   it('drops seed and size when undefined', () => {
-    const search = withMapParams('?map=organic&seed=7&size=40', {
+    const search = withMapParams('?map=river&seed=7&size=40', {
       map: 'reference',
       seed: undefined,
       size: undefined,
@@ -26,8 +26,8 @@ describe('withMapParams', () => {
   })
 
   it('round-trips through readUrlFlags', () => {
-    const flags = readUrlFlags(withMapParams('', { map: 'organic', seed: -5, size: 64 }))
-    expect(flags.map).toBe('organic')
+    const flags = readUrlFlags(withMapParams('', { map: 'river', seed: -5, size: 64 }))
+    expect(flags.map).toBe('river')
     expect(flags.seed).toBe(-5)
     expect(flags.size).toBe(64)
   })

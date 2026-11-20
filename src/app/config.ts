@@ -49,8 +49,8 @@ export const config = {
  * Read debug switches from the page URL.
  *
  * - `?forceWebGL=1` forces the WebGL 2 backend to test the fallback path.
- * - `?map=<id>` picks a test map (`reference` by default, `flat`, `organic`).
- * - `?seed=<integer>` changes the seed of procedural maps (`organic`).
+ * - `?map=<id>` picks a test map (`reference` by default, `flat`, `river`).
+ * - `?seed=<integer>` changes the seed of procedural maps (`river`).
  * - `?size=<cells>` changes the edge length of procedural maps (8 to 128;
  *   default 32, a battle-map sized encounter).
  * - `?mesher=blocky` renders every voxel as its exact block shape instead of

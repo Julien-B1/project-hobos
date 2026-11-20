@@ -76,7 +76,7 @@ on a bank.
   stones, height above the water for a rope bridge...; the wooden beam
   bridge fits any site). `pickCrossing(site, seed)` picks among the fitting
   kinds with the seed.
-- The organic map scores every row crossing the river and keeps the best:
+- The river map scores every row crossing the river and keeps the best:
   short span and narrow water, near the middle, never within 12 % of the
   map's edge, a deck meeting both banks (`CrossingSite.flush`), and easy
   approaches (`approachCost`: climb and bare rock over the 4 cells beyond

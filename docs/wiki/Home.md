@@ -12,7 +12,7 @@ documentation; the repository README only covers setup and daily usage.
 - [[Architecture]]: layers and import rules, tooling.
 - [[Reference Map|Reference-Map]]: layout of the deterministic test map and key columns to check.
 - [[Extending]]: add materials, shapes, meshers, test maps.
-- [[Organic Map|Organic-Map]]: procedural natural-looking test map (`?map=organic&seed=n`).
+- [[River Map|River-Map]]: procedural natural-looking test map (`?map=river&seed=n`).
 - [[Kitchen Sink Map|Kitchen-Sink-Map]]: hand-made map holding every element (`?map=kitchen-sink`).
 - [[Structures]]: parametric map objects (bridges, later buildings), the seven
   river crossings, how a crossing is chosen and placed, the bridges showcase

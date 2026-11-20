@@ -10,11 +10,11 @@ import { createFlatMap } from './flatMap'
 import { StructureSet } from '../structures/structureSet'
 import { BRIDGES_LAYOUT, createBridgesWorld } from './bridgesShowcaseMap'
 import { KITCHEN_SINK_LAYOUT, createKitchenSinkWorld } from './kitchenSinkMap'
-import { createOrganicMap } from './organicMap'
+import { createRiverMap } from './riverMap'
 import { REFERENCE_LAYOUT, createReferenceMap } from './referenceMap'
 
 /** Identifiers of the available test maps. */
-export const TEST_MAP_IDS = ['reference', 'flat', 'organic', 'kitchen-sink', 'bridges'] as const
+export const TEST_MAP_IDS = ['reference', 'flat', 'river', 'kitchen-sink', 'bridges'] as const
 
 /** One of {@link TEST_MAP_IDS}. */
 export type TestMapId = (typeof TEST_MAP_IDS)[number]
@@ -62,20 +62,20 @@ export function createTestMap(id: TestMapId, options: TestMapOptions = {}): Test
         home: { x: width / 2, y: REFERENCE_LAYOUT.groundTop * VOXEL_HEIGHT, z: depth / 2 },
       }
     }
-    case 'organic': {
-      const organic = createOrganicMap({
+    case 'river': {
+      const river = createRiverMap({
         ...(options.seed === undefined ? {} : { seed: options.seed }),
         ...(options.size === undefined ? {} : { size: options.size }),
       })
-      const c = organic.size / 2
+      const c = river.size / 2
       return {
         id,
-        map: organic.map,
-        structures: organic.structures,
-        width: organic.size,
-        depth: organic.size,
-        home: { x: c, y: organic.heightAt(c, c) * VOXEL_HEIGHT, z: c },
-        seed: organic.seed,
+        map: river.map,
+        structures: river.structures,
+        width: river.size,
+        depth: river.size,
+        home: { x: c, y: river.heightAt(c, c) * VOXEL_HEIGHT, z: c },
+        seed: river.seed,
       }
     }
     case 'flat':

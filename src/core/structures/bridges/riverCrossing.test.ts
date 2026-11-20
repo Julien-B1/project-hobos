@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createOrganicMap } from '../../generators/organicMap'
+import { createRiverMap } from '../../generators/riverMap'
 import { isTerrainMaterial, Material } from '../../materials'
 import { materialOf, packVoxel } from '../../voxel'
 import { VoxelMap } from '../../voxelMap'
@@ -49,10 +49,10 @@ describe('measureCrossing', () => {
     expect(profile[site.span.to]).toBeLessThanOrEqual(19 + 1)
   })
 
-  it('meets both banks on organic maps, neither buried nor floating (seed 314295924 and others)', () => {
+  it('meets both banks on river maps, neither buried nor floating (seed 314295924 and others)', () => {
     for (const seed of [314295924, 1, 4, 15, 22]) {
-      const organic = createOrganicMap({ seed, size: 32 })
-      const [crossing] = organic.structures.all
+      const river = createRiverMap({ seed, size: 32 })
+      const [crossing] = river.structures.all
       if (!crossing || !isBridgeSpan(crossing.params)) throw new Error(`seed ${seed}: none`)
       const span = crossing.params
       const deck = span.deckY + 1
@@ -65,8 +65,8 @@ describe('measureCrossing', () => {
       ] as const) {
         const v = spanVoxel(span, along, 0, 0)
         const w = spanVoxel(span, along + outward, 0, 0)
-        const g = terrainTop(organic.map, v.x, v.z)
-        const beyond = terrainTop(organic.map, w.x, w.z)
+        const g = terrainTop(river.map, v.x, v.z)
+        const beyond = terrainTop(river.map, w.x, w.z)
         expect(g, `seed ${seed} end ${along}`).toBeLessThanOrEqual(deck + 1)
         expect(Math.max(g, beyond), `seed ${seed} end ${along}`).toBeGreaterThanOrEqual(deck)
       }

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * Map picker: bottom-right panel to switch the test map without reloading
- * the page. Procedural maps (`organic`) also get a seed field, a random
+ * the page. Procedural maps (`river`) also get a seed field, a random
  * seed button and an optional size field.
  *
  * Edits a local draft; nothing changes until "Load" (or Enter in a field),
@@ -27,7 +27,7 @@ const emit = defineEmits<{
 }>()
 
 /** Maps that take a seed and a size; the fixed maps ignore both. */
-const PROCEDURAL: ReadonlySet<TestMapId> = new Set<TestMapId>(['organic'])
+const PROCEDURAL: ReadonlySet<TestMapId> = new Set<TestMapId>(['river'])
 
 // Draft state. Fields are strings so an empty field can mean "default".
 const map = ref<TestMapId>(props.settings.map)

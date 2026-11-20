@@ -1,5 +1,5 @@
 /**
- * Organic test map: procedural, natural-looking terrain sized for one
+ * River test map: procedural, natural-looking terrain sized for one
  * encounter (a battle map), not a journey.
  *
  * Scale: one cell is one battle-map square (5 ft, 1.5 m). The default
@@ -47,16 +47,16 @@ import { defaultStructureKinds } from '../structures/kinds'
 import { StructureSet } from '../structures/structureSet'
 import { growTree } from './treeGrowth'
 
-/** Options for {@link createOrganicMap}. */
-export interface OrganicMapOptions {
+/** Options for {@link createRiverMap}. */
+export interface RiverMapOptions {
   /** Noise seed (any 32-bit integer). Default 1337. */
   readonly seed?: number
-  /** Edge length of the square map, in cells. Default {@link DEFAULT_ORGANIC_SIZE}. */
+  /** Edge length of the square map, in cells. Default {@link DEFAULT_RIVER_SIZE}. */
   readonly size?: number
 }
 
-/** Generated organic map with the data needed to frame and test it. */
-export interface OrganicMap {
+/** Generated river map with the data needed to frame and test it. */
+export interface RiverMap {
   readonly map: VoxelMap
   readonly size: number
   readonly seed: number
@@ -69,7 +69,7 @@ export interface OrganicMap {
 }
 
 /** Default edge length of the map, in cells (battle-map squares). */
-export const DEFAULT_ORGANIC_SIZE = 32
+export const DEFAULT_RIVER_SIZE = 32
 
 /** Horizontal scale of the hills, in cells (about the width of one hill). */
 const RELIEF_SCALE = 26
@@ -102,10 +102,10 @@ const TERRACE = 7
 /** Height difference to a neighbour (in levels) from which ground is bare rock. */
 const STEEP_STEP = 3
 
-/** Build the organic map. Deterministic for a given seed and size. */
-export function createOrganicMap(options: OrganicMapOptions = {}): OrganicMap {
+/** Build the river map. Deterministic for a given seed and size. */
+export function createRiverMap(options: RiverMapOptions = {}): RiverMap {
   const seed = options.seed ?? 1337
-  const size = options.size ?? DEFAULT_ORGANIC_SIZE
+  const size = options.size ?? DEFAULT_RIVER_SIZE
   const heights = buildHeightField(size, seed)
   const heightAt = (x: number, z: number): number =>
     heights[clampIndex(x, size) + clampIndex(z, size) * size] ?? MIN_LEVEL

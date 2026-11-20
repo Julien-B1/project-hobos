@@ -4,7 +4,7 @@ import { materialOf, packVoxel, type Voxel } from '@/core/voxel'
 import { VoxelMap } from '@/core/voxelMap'
 import type { MeshData } from './mesher'
 import { createKitchenSinkMap } from '@/core/generators/kitchenSinkMap'
-import { createOrganicMap } from '@/core/generators/organicMap'
+import { createRiverMap } from '@/core/generators/riverMap'
 import { TerrainMesher, UP_CHANNEL, uncoveredStrips } from './terrainMesher'
 import { openStretches, unmatchedEdges } from './watertight'
 
@@ -229,7 +229,7 @@ describe('TerrainMesher watertightness', () => {
     expect(openStretches(meshAll(map))).toEqual([])
   })
 
-  it('stays watertight with crags (cave, organic and kitchen-sink maps)', () => {
+  it('stays watertight with crags (cave, river and kitchen-sink maps)', () => {
     const craggyAll = (map: VoxelMap): MeshData[] =>
       [...map.chunks()].map((c) => craggy.mesh(map, c).terrain)
     // Map borders (x or z at 0 or the size) and the floor stay open.
@@ -244,16 +244,16 @@ describe('TerrainMesher watertightness', () => {
     for (let x = 0; x < 10; x++)
       for (let y = 4; y < 7; y++) for (let z = 4; z < 6; z++) tunnel.set(x, y, z, 0)
     expect(unmatchedEdges(craggyAll(tunnel), border(10, 10))).toEqual([])
-    const { map } = createOrganicMap({ seed: 3, size: 32 })
+    const { map } = createRiverMap({ seed: 3, size: 32 })
     expect(unmatchedEdges(craggyAll(map), border(32, 32)).slice(0, 5)).toEqual([])
     expect(unmatchedEdges(craggyAll(createKitchenSinkMap()), border(40, 32)).slice(0, 5)).toEqual(
       [],
     )
   })
 
-  it('has no gap anywhere on an organic map except the map floor and borders', () => {
+  it('has no gap anywhere on an river map except the map floor and borders', () => {
     const size = 48
-    const { map } = createOrganicMap({ seed: 3, size })
+    const { map } = createRiverMap({ seed: 3, size })
     const open = openStretches(meshAll(map), onFloorOrBorder(size))
     expect(open.slice(0, 5)).toEqual([])
   })

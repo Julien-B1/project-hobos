@@ -1,8 +1,8 @@
-# Organic map
+# River map
 
-`src/core/generators/organicMap.ts` builds a procedural, natural-looking
+`src/core/generators/riverMap.ts` builds a procedural, natural-looking
 test map sized for **one encounter** (a battle map), not a journey. Open it
-with `?map=organic`; change the terrain with `?map=organic&seed=42` (any
+with `?map=river`; change the terrain with `?map=river&seed=42` (any
 integer) and its size with `&size=24` (8 to 128 cells). The same seed and
 size always give the same map.
 

@@ -13,14 +13,14 @@ describe('test map catalog', () => {
   })
 
   it('reports the seed of procedural maps only', () => {
-    expect(createTestMap('organic', { seed: 7 }).seed).toBe(7)
+    expect(createTestMap('river', { seed: 7 }).seed).toBe(7)
     expect(createTestMap('flat', { seed: 7 }).seed).toBeUndefined()
   })
 
   it('validates ids from untrusted input', () => {
     expect(isTestMapId('reference')).toBe(true)
     expect(isTestMapId('flat')).toBe(true)
-    expect(isTestMapId('organic')).toBe(true)
+    expect(isTestMapId('river')).toBe(true)
     expect(isTestMapId('nope')).toBe(false)
   })
 })
