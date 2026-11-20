@@ -222,8 +222,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   character (`initialDistance` 20), and `C` / `Home` recentres on it
   (`Engine.resetView`). The farthest zoom follows the map size
   (`CameraRig.setFitRadius`, `cameraMath.fitDistance`) instead of a fixed 240.
-- The debug HUD is hidden by default; a round `?` button at the top left
-  shows it (`?hud=on` at start; screenshots turn it on).
+- The debug HUD is hidden by default; a round bug button at the top left
+  shows it, and a round `?` button next to it a summary of the controls
+  (`ControlsHelp.vue`; one panel at a time) (`?hud=on` at start; screenshots turn it on).
 - A loading screen covers the canvas at launch and at each map or seed
   change, until the map, the character and a first frame are ready
   (`LoadingScreen.vue`, `GameCanvas` `ready` event, `Engine.rendered`).

@@ -45,8 +45,10 @@ App.vue
   callback, at most a few times per second. Vue only stores the latest one.
   `GameCanvas.vue` also emits a `SessionInfo` once per map (map, resolved
   seed, mesher), so screenshots of the HUD are self-describing. The HUD is
-  hidden by default: the round `?` button (`App.vue`) shows it, as does
-  `?hud=on` (on for `make screenshots`).
+  hidden by default: the round bug button (`App.vue`) shows it, as does
+  `?hud=on` (on for `make screenshots`). The `?` button next to it shows
+  a summary of the controls instead (`ControlsHelp.vue`): one panel at a
+  time.
 - **Loading screen** (`LoadingScreen.vue`): covers the canvas from launch
   and from each map change until `GameCanvas` emits `ready`: it waits for
   the screen to paint (map generation blocks the main thread), generates

@@ -61,7 +61,7 @@ export const config = {
  *   the default faceted terrain.
  * - `?time=<id>` sets the starting time of day (`dawn`, `morning`, `noon`,
  *   `afternoon` (default), `dusk`, `evening`, `midnight`, `late-night`).
- * - `?hud=on` starts with the debug HUD shown (the "?" button toggles it).
+ * - `?hud=on` starts with the debug HUD shown (the bug button toggles it).
  * - `?grid=off` starts with the battle-map grid hidden (toggle with G).
  * - `?shadows=off|low|high` sets the sun shadow quality (`high` by default:
  *   4096² map; `low`: 2048²; `off`: no shadow pass, no lookups).

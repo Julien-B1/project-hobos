@@ -10,7 +10,8 @@
  * bindings) and mounts a fresh one. Time of day, cut and grid are held here
  * too, so they carry over to the new map. `H` shows or hides all the
  * overlays (screenshots, a clean view). The debug HUD is hidden by
- * default: the round "?" button at the top left shows or hides it. A
+ * default: the round bug button at the top left shows or hides it; the
+ * "?" button next to it shows the controls (one panel at a time). A
  * loading screen covers the canvas until it reports `ready`, at launch and
  * at each map change.
  */
@@ -26,6 +27,7 @@ import TimeOfDayPicker from './components/TimeOfDayPicker.vue'
 import CutSlider from './components/CutSlider.vue'
 import MapPicker from './components/MapPicker.vue'
 import LoadingScreen from './components/LoadingScreen.vue'
+import ControlsHelp from './components/ControlsHelp.vue'
 
 const flags = readUrlFlags()
 
@@ -78,8 +80,13 @@ function onApplyMap(settings: MapSettings): void {
   )
 }
 
-/** Whether the debug HUD is shown (the "?" button flips it; `?hud=on` at start). */
-const debugHud = ref(flags.hud)
+/** Panel open under the round buttons: debug HUD (`?hud=on` at start), controls, or none. */
+const panel = ref<'debug' | 'controls' | null>(flags.hud ? 'debug' : null)
+
+/** Open `which`, or close it when it is already open (one panel at a time). */
+function togglePanel(which: 'debug' | 'controls'): void {
+  panel.value = panel.value === which ? null : which
+}
 
 /** Whether the overlays (HUD, pickers, cut slider) are shown; `H` flips it. */
 const overlays = ref(true)
@@ -116,16 +123,37 @@ onBeforeUnmount(() => {
     <template v-if="overlays">
       <button
         type="button"
-        class="debug-toggle"
-        :class="{ on: debugHud }"
-        :aria-pressed="debugHud"
-        :title="debugHud ? 'Hide debug info' : 'Show debug info'"
+        class="round debug-toggle"
+        :class="{ on: panel === 'debug' }"
+        :aria-pressed="panel === 'debug'"
+        :title="panel === 'debug' ? 'Hide debug info' : 'Show debug info'"
         aria-label="Debug info"
-        @click="debugHud = !debugHud"
+        @click="togglePanel('debug')"
+      >
+        <!-- Bug icon (stroke follows the text colour). -->
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M9 7.5a3 3 0 0 1 6 0" />
+            <rect x="7" y="8" width="10" height="12" rx="5" />
+            <path
+              d="M12 12v8M7 13H3M21 13h-4M7.5 17.5 4 20M16.5 17.5 20 20M7.5 9.5 4 7M16.5 9.5 20 7"
+            />
+          </g>
+        </svg>
+      </button>
+      <button
+        type="button"
+        class="round help-toggle"
+        :class="{ on: panel === 'controls' }"
+        :aria-pressed="panel === 'controls'"
+        :title="panel === 'controls' ? 'Hide controls' : 'Show controls'"
+        aria-label="Controls"
+        @click="togglePanel('controls')"
       >
         ?
       </button>
-      <DebugHud v-if="debugHud" :state="hud" :session="session" />
+      <DebugHud v-if="panel === 'debug'" :state="hud" :session="session" />
+      <ControlsHelp v-if="panel === 'controls'" />
       <TimeOfDayPicker v-model="timeOfDay" />
       <CutSlider v-model="cutHeight" />
       <MapPicker :settings="mapSettings" :session="session" @apply="onApplyMap" />
@@ -147,11 +175,12 @@ onBeforeUnmount(() => {
   opacity: 0;
 }
 
-/* Round button at the top left, right of the cut slider. */
-.debug-toggle {
+/* Round buttons at the top left, right of the cut slider. */
+.round {
   position: absolute;
   top: 12px;
-  left: 60px;
+  display: grid;
+  place-items: center;
   width: 32px;
   height: 32px;
   padding: 0;
@@ -165,11 +194,19 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 
-.debug-toggle:hover {
+.debug-toggle {
+  left: 60px;
+}
+
+.help-toggle {
+  left: 100px;
+}
+
+.round:hover {
   background: rgb(255 255 255 / 15%);
 }
 
-.debug-toggle.on {
+.round.on {
   border-color: rgb(255 214 140 / 80%);
   background: rgb(255 214 140 / 20%);
 }

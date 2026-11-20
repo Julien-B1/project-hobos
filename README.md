@@ -85,7 +85,8 @@ Keys are bound by physical position: the same keys work on AZERTY and QWERTY.
 | Zoom                   | Mouse wheel, `R` / `F`, numpad `+` / `-`                                |
 | Reset view             | `C` or `Home` (centred on the character)                                |
 | Show / hide the grid   | `G`                                                                     |
-| Show / hide debug HUD  | The round `?` button at the top left                                    |
+| Show / hide controls   | The round `?` button at the top left                                    |
+| Show / hide debug HUD  | The round bug button at the top left                                    |
 | Show / hide overlays   | `H` (HUD, pickers, cut slider)                                          |
 | Performance probes     | `1` to `6` (shadows, foliage, scatter, water, terrain, half resolution) |
 | Select the character   | Left click on it (left click elsewhere clears the selection)            |
