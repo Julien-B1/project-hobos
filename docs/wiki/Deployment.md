@@ -38,8 +38,11 @@ All in `deploy/`:
 On the server, with Docker Compose v2 and Traefik already running on the
 external `web` network:
 
+With the GitHub CLI (it uses git underneath, which must be installed):
+
 ```sh
-git clone -b dev https://github.com/Julien-B1/project-hobos.git hobos
+gh auth login            # once per server
+gh repo clone Julien-B1/project-hobos hobos -- --branch dev
 cd hobos
 docker compose -f deploy/compose.yaml up -d --build
 ```
@@ -49,6 +52,14 @@ docker compose -f deploy/compose.yaml up -d --build
 ```sh
 cd hobos
 make deploy   # = git pull --ff-only && docker compose -f deploy/compose.yaml up -d --build
+```
+
+Or with the GitHub CLI (`gh repo sync` fast-forwards only, like
+`--ff-only`):
+
+```sh
+cd hobos
+gh repo sync --branch dev && docker compose -f deploy/compose.yaml up -d --build
 ```
 
 The build takes a minute or two (dependencies are cached in a layer while
