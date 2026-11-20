@@ -199,3 +199,40 @@ export function blendPresets(a: LightingPreset, b: LightingPreset, t: number): L
     background: blendColor(a.background, b.background, t),
   }
 }
+
+/**
+ * Times of day a transition from `from` to `to` goes through, `to`
+ * included, `from` excluded: the shorter way round the daily cycle,
+ * forwards on a tie. Late night to morning goes through dawn (the night
+ * ends) instead of back through the whole day.
+ */
+export function timePath(from: TimeOfDay, to: TimeOfDay): TimeOfDay[] {
+  const n = TIMES_OF_DAY.length
+  const a = TIMES_OF_DAY.indexOf(from)
+  const b = TIMES_OF_DAY.indexOf(to)
+  const forward = (b - a + n) % n
+  const step = forward <= n - forward ? 1 : -1
+  const count = step > 0 ? forward : n - forward
+  const path: TimeOfDay[] = []
+  for (let k = 1; k <= count; k++) {
+    const time = TIMES_OF_DAY[(a + step * k + n * k) % n]
+    if (time) path.push(time)
+  }
+  return path
+}
+
+/**
+ * Lighting at `t` (0 to 1) along `keys` (at least one), each consecutive
+ * pair taking an equal share of `t` and blended with {@link blendPresets}.
+ */
+export function blendAlong(keys: readonly LightingPreset[], t: number): LightingPreset {
+  const last = keys.length - 1
+  const first = keys[0]
+  if (!first) throw new Error('blendAlong needs at least one preset')
+  if (last <= 0) return first
+  const x = Math.min(1, Math.max(0, t)) * last
+  const i = Math.min(last - 1, Math.floor(x))
+  const a = keys[i] ?? first
+  const b = keys[i + 1] ?? a
+  return blendPresets(a, b, x - i)
+}

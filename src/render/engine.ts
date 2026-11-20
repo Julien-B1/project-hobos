@@ -42,8 +42,9 @@ import { applyLighting, createScene, type SceneHandle } from './sceneSetup'
 import { setLightUniforms } from './lightUniforms'
 import {
   LIGHTING,
-  blendPresets,
+  blendAlong,
   lightDirection,
+  timePath,
   type LightingPreset,
   type TimeOfDay,
 } from './timeOfDay'
@@ -211,8 +212,12 @@ export type TerrainMesherKind = 'faceted' | 'blocky'
  */
 const MAX_FRAME_DT = 0.1
 
-/** Duration of a change of time of day, in seconds (eased in and out). */
+/**
+ * Duration of a change of time of day, in seconds (eased in and out), plus
+ * {@link TIME_STEP_S} per time of day passed on the way.
+ */
 const TIME_TRANSITION_S = 1.2
+const TIME_STEP_S = 0.5
 
 /**
  * Rendering engine bound to one canvas.
@@ -258,10 +263,14 @@ export class Engine {
   private lastFrameTime: number | null = null
   /** Lighting applied now (a preset, or a blend during a transition). */
   private lighting: LightingPreset
-  /** Change of time of day in progress: from, to, seconds elapsed; null when idle. */
+  /**
+   * Change of time of day in progress: the lighting it started from, then
+   * each time of day on the way (see `timePath`), its duration and the
+   * seconds elapsed; null when idle.
+   */
   private lightingTransition: {
-    readonly from: LightingPreset
-    readonly to: LightingPreset
+    readonly keys: readonly LightingPreset[]
+    readonly duration: number
     elapsed: number
   } | null = null
   /** Callbacks waiting for the next rendered frame (see `rendered`). */
@@ -411,11 +420,18 @@ export class Engine {
 
   /**
    * Relight the scene for a time of day (sun or moon, ambient, background,
-   * shadows), with a smooth transition from the current lighting over
-   * {@link TIME_TRANSITION_S} (`blendPresets`).
+   * shadows), with a smooth transition from the current lighting through
+   * the times of day on the way, the shorter way round the day (`timePath`,
+   * `blendAlong`): late night to morning goes through dawn.
    */
   setTimeOfDay(time: TimeOfDay): void {
-    this.lightingTransition = { from: this.lighting, to: LIGHTING[time], elapsed: 0 }
+    const path = timePath(this.hud.timeOfDay, time)
+    if (path.length === 0) path.push(time)
+    this.lightingTransition = {
+      keys: [this.lighting, ...path.map((t) => LIGHTING[t])],
+      duration: TIME_TRANSITION_S + TIME_STEP_S * (path.length - 1),
+      elapsed: 0,
+    }
     this.publish({ ...this.hud, timeOfDay: time })
   }
 
@@ -424,9 +440,9 @@ export class Engine {
     const transition = this.lightingTransition
     if (!transition) return
     transition.elapsed += dt
-    const t = Math.min(1, transition.elapsed / TIME_TRANSITION_S)
+    const t = Math.min(1, transition.elapsed / transition.duration)
     const eased = t * t * (3 - 2 * t)
-    this.lighting = t >= 1 ? transition.to : blendPresets(transition.from, transition.to, eased)
+    this.lighting = blendAlong(transition.keys, eased)
     this.relight(this.lighting)
     if (t >= 1) this.lightingTransition = null
   }

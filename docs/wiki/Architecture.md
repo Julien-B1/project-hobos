@@ -294,7 +294,9 @@ scatter, props), each layer with its own shared material
   background). The picker in the app (`TimeOfDayPicker.vue`: one small
   sky swatch per time, sun or moon placed by direction and height, drawn
   from the preset) and `?time=<id>` choose it; the engine blends to the
-  new lighting over 1.2 s, eased (`blendPresets`: colours and intensities
+  new lighting the shorter way round the day, through the times on the way
+  (`timePath`, `blendAlong`: late night to morning goes through dawn), in
+  1.2 s plus 0.5 s per time passed, eased (`blendPresets`: colours and intensities
   linear, azimuth the shorter way, the light dimmed half-way when it turns
   a lot, from sun to moon), reframing the shadow and updating the water
   sheen uniforms (`render/lightUniforms.ts`) each frame; Khronos PBR Neutral tone mapping (rolls off

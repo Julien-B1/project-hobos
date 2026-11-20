@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { LIGHTING, TIMES_OF_DAY, blendPresets, isTimeOfDay, lightDirection } from './timeOfDay'
+import {
+  LIGHTING,
+  TIMES_OF_DAY,
+  blendAlong,
+  blendPresets,
+  isTimeOfDay,
+  lightDirection,
+  timePath,
+} from './timeOfDay'
 
 describe('lightDirection', () => {
   it('follows compass angles: north -Z, east +X, south +Z', () => {
@@ -60,5 +68,30 @@ describe('blendPresets', () => {
     expect(swing.lightIntensity).toBeLessThan(straight * 0.7)
     const same = blendPresets(LIGHTING.noon, { ...LIGHTING.noon, lightIntensity: 1 }, 0.5)
     expect(same.lightIntensity).toBeCloseTo((LIGHTING.noon.lightIntensity + 1) / 2, 9)
+  })
+})
+
+describe('timePath', () => {
+  it('ends the night forwards instead of rewinding the day', () => {
+    expect(timePath('late-night', 'morning')).toEqual(['dawn', 'morning'])
+  })
+
+  it('goes back the shorter way', () => {
+    expect(timePath('afternoon', 'noon')).toEqual(['noon'])
+    expect(timePath('dawn', 'midnight')).toEqual(['late-night', 'midnight'])
+  })
+
+  it('goes forwards on a tie, and nowhere to the same time', () => {
+    expect(timePath('dawn', 'dusk')).toEqual(['morning', 'noon', 'afternoon', 'dusk'])
+    expect(timePath('noon', 'noon')).toEqual([])
+  })
+})
+
+describe('blendAlong', () => {
+  it('passes through every key at equal shares of t', () => {
+    const keys = [LIGHTING['late-night'], LIGHTING.dawn, LIGHTING.morning]
+    expect(blendAlong(keys, 0)).toEqual(LIGHTING['late-night'])
+    expect(blendAlong(keys, 0.5).lightColor).toBe(LIGHTING.dawn.lightColor)
+    expect(blendAlong(keys, 1).background).toBe(LIGHTING.morning.background)
   })
 })
