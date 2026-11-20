@@ -155,3 +155,47 @@ export function lightDirection(azimuthDeg: number, elevationDeg: number): Vec3Li
     z: -Math.cos(el) * Math.cos(az),
   }
 }
+
+/** Linear blend of two sRGB hex colours, channel by channel. */
+function blendColor(a: number, b: number, t: number): number {
+  let out = 0
+  for (const shift of [16, 8, 0]) {
+    const ca = (a >> shift) & 0xff
+    const cb = (b >> shift) & 0xff
+    out |= Math.round(ca + (cb - ca) * t) << shift
+  }
+  return out
+}
+
+/**
+ * Share of the light dimmed half-way through a transition whose direction
+ * turns by 180 degrees (sun to moon); less for smaller turns.
+ */
+const TURN_DIP = 0.8
+
+/**
+ * Lighting between presets `a` (t = 0) and `b` (t = 1), for smooth
+ * transitions: colours and intensities blended linearly, the light's
+ * azimuth along the shorter way round and its elevation linearly. When the
+ * light turns a lot (from the setting sun to the moon), it dims half-way,
+ * so the swing across the sky does not show.
+ */
+export function blendPresets(a: LightingPreset, b: LightingPreset, t: number): LightingPreset {
+  const turn = ((((b.azimuthDeg - a.azimuthDeg) % 360) + 540) % 360) - 180
+  const da = lightDirection(a.azimuthDeg, a.elevationDeg)
+  const db = lightDirection(b.azimuthDeg, b.elevationDeg)
+  const cos = Math.min(1, Math.max(-1, da.x * db.x + da.y * db.y + da.z * db.z))
+  const dip = (TURN_DIP * Math.acos(cos)) / Math.PI
+  const lerp = (x: number, y: number): number => x + (y - x) * t
+  return {
+    label: t < 0.5 ? a.label : b.label,
+    azimuthDeg: (((a.azimuthDeg + turn * t) % 360) + 360) % 360,
+    elevationDeg: lerp(a.elevationDeg, b.elevationDeg),
+    lightColor: blendColor(a.lightColor, b.lightColor, t),
+    lightIntensity: lerp(a.lightIntensity, b.lightIntensity) * (1 - dip * Math.sin(Math.PI * t)),
+    skyColor: blendColor(a.skyColor, b.skyColor, t),
+    groundColor: blendColor(a.groundColor, b.groundColor, t),
+    ambientIntensity: lerp(a.ambientIntensity, b.ambientIntensity),
+    background: blendColor(a.background, b.background, t),
+  }
+}

@@ -217,6 +217,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Time of day: lighter picker, one small sky swatch per time (sun or moon
+  placed by its direction and height) and the current time's name; the
+  lighting changes smoothly over 1.2 s (`blendPresets`, eased; the light
+  dims half-way when it swings from the sun to the moon).
 - Launch: the `river` map, 40 x 40 by default (`DEFAULT_RIVER_SIZE`), with
   a random seed unless `?seed=` gives one; the camera starts close on the
   character (`initialDistance` 20), and `C` / `Home` recentres on it

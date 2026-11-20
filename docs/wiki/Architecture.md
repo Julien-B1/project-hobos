@@ -291,9 +291,13 @@ scatter, props), each layer with its own shared material
   (`render/sceneSetup.ts`), set by the **time of day** (`render/timeOfDay.ts`:
   dawn, morning, noon, afternoon, dusk, evening, midnight, late night; sun
   by day, moon at night, with direction, colours, intensities and
-  background). The picker in the app (`TimeOfDayPicker.vue`) and
-  `?time=<id>` choose it; the engine relights live, reframes the shadow and
-  updates the water sheen uniforms (`render/lightUniforms.ts`); Khronos PBR Neutral tone mapping (rolls off
+  background). The picker in the app (`TimeOfDayPicker.vue`: one small
+  sky swatch per time, sun or moon placed by direction and height, drawn
+  from the preset) and `?time=<id>` choose it; the engine blends to the
+  new lighting over 1.2 s, eased (`blendPresets`: colours and intensities
+  linear, azimuth the shorter way, the light dimmed half-way when it turns
+  a lot, from sun to moon), reframing the shadow and updating the water
+  sheen uniforms (`render/lightUniforms.ts`) each frame; Khronos PBR Neutral tone mapping (rolls off
   highlights, keeps the palette), applied with sRGB encoding at the end of
   every visible material (`render/outputEncoding.ts`): the renderer itself
   has no tone mapping and stays in the working colour space, so it draws

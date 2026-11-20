@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { LIGHTING, TIMES_OF_DAY, isTimeOfDay, lightDirection } from './timeOfDay'
+import { LIGHTING, TIMES_OF_DAY, blendPresets, isTimeOfDay, lightDirection } from './timeOfDay'
 
 describe('lightDirection', () => {
   it('follows compass angles: north -Z, east +X, south +Z', () => {
@@ -35,5 +35,30 @@ describe('lighting presets', () => {
     expect(isTimeOfDay('dusk')).toBe(true)
     expect(isTimeOfDay('late-night')).toBe(true)
     expect(isTimeOfDay('teatime')).toBe(false)
+  })
+})
+
+describe('blendPresets', () => {
+  it('starts at the first preset and ends at the second', () => {
+    expect(blendPresets(LIGHTING.noon, LIGHTING.dusk, 0)).toEqual(LIGHTING.noon)
+    const end = blendPresets(LIGHTING.noon, LIGHTING.dusk, 1)
+    expect(end.lightColor).toBe(LIGHTING.dusk.lightColor)
+    expect(end.background).toBe(LIGHTING.dusk.background)
+    expect(end.lightIntensity).toBeCloseTo(LIGHTING.dusk.lightIntensity, 9)
+    expect(end.azimuthDeg).toBeCloseTo(LIGHTING.dusk.azimuthDeg, 9)
+  })
+
+  it('turns the light the shorter way round', () => {
+    const a = { ...LIGHTING.noon, azimuthDeg: 350 }
+    const b = { ...LIGHTING.noon, azimuthDeg: 10 }
+    expect(blendPresets(a, b, 0.5).azimuthDeg).toBeCloseTo(0, 9)
+  })
+
+  it('dims the light half-way through a large turn only', () => {
+    const swing = blendPresets(LIGHTING.dusk, LIGHTING.evening, 0.5)
+    const straight = (LIGHTING.dusk.lightIntensity + LIGHTING.evening.lightIntensity) / 2
+    expect(swing.lightIntensity).toBeLessThan(straight * 0.7)
+    const same = blendPresets(LIGHTING.noon, { ...LIGHTING.noon, lightIntensity: 1 }, 0.5)
+    expect(same.lightIntensity).toBeCloseTo((LIGHTING.noon.lightIntensity + 1) / 2, 9)
   })
 })

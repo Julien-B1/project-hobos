@@ -40,7 +40,13 @@ import { CapMesher } from './meshing/capMesher'
 import { CutCap } from './cutCap'
 import { applyLighting, createScene, type SceneHandle } from './sceneSetup'
 import { setLightUniforms } from './lightUniforms'
-import { LIGHTING, lightDirection, type TimeOfDay } from './timeOfDay'
+import {
+  LIGHTING,
+  blendPresets,
+  lightDirection,
+  type LightingPreset,
+  type TimeOfDay,
+} from './timeOfDay'
 import { SunShadow, type ShadowQuality } from './sunShadow'
 import { FrameStats, estimateVram, type VramEstimate } from './frameStats'
 
@@ -205,6 +211,9 @@ export type TerrainMesherKind = 'faceted' | 'blocky'
  */
 const MAX_FRAME_DT = 0.1
 
+/** Duration of a change of time of day, in seconds (eased in and out). */
+const TIME_TRANSITION_S = 1.2
+
 /**
  * Rendering engine bound to one canvas.
  *
@@ -247,6 +256,14 @@ export class Engine {
   private lastDrawCalls = 0
   private lastTriangles = 0
   private lastFrameTime: number | null = null
+  /** Lighting applied now (a preset, or a blend during a transition). */
+  private lighting: LightingPreset
+  /** Change of time of day in progress: from, to, seconds elapsed; null when idle. */
+  private lightingTransition: {
+    readonly from: LightingPreset
+    readonly to: LightingPreset
+    elapsed: number
+  } | null = null
   /** Callbacks waiting for the next rendered frame (see `rendered`). */
   private frameWaiters: (() => void)[] = []
   /** Where characters can stand and walk (built on first use). */
@@ -268,7 +285,8 @@ export class Engine {
     this.layerMaterials = createLayerMaterials(options.grid)
     this.highlight = new SurfaceHighlight(this.layerMaterials.cutHeight)
     this.sunShadow = new SunShadow(this.lights.sun, options.shadows)
-    this.applyTimeOfDay(options.timeOfDay)
+    this.lighting = LIGHTING[options.timeOfDay]
+    this.relight(this.lighting)
     this.rig = new CameraRig(options.camera)
 
     const mesher =
@@ -391,15 +409,30 @@ export class Engine {
     this.publish({ ...this.hud, cutHeight: height })
   }
 
-  /** Relight the scene for a time of day (sun or moon, ambient, background, shadows). */
+  /**
+   * Relight the scene for a time of day (sun or moon, ambient, background,
+   * shadows), with a smooth transition from the current lighting over
+   * {@link TIME_TRANSITION_S} (`blendPresets`).
+   */
   setTimeOfDay(time: TimeOfDay): void {
-    this.applyTimeOfDay(time)
+    this.lightingTransition = { from: this.lighting, to: LIGHTING[time], elapsed: 0 }
     this.publish({ ...this.hud, timeOfDay: time })
   }
 
-  /** Apply a lighting preset to the lights, the shadow framing and the shader uniforms. */
-  private applyTimeOfDay(time: TimeOfDay): void {
-    const preset = LIGHTING[time]
+  /** Advance a change of time of day by `dt` seconds. */
+  private advanceLighting(dt: number): void {
+    const transition = this.lightingTransition
+    if (!transition) return
+    transition.elapsed += dt
+    const t = Math.min(1, transition.elapsed / TIME_TRANSITION_S)
+    const eased = t * t * (3 - 2 * t)
+    this.lighting = t >= 1 ? transition.to : blendPresets(transition.from, transition.to, eased)
+    this.relight(this.lighting)
+    if (t >= 1) this.lightingTransition = null
+  }
+
+  /** Apply lighting to the lights, the shadow framing and the shader uniforms. */
+  private relight(preset: LightingPreset): void {
     applyLighting(this.lights, preset)
     this.sunShadow.setDirection(lightDirection(preset.azimuthDeg, preset.elevationDeg))
     setLightUniforms(this.layerMaterials.light, preset)
@@ -615,6 +648,7 @@ export class Engine {
     const dt = this.lastFrameTime === null ? 0 : (time - this.lastFrameTime) / 1000
     this.lastFrameTime = time
     this.rig.update(Math.min(dt, MAX_FRAME_DT))
+    this.advanceLighting(Math.min(dt, MAX_FRAME_DT))
     const character = this.character
     if (character) {
       const walking = character.walking
