@@ -4,9 +4,12 @@ Read this before changing anything. It applies to humans and AI agents alike.
 
 ## Project in one paragraph
 
-Browser-first HD-2D voxel RPG prototype. Original specification:
-[`BOOTSTRAP.md`](BOOTSTRAP.md). Deeper documentation lives in
-[`docs/wiki/`](docs/wiki/) (published to the GitHub wiki).
+Browser-first HD-2D voxel RPG prototype (native builds later): battle maps
+of multi-level voxel terrain (bridges, tunnels, caves) drawn as natural
+low-poly scenery, with characters moving on them. Milestones, current state
+and roadmap: wiki page _Home_ ([`docs/wiki/Home.md`](docs/wiki/Home.md)).
+Deeper documentation lives in [`docs/wiki/`](docs/wiki/) (published to the
+GitHub wiki).
 
 > Picking up the project? Start with the handover pack in
 > [`docs/handover/`](docs/handover/README.md).
@@ -25,9 +28,12 @@ Browser-first HD-2D voxel RPG prototype. Original specification:
      map in response to user input.
 3. **Tests**: every module in `src/core/` has unit tests (`*.test.ts` next to
    the module). `make check` must pass before every commit.
-4. **Scope**: follow the current step of `BOOTSTRAP.md`. Do not anticipate
-   out-of-scope features (navigation graph, A*, tokens, sprites, occlusion
-   fading, post-processing, editor, save/load).
+4. **Scope**: build what the project owner asked for, nothing more. The
+   current topic and the roadmap are in the wiki _Home_ page; items the
+   owner deferred are listed in
+   [`docs/handover/02-next-steps.md`](docs/handover/02-next-steps.md). Do
+   not start them, nor anticipate features nobody asked for (editor,
+   save/load, rules, post-processing...).
 5. **Language**: English everywhere in the repository (code, comments, docs,
    wiki, changelog, commit messages).
 
@@ -50,6 +56,11 @@ Update documentation **in the same commit** as the code:
 - `docs/wiki/*.md`: update the relevant page when architecture, conventions or
   workflows change.
 - `README.md`: only setup, stack and usage; keep it short.
+- **This file** (`AGENTS.md`): keep it true. Update it in the same commit
+  when a rule, the scope, the workflow or the repository layout changes.
+- **Handover pack** (`docs/handover/`): keep it current at the end of each
+  topic (summary, next steps, transcript, issues, agent briefing), so
+  anyone can pick the project up without the conversation.
 
 ## Git workflow
 
@@ -62,6 +73,13 @@ Update documentation **in the same commit** as the code:
 - One commit per significant step, Conventional Commits
   (`feat:`, `fix:`, `chore:`, `docs:`, `test:`, `refactor:`), scoped when
   useful (`feat(core): ...`).
-- Push only at validation milestones, after the project owner approves.
-  Releases are tagged `vX.Y.Z` and the wiki is published with
-  `make wiki-publish` at the same time.
+- Commit each checked step (`make check` green). Pushing `dev` is allowed
+  whenever useful; never push to `master`.
+- Versions (wiki _Home_, table of milestones):
+  - `vX.Y.0`: a milestone, one per finished topic group, with its own
+    `CHANGELOG.md` section, the `package.json` and `neutralino.config.json`
+    versions bumped, a GitHub release and `make wiki-publish`;
+  - `vX.Y.0-demo.N`: a pre-release of the next milestone, for testers
+    (desktop builds of `make release` attached as assets).
+- The app's corner badge shows the last tag plus the commits after it
+  (`tooling/buildInfo.ts`): tag before handing a build to testers.

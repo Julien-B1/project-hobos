@@ -1,6 +1,6 @@
 # Handover pack
 
-Snapshot of the project on **2026-11-19** (updated after the structures and bridges work), written to let a human or an AI
+Snapshot of the project on **2026-11-20** (milestone `v0.3.0`), written to let a human or an AI
 agent pick up the work without the original conversation.
 
 | File                                             | Content                                                                                                                  |
@@ -14,8 +14,7 @@ agent pick up the work without the original conversation.
 Related reference documentation:
 
 - [`AGENTS.md`](../../AGENTS.md): hard rules for contributors and agents.
-- [`BOOTSTRAP.md`](../../BOOTSTRAP.md): original specification (steps 1 and 2).
 - [`CHANGELOG.md`](../../CHANGELOG.md): changes per release.
 - [`docs/wiki/`](../wiki/): in-depth documentation (Architecture, Conventions,
-  Decisions, Extending, Structures, Reference-Map, Organic-Map,
-  Kitchen-Sink-Map, Development-Environment).
+  Decisions, Extending, Structures, River-Map, Kitchen-Sink-Map,
+  Development-Environment, Deployment).

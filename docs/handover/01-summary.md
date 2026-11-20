@@ -36,7 +36,7 @@ pnpm. Everything runs in Docker through `make`. Rationale: wiki page
 | `439f8cf` | Targeted rebuild, debug edits (right click remove, Shift + click place).                               |
 | `59345c7` | Release 0.2.0.                                                                                         |
 
-### After v0.2.0: organic terrain and rendering (pushed to `dev`)
+### v0.3.0, part 1: organic terrain and rendering
 
 | Commit    | Content                                                                                                          |
 | --------- | ---------------------------------------------------------------------------------------------------------------- |
@@ -52,7 +52,7 @@ pnpm. Everything runs in Docker through `make`. Rationale: wiki page
 | `78f1cc6` | Per-layer chunk meshes (terrain, blocks, water); max zoom-out 240.                                               |
 | `de78de4` | Cheap procedural terrain material (noise texture, blended transitions). **Awaiting owner feedback on GPU load.** |
 
-### Battle-map rendering, structures and bridges (pushed to `dev`, except the last commit)
+### v0.3.0, part 2: battle-map rendering, structures and bridges
 
 | Commit    | Content                                                                                                                                                                                                                                                             |
 | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -60,7 +60,23 @@ pnpm. Everything runs in Docker through `make`. Rationale: wiki page
 | `e0f8998` | Watertight crags (Freudenthal lattice), stencil cut section (ADR-008), terrain hover tint in the shader, earthy cave mouths and rocky interiors, gzip dev server.                                                                                                   |
 | `2803ab9` | Structures (ADR-007) and seven river crossings; crossing choice and placement on the organic map (flush or canyon deck, best site); bridges showcase map; map picker; output encoding in the materials (ADR-009); performance probes; `make screenshots` (ADR-010). |
 | `998b02a` | Ford boulders on the gravel in line with the posts; cursor on the bed of shallow water.                                                                                                                                                                             |
-| `e20fe7d` | Cursor on the deck over banks under a bridge's end (local, to push with the next batch).                                                                                                                                                                            |
+| `e20fe7d` | Cursor on the deck over banks under a bridge's end.                                                                                                                                                                                                                 |
+
+### v0.3.0, part 3: character, distribution, launch flow (tagged 2026-11-20)
+
+| Commit    | Content                                                                                                                |
+| --------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `8e574a7` | Playable character (fighter.glb, idle and walk), selection, A* walk area, right click to move.                         |
+| `a70b573` | Foot IK and standing stance lock; `ec3196d`, `cbee486`: cel shading, outline, real shadow, 1.6 units tall.             |
+| `e4736cf` | `make models` (WebP texture, gltfpack meshopt); `c3377e6`: Brotli, precompressed build, immutable assets.              |
+| `baac9d1` | Desktop demo with Neutralino (`make release`); `9be53fa`: Linux AppImage. Pre-release `v0.3.0-demo.1`.                 |
+| `e037a3d` | The cut hides objects on the scenery whole (ADR-011, `CutSupported`).                                                  |
+| `c933144` | `organic` map renamed `river`; `46e06c2`: random 40 x 40 river map at launch, loading screens, zoom fitted to the map. |
+| `fcc4e90` | No dark triangles on steep banks (crag shading normal).                                                                |
+| `e07a0cb` | Bug button (debug HUD) and `?` button (controls); `cf7b670`, `d1444f0`: time-of-day swatches, smooth transitions.      |
+| `33154cb` | Web deployment behind Traefik (`deploy/`, `make deploy*`). Pre-release `v0.3.0-demo.2` (`7ae1264`).                    |
+| `1e1c980` | Water shader fixed for Firefox WebGPU (Naga); `b749387`: version badge.                                                |
+| (release) | Reference map and `BOOTSTRAP.md` removed, CHANGELOG reorganised, version 0.3.0, tag `v0.3.0`.                          |
 
 ## Current state in one paragraph
 
@@ -68,10 +84,11 @@ The voxel grid is the truth for terrain and gameplay. Terrain materials are
 drawn as a faceted low-poly height surface with watertight crags where the
 relief is marked; trees as round trunks and leaf cards; water as a flat
 plane; built voxels as patterned blocks. Structures (bridges now, buildings
-next) are parametric map objects: their kind stamps gameplay voxels, a
+later) are parametric map objects: their kind stamps gameplay voxels, a
 mesher per kind draws them from closed primitives. Every generated river
-gets one crossing of a kind fitting the site. The cut slider shows a
-stencil-capped section; the hover cursor is a shader tint on terrain and a
-patch on blocks and decks. The frame is drawn straight into the canvas
-(tone mapping in the materials). 261 unit tests, lint and type-check pass
-(`make check`).
+gets one crossing of a kind fitting the site. One character walks the map
+(A* on the voxels, foot IK, cel shading); the cut hides it whole when its
+ground is cut away. The app starts on a random 40 x 40 river map behind a
+loading screen. It runs in the browser (web host at
+`labo.taverne-des-rolistes.fr/kratos/hobos/`) and as an offline desktop
+demo. 274 unit tests, lint and type-check pass (`make check`).

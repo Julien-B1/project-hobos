@@ -6,9 +6,10 @@ sprites planned later. Native builds for all platforms are a later goal.
 
 > Working title. The final product name is not decided yet.
 
-Current scope: technical foundation (rendering, camera, picking) and a
-multi-level voxel map. See [`BOOTSTRAP.md`](BOOTSTRAP.md) for the original
-specification and [`CHANGELOG.md`](CHANGELOG.md) for progress.
+Current state: procedural battle maps with natural terrain, river
+crossings and one playable character, in the browser and as a desktop
+demo. Progress: [`CHANGELOG.md`](CHANGELOG.md); milestones and roadmap:
+the wiki home page.
 
 ## Stack
 
@@ -61,7 +62,7 @@ map (40 x 40 squares) with a random seed, the camera close on the
 character, behind a loading screen (also shown at each map change); the
 farthest zoom shows the whole map. URL switches:
 `?forceWebGL=1` forces the WebGL 2 backend; `?seed=42` and `?size=24` fix
-the river map's seed and size; `?map=reference`, `?map=flat`,
+the river map's seed and size; `?map=flat`,
 `?map=kitchen-sink` (every element in one hand-made map) or `?map=bridges`
 (100 x 24 river, one crossing of each kind) loads another test map;
 `?hud=on` starts with the debug HUD shown. The map picker at the bottom right switches map, seed (🎲 for
