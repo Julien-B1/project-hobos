@@ -86,6 +86,10 @@ runtimes are downloaded once into `bin/` (git-ignored). The build skips
 the precompressed `.br` / `.gz` files (`PRECOMPRESS=off`): the window
 serves files locally.
 
+The demo runs fully offline: code, styles and models are embedded, maps
+are generated, and the build loads nothing from the network (no CDN, no
+remote font). The only external requirement is the system web view.
+
 On Windows the web view is WebView2 (Edge, Chromium): WebGPU works,
 WebView2 ships with Windows 11 and up-to-date Windows 10. On Linux the
 binary needs WebKitGTK (`libwebkit2gtk-4.1`), whose WebGPU support is
