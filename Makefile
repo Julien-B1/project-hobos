@@ -23,7 +23,7 @@ RUN     := $(COMPOSE) run --rm app
 
 .DEFAULT_GOAL := help
 
-.PHONY: help image install up down test test-watch lint format format-check typecheck build preview check screenshots models release deploy sh wiki-publish clean
+.PHONY: help image install up down test test-watch lint format format-check typecheck build preview check screenshots models release deploy deploy-status deploy-logs deploy-restart deploy-down deploy-prune sh wiki-publish clean
 
 help: ## List available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -80,8 +80,27 @@ models: ## Rebuild src/assets/models/ from assets-src/models/ (host: python3 + n
 release: ## Desktop demo (Neutralino): build, then executables for Windows, Linux (+ AppImage) and macOS into release/hobos/
 	$(RUN) sh -c "PRECOMPRESS=off pnpm build && { [ -f bin/neutralino-win_x64.exe ] || pnpm exec neu update; } && pnpm exec neu build --release --embed-resources && node scripts/appimage.mjs"
 
-deploy: ## On the server: pull dev, rebuild and restart the production container (deploy/, wiki page Deployment)
-	git pull --ff-only && $(COMPOSE) -f deploy/compose.yaml up -d --build
+# Production deployment (on the server, see deploy/ and the wiki page Deployment).
+PROD := $(COMPOSE) -f deploy/compose.yaml
+
+deploy: ## Server: fetch dev (gh repo sync), rebuild and restart the production container
+	gh repo sync --branch dev
+	$(PROD) up -d --build
+
+deploy-status: ## Server: state of the production container
+	$(PROD) ps
+
+deploy-logs: ## Server: follow the production logs (Ctrl+C to stop)
+	$(PROD) logs -f
+
+deploy-restart: ## Server: restart the production container without rebuilding
+	$(PROD) restart
+
+deploy-down: ## Server: stop and remove the production container
+	$(PROD) down
+
+deploy-prune: ## Server: remove dangling images left by previous builds
+	docker image prune -f
 
 sh: ## Open a shell inside the dev container
 	$(RUN) bash

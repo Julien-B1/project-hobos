@@ -108,7 +108,9 @@ install), a Linux AppImage `hobos-x86_64.AppImage` (needs WebKitGTK,
 `deploy/` holds the production image (nginx, precompressed files) and a
 Compose file for Traefik, published at
 <https://labo.taverne-des-rolistes.fr/kratos/hobos/>. On the server:
-`make deploy` (pull, rebuild, restart). See the wiki page _Deployment_.
+`make deploy` (sync, rebuild, restart), `make deploy-status`,
+`deploy-logs`, `deploy-restart`, `deploy-down`, `deploy-prune`. See the
+wiki page _Deployment_.
 
 ## Branches
 

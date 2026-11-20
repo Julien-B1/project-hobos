@@ -35,48 +35,42 @@ All in `deploy/`:
 
 ## First deployment
 
-On the server, with Docker Compose v2 and Traefik already running on the
-external `web` network:
-
-With the GitHub CLI (it uses git underneath, which must be installed):
+On the server, with Docker Compose v2, Traefik already running on the
+external `web` network, `make` and the GitHub CLI (`gh`, which uses git:
+install both):
 
 ```sh
 gh auth login            # once per server
 gh repo clone Julien-B1/project-hobos hobos -- --branch dev
 cd hobos
-docker compose -f deploy/compose.yaml up -d --build
+make deploy
 ```
 
 ## Update
 
 ```sh
 cd hobos
-make deploy   # = git pull --ff-only && docker compose -f deploy/compose.yaml up -d --build
+make deploy   # gh repo sync --branch dev, then docker compose -f deploy/compose.yaml up -d --build
 ```
 
-Or with the GitHub CLI (`gh repo sync` fast-forwards only, like
-`--ff-only`):
+`gh repo sync` fast-forwards only: it refuses if the clone was changed on
+the server. The build takes a minute or two (dependencies are cached in a
+layer while the lockfile does not change); the old container serves until
+the new one replaces it. Browsers pick up the new version on the next
+visit (`index.html` is revalidated, the new assets have new names).
 
-```sh
-cd hobos
-gh repo sync --branch dev && docker compose -f deploy/compose.yaml up -d --build
-```
+## Other targets
 
-The build takes a minute or two (dependencies are cached in a layer while
-the lockfile does not change); the old container serves until the new one
-replaces it. Browsers pick up the new version on the next visit
-(`index.html` is revalidated, the new assets have new names).
+| Target                | Does                                               |
+| --------------------- | -------------------------------------------------- |
+| `make deploy-status`  | State of the container (`docker compose ps`)       |
+| `make deploy-logs`    | Follow the logs (Ctrl+C to stop)                   |
+| `make deploy-restart` | Restart without rebuilding                         |
+| `make deploy-down`    | Stop and remove the container                      |
+| `make deploy-prune`   | Remove the dangling images left by previous builds |
 
-## Checks
-
-```sh
-docker compose -f deploy/compose.yaml ps
-docker compose -f deploy/compose.yaml logs -f
-curl -sI https://labo.taverne-des-rolistes.fr/kratos/hobos/ | head -5
-```
-
-Old images pile up after each build: `docker image prune` removes the
-dangling ones.
+Check from outside:
+`curl -sI https://labo.taverne-des-rolistes.fr/kratos/hobos/ | head -5`.
 
 ## Another project or path
 
