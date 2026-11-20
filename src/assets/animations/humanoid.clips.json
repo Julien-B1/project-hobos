@@ -1,0 +1,64 @@
+{
+  "sword_draw": {
+    "weapon": "sword",
+    "draw": true,
+    "grab": 0.375,
+    "settle": [
+      0.4583,
+      0.6667
+    ],
+    "then": "sword_idle"
+  },
+  "sword_idle": {
+    "weapon": "sword",
+    "loop": true
+  },
+  "sword_slash": {
+    "weapon": "sword",
+    "then": "sword_idle"
+  },
+  "sword_hit": {
+    "weapon": "sword",
+    "then": "sword_idle"
+  },
+  "sword_defeat": {
+    "weapon": "sword",
+    "hold": true,
+    "foot_ik": false
+  },
+  "staff_draw": {
+    "weapon": "staff",
+    "draw": true,
+    "grab": 0.4167,
+    "settle": [
+      1.0833,
+      1.5
+    ],
+    "then": "staff_idle"
+  },
+  "staff_idle": {
+    "weapon": "staff",
+    "loop": true
+  },
+  "staff_strike": {
+    "weapon": "staff",
+    "then": "staff_idle"
+  },
+  "staff_cast": {
+    "weapon": "staff",
+    "then": "staff_idle",
+    "cast": [
+      0.625,
+      2.625
+    ]
+  },
+  "staff_hit": {
+    "weapon": "staff",
+    "then": "staff_idle"
+  },
+  "staff_defeat": {
+    "weapon": "staff",
+    "hold": true,
+    "foot_ik": false
+  }
+}

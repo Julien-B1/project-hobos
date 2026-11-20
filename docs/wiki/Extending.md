@@ -71,36 +71,27 @@ generators do not change.
 
 ## Add a character model
 
-1. Export a skinned glTF binary (Y up, facing +Z, feet at the origin,
-   clips in place: no root motion).
-2. Put it in `assets-src/models/name.glb` and run `make models`. First,
-   when `tooling/blender/name.py` exists, headless Blender runs it on the
-   model (see below). Then, on the
-   host, `tooling/compress_glb.py --flat 12 --max-size 1024 --texture-only` turns the
-   painted texture into 12 flat colours for the cel shading, at most
-   1024 pixels wide, as WebP
-   (needs Python 3, numpy, ffmpeg); in the container, `gltfpack -cc -vpf
--vtf` compresses geometry and animations (meshopt; positions and UVs
-   stay floats: the outline offset and the shade tint read them raw). The
-   result lands in `src/assets/models/name.glb`; the engine's loader has
-   the meshopt decoder.
-3. Import it with `?url` and pass it to `Engine.spawnCharacter` with the
-   animation library and the names of its idle, walk and run clips (see
-   `GameCanvas.vue`). Models carry no clips: `make models` drops them
-   (`--no-animations`) and every character plays the library's
-   (`render/actors/retarget.ts`); a rig needs Mixamo or VRM-style bone
-   names (`HUMANOID_BONES`). New clips go into the library: today it is
-   built from the wizard's export (`tooling/blender/humanoid_library.py`)
-   plus clips keyed by script (`tooling/blender/combat_clips.py`: poses as
-   hand, sword and ankle targets solved by a two-bone IK; preview them
-   with Cycles renders of the wizard in the container). If the model is not
-   about 1 unit tall, or its walk is faster or slower, adjust
-   `MODEL_HEIGHT` and `CLIP_STRIDE_SPEED` in `render/actors/character.ts`
-   (the stride speed is how fast a planted foot slides back in the walk
-   clip, in model units per second). A `run` clip is optional (its
-   stride is `RUN_CLIP_STRIDE_SPEED`); `arms` (`ArmStyle`) sets the arm
-   spacing and swing for the body and outfit. Add its id to `CHARACTER_IDS`
-   (`app/config.ts`) and `CHARACTERS` (`GameCanvas.vue`).
+1. Rig the model in Tripo with the Mixamo preset and export a skinned
+   glTF binary (Y up, facing +Z, feet at the origin). Its own clips are
+   not used.
+2. Put it in `assets-src/models/name.glb` with a script
+   `tooling/blender/name.py` that brings it to the reference skeleton
+   (`humanoid.load_normalised`, then `humanoid.export_model`; see
+   `fighter.py`), and run `make models`: headless Blender runs the script
+   (Mixamo or VRM-style bone names, any rest pose, become the reference
+   names, T-pose and rest axes). Then, on the host,
+   `tooling/compress_glb.py --flat 12 --max-size 1024 --no-animations
+--texture-only` turns the painted texture into 12 flat colours for the
+   cel shading, at most 1024 pixels wide, as WebP (needs Python 3, numpy,
+   ffmpeg); in the container, `gltfpack -cc -vpf -vtf` compresses the
+   geometry (meshopt; positions and UVs stay floats: the outline offset
+   and the shade tint read them raw). The result lands in
+   `src/assets/models/name.glb`.
+3. Add it to `CHARACTERS` (`GameCanvas.vue`: file, idle, walk and run
+   clips of the library, arm style, weapon), `CHARACTER_IDS` and
+   `CHARACTER_ACTIONS` (`app/config.ts`). It plays every clip of the
+   library as it is. If the model is not about 1 unit tall, adjust
+   `MODEL_HEIGHT` in `render/actors/character.ts`.
 4. Cloth and hair that should swing: a Blender script
    (`tooling/blender/name.py`, run as
    `blender -b --python script.py -- in.glb out.glb`) adds chains of bones
@@ -111,3 +102,31 @@ generators do not change.
    picks the stiffness, gravity and drag in
    `DEFAULT_SPRING_PROFILE` (`render/actors/springBones.ts`), which also
    lists the body colliders (capsules between leg and spine bones).
+
+## Add or change a clip
+
+- Clips of a rigged export (a Mixamo pack, a Tripo clip): they go through
+  `humanoid.load_normalised(path, keep_actions=True)`, which carries them
+  onto the reference skeleton exactly; the library is built by
+  `tooling/blender/humanoid_library.py`.
+- Clips keyed by script: `tooling/blender/combat_clips.py`. A clip is a
+  list of `(frame, spec)` keys; a spec gives targets (hips, spine, grip
+  positions, weapon directions, ankles; see `pose_solver.py`), built from
+  a complete base pose with `pose(base, **changes)`. Describe it in
+  `CLIPS` (weapon, grab and settle times, follow-up).
+- Check the numbers first: `make clip-check CLIPS="sword_draw"` (forearm
+  roll, distance between the asked and obtained weapon axis, arm inside
+  the trunk, per frame; warnings and a summary per clip). Then look:
+  `make clip-preview CLIPS="sword_draw:1,10,20"` (add `MODEL=fighter`, or
+  `VIDEO=1` for every frame; `PREVIEW_FOCUS=mixamorig:RightHand` in the
+  environment closes in on a bone from four sides).
+- `make models` rebuilds the library and `humanoid.clips.json`; in the
+  game, `?pose=sword_slash@0.6` freezes a character on a clip.
+
+## Add a weapon
+
+Model 1 unit long along +Y, flat along X, in `assets-src/models/`; its
+shape in `WEAPON_SHAPES` (`render/actors/weapon.ts`: grip height, which
+end is the head, length, lit point, sheath socket); its sheath socket in
+`SOCKETS` (`tooling/blender/pose_solver.py`); the same shape in
+`WEAPONS` of `preview_clips.py`.

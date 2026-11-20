@@ -107,9 +107,10 @@ export class ArmPose {
 
   /**
    * Adjust the arms of the current pose, `dt` seconds after the previous
-   * call. The model's world matrices must be up to date.
+   * call. The model's world matrices must be up to date. `weight` 0 to 1
+   * scales the whole style (0 during action clips: their arms are keyed).
    */
-  update(dt: number): void {
+  update(dt: number, weight = 1): void {
     const s = this.style
     if (this.arms.length === 0 || s === NEUTRAL_ARMS) return
     this.model.getWorldQuaternion(MODEL_ROT)
@@ -122,21 +123,24 @@ export class ArmPose {
       arm.upper.getWorldPosition(A)
       arm.lower.getWorldPosition(B)
       B.sub(A).applyQuaternion(INVERSE)
-      const swing = Math.atan2(B.z, -B.y)
+      // The swing angle only means something for an arm that hangs: a
+      // raised arm (action clips) would make it jump.
+      const hanging = -B.y > 0.3 * B.length()
+      const swing = hanging ? Math.atan2(B.z, -B.y) : arm.lagged
       if (!arm.primed) {
         arm.lagged = swing
         arm.primed = true
       }
       arm.lagged += (swing - arm.lagged) * k
-      const trail = (arm.lagged - swing) * s.followThrough
+      const trail = Math.max(-0.5, Math.min(0.5, (arm.lagged - swing) * s.followThrough)) * weight
 
       // 1. Spacing: outwards about the forward axis.
-      rotateWorld(arm.upper, R.setFromAxisAngle(FORWARD, arm.side * s.abduction))
+      rotateWorld(arm.upper, R.setFromAxisAngle(FORWARD, arm.side * s.abduction * weight))
       arm.upper.updateMatrixWorld(true)
 
       // 2-3. Elbow: forward bend (negative turn about the lateral axis
       // brings a hanging forearm forward), plus the lag.
-      const flex = s.elbowFlex + s.forwardFlex * Math.max(0, swing) + trail
+      const flex = (s.elbowFlex + s.forwardFlex * Math.max(0, swing)) * weight + trail
       rotateWorld(arm.lower, R.setFromAxisAngle(LATERAL, -flex))
       arm.lower.updateMatrixWorld(true)
       if (arm.hand) {

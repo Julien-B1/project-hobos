@@ -27,7 +27,8 @@ import type { VoxelMap } from '@/core/voxelMap'
 import { WalkArea, type Stand } from '@/core/navigation/walkArea'
 import { Character, type CharacterClips, type WalkPoint } from './actors/character'
 import { applyCut } from './actors/cutSupported'
-import { retargetClip } from './actors/retarget'
+import { adaptClips, addSockets, sizeRatio, type ClipRules } from './actors/animationLibrary'
+import type { WeaponKind } from './actors/weapon'
 import { CameraRig, type CameraRigSettings } from './cameraRig'
 import { ChunkRenderer } from './chunkRenderer'
 import { NO_CUT, createLayerMaterials, type LayerMaterialSet } from './materials'
@@ -129,6 +130,22 @@ export interface EngineHudState {
   readonly probes: Readonly<Record<ProbeId, boolean>>
   /** The character: the stand it is at or walks to, and its state; null before it loads. */
   readonly character: CharacterInfo | null
+}
+
+/** What a character is loaded from. */
+export interface CharacterSpec {
+  /** Model file (reference humanoid skeleton). */
+  readonly url: string
+  /** Shared animation library file. */
+  readonly libraryUrl: string
+  /** Which library clips are idle, walk and run, and the arm style. */
+  readonly clips: CharacterClips
+  /** Rules of the library clips (`humanoid.clips.json`). */
+  readonly rules: ClipRules
+  /** Its weapon: model file and kind. */
+  readonly weapon?: { readonly url: string; readonly kind: WeaponKind }
+  /** Start frozen on a clip at a time, in seconds (debug poses). */
+  readonly pose?: { readonly clip: string; readonly time: number }
 }
 
 /** Character state for the HUD. */
@@ -459,26 +476,33 @@ export class Engine {
    * Load a character model and put it on grass, in the largest walkable
    * region of the map, as close as possible to (x, z) (world units).
    * Resolves to where its feet are (world units), or null when the map has
-   * no such spot. `libraryUrl` is the shared animation library: the clips
-   * named in `clips` are taken from it and baked for the model's skeleton
-   * (`actors/retarget.ts`).
+   * no such spot. Every model shares the skeleton of the animation library
+   * (`actors/animationLibrary.ts`): its clips play as they are, only sized
+   * to the model, and its weapon sockets are copied onto the model.
    */
   async spawnCharacter(
-    url: string,
-    libraryUrl: string,
-    clips: CharacterClips,
+    spec: CharacterSpec,
     near: { readonly x: number; readonly z: number },
   ): Promise<{ readonly x: number; readonly y: number; readonly z: number } | null> {
     const stand = this.walking().spawnPoint(near.x, near.z)
     if (!stand) return null
     // Models are meshopt-compressed (`make models`).
     const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder)
-    const [gltf, library] = await Promise.all([loader.loadAsync(url), loader.loadAsync(libraryUrl)])
-    // Clips come from the shared library, baked for this skeleton (all of
-    // them: `playClip` reaches the others).
-    const baked = library.animations.map((clip) => retargetClip(clip, library.scene, gltf.scene))
-    const character = new Character(gltf.scene, baked, clips)
+    const [gltf, library, weapon] = await Promise.all([
+      loader.loadAsync(spec.url),
+      loader.loadAsync(spec.libraryUrl),
+      spec.weapon ? loader.loadAsync(spec.weapon.url) : null,
+    ])
+    const ratio = sizeRatio(library.scene, gltf.scene)
+    const character = new Character(gltf.scene, {
+      clips: adaptClips(library.animations, library.scene, gltf.scene, ratio),
+      names: spec.clips,
+      rules: spec.rules,
+      sockets: addSockets(library.scene, gltf.scene, ratio),
+      ...(weapon && spec.weapon ? { weapon: { model: weapon.scene, kind: spec.weapon.kind } } : {}),
+    })
     character.placeAt(walkPoint(stand))
+    if (spec.pose) character.freeze(spec.pose.clip, spec.pose.time)
     this.character?.dispose()
     this.character = character
     this.characterStand = stand
@@ -486,6 +510,13 @@ export class Engine {
     this.publishCharacter()
     const { x, y, z } = character.root.position
     return { x, y, z }
+  }
+
+  /**
+   * Freeze the character on a clip at a time, in seconds (debug poses).
+   */
+  freezeClip(name: string, time: number): boolean {
+    return this.character?.freeze(name, time) ?? false
   }
 
   /**

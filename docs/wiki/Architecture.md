@@ -387,23 +387,18 @@ trees and grid. Shadow quality barely changes GPU time; `high` costs about
   is solved by a two-bone IK whose knee is placed on the front side (pole:
   the animated knee, backward part removed), and planted feet are turned
   along the slope. Standing, the feet are locked on the stance of the idle
-  clip's first frame. A hop (stepping stones) fades the IK out. Leg bones
-  are found by Mixamo (`LeftUpLeg`) or VRM-style (`J_Bip_L_UpperLeg`)
-  names.
+  clip's first frame. A hop (stepping stones) fades the IK out.
   Moves of more than `RUN_FROM_CELLS` (2) cells are run at twice the
   walking speed, shorter ones walked; the run clip's playback speed
   matches its measured stride (`RUN_CLIP_STRIDE_SPEED`).
-  Clips come from the shared animation library
-  (`src/assets/animations/humanoid.glb`: a skeleton and its clips, no
-  mesh), baked at load for each character by `retargetClip`
-  (`actors/retarget.ts`): bones matched by canonical name
-  (`HUMANOID_BONES`: Mixamo and VRM-style suffixes); the character's rest
-  bones first turned to point like the library's (T-pose vs A-pose);
-  then, per frame, each library bone's turn from its rest pose in model
-  space applied to the matching bone, local rotations derived from the
-  parents; hips offset scaled by the hip height ratio; a clip whose
-  lowest foot never reaches the rest pose's lowest foot is lowered by the
-  gap (grounding: the Tripo run floats otherwise).
+  Every character model is on one reference skeleton (Mixamo names,
+  T-pose rest, same rest axes; `tooling/blender/humanoid.py` converts each
+  rig in `make models`). Clips come from the shared animation library
+  (`src/assets/animations/humanoid.glb`: that skeleton, every clip, the
+  weapon sockets; no mesh) and play on any character as they are
+  (`actors/animationLibrary.ts`): `adaptClips` only scales the hips'
+  moves by the hip height ratio, `addSockets` copies the sockets under
+  the character's bones. Nothing is retargeted in the game.
   Before the foot IK, `ArmPose` (`actors/armPose.ts`) adjusts the arms of
   the clip pose with the character's `ArmStyle`: upper arms turned out
   about the forward axis (clear of a wide outfit), extra elbow bend
@@ -414,16 +409,22 @@ trees and grid. Shadow quality barely changes GPU time; `high` costs about
   Actions (`Character.play`, from the action bar shown while the
   character is selected, `app/components/ActionBar.vue`, per class in
   `CHARACTER_ACTIONS`): every change of clip is a cross-fade from the
-  current pose; a clip needing the weapon in hand (`REQUIRES`) plays the
-  draw first; one-shot clips hold their last frame and go on with their
-  follow-up (`FOLLOW_UP`, the guard), a defeat stays down; clips ending in
-  `_idle` loop and become the standing clip until the character walks.
-  The foot IK's stance lock holds only during the idle clip. While a
-  `*_cast` clip plays, the spring bones get a magic lift (gravity turned
-  upwards, swirling wind) and `ArcaneWisps` draws a glow and three wisp
-  trails around the staff's head (one instanced sprite object, additive,
-  positions written on the CPU), placed along the right hand's grip axis
-  (the model's forward direction at rest, in the hand's space).
+  current pose, following the clip's rule (`ClipRule`, from
+  `humanoid.clips.json`): a clip of the weapon asked for with the weapon
+  sheathed plays the draw first; one-shot clips go on with their
+  follow-up or the standing clip, a defeat holds its last frame; looping
+  clips become the standing clip; the idle clip's name sheathes the weapon
+  (the draw played backwards). As little as possible is computed live on
+  top of the clips: the arm style only for idle, walk and run (it fades
+  out for action clips), the foot IK's stance lock only during the idle
+  clip and no foot IK for clips that lie down.
+  The weapon (`actors/weapon.ts`) sits on a socket: its sheath or the
+  right hand's grip, switched at the draw clip's `grab` time; it keeps its
+  place at the switch and eases to the socket (during the clip's `settle`
+  period for a draw). During a clip's `cast` period the spring bones get a
+  magic lift (gravity turned upwards, swirling wind) and `ArcaneWisps`
+  draws a glow on the weapon's lit point and three wisp trails around it
+  (one instanced sprite object, additive, positions written on the CPU).
   Last, `SpringBones` (`actors/springBones.ts`) moves cloth and hair: the
   model's bones named `Spring_*` (added by a Blender script, see
   _Extending_) form chains simulated root to tip at a fixed 60 Hz step:

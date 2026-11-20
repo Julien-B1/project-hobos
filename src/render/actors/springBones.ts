@@ -63,16 +63,16 @@ export const DEFAULT_SPRING_PROFILE: SpringProfile = {
     ['Hair', { stiffness: 0.8, gravity: 0.5, drag: 0.4, radius: 0.015 }],
   ],
   colliders: [
-    ['L_UpperLeg', 'L_LowerLeg', 0.065],
-    ['L_LowerLeg', 'L_Foot', 0.05],
-    ['R_UpperLeg', 'R_LowerLeg', 0.065],
-    ['R_LowerLeg', 'R_Foot', 0.05],
-    ['C_Spine', 'C_Neck', 0.06],
+    ['LeftUpLeg', 'LeftLeg', 0.065],
+    ['LeftLeg', 'LeftFoot', 0.05],
+    ['RightUpLeg', 'RightLeg', 0.065],
+    ['RightLeg', 'RightFoot', 0.05],
+    ['Spine', 'Neck', 0.06],
     // Forearms and hands: the skirt moves aside for them too.
-    ['L_LowerArm', 'L_Hand', 0.03],
-    ['L_Hand', 'L_Middle3', 0.03],
-    ['R_LowerArm', 'R_Hand', 0.03],
-    ['R_Hand', 'R_Middle3', 0.03],
+    ['LeftForeArm', 'LeftHand', 0.03],
+    ['LeftHand', 'LeftHandMiddle3', 0.03],
+    ['RightForeArm', 'RightHand', 0.03],
+    ['RightHand', 'RightHandMiddle3', 0.03],
   ],
 }
 

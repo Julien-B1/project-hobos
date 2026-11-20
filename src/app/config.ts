@@ -72,6 +72,8 @@ export const config = {
  *   map's home point (screenshots, debugging a spot).
  * - `?character=<id>` picks the character model (`wizard` by default,
  *   `fighter`).
+ * - `?pose=<clip>@<seconds>` freezes the character on a clip at a time
+ *   (screenshots of a pose, debugging a clip).
  */
 export function readUrlFlags(
   search: string = window.location.search,
@@ -89,6 +91,7 @@ export function readUrlFlags(
   camera: CameraView | undefined
   spawn: { readonly x: number; readonly z: number } | undefined
   character: CharacterModelId
+  pose: { readonly clip: string; readonly time: number } | undefined
 } {
   const params = new URLSearchParams(search)
   const map = params.get('map') ?? DEFAULT_MAP
@@ -107,7 +110,15 @@ export function readUrlFlags(
     camera: parseCameraView(params.get('cam')),
     spawn: parseCameraView(params.get('spawn')),
     character: parseCharacter(params.get('character')),
+    pose: parsePose(params.get('pose')),
   }
+}
+
+/** `<clip>@<seconds>` from a URL value, or undefined. */
+function parsePose(value: string | null): { clip: string; time: number } | undefined {
+  const [clip, at] = (value ?? '').split('@')
+  const time = Number.parseFloat(at ?? '')
+  return clip && Number.isFinite(time) ? { clip, time } : undefined
 }
 
 /** Character models (`src/assets/models/<id>.glb`). */

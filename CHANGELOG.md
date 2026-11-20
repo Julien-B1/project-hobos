@@ -19,15 +19,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Running: a move of more than 2 cells is run at twice the walking speed
   (a jog; D&D's Dash doubles the speed too); 1 or 2 cells are walked
   (`gaitFor`, `RUN_SPEED`).
-- Shared animation library (`src/assets/animations/humanoid.glb`, 157 kB,
-  seven clips, built by `make models` from the wizard's export with
-  `tooling/blender/humanoid_library.py`): every character takes its clips
-  from it, baked at load for its own skeleton (`render/actors/retarget.ts`:
-  Mixamo or VRM-style names, other bone rolls, A-pose or T-pose rest,
-  hips scaled to the leg length). The fighter now runs with the wizard's
-  run. Clips whose feet never touch the ground (the run) are lowered so
-  they do. Character models carry no clips any more
-  (`compress_glb.py --no-animations`): wizard 214 kB, fighter 165 kB.
+- One skeleton for every human (`tooling/blender/humanoid.py`): Mixamo
+  bone names, T-pose rest, the same rest axes on every bone. `make models`
+  brings each Tripo rig to it (the wizard's VRM-style names, the fighter's
+  A-pose), mesh included.
+- Shared animation library (`src/assets/animations/humanoid.glb`: that
+  skeleton, every clip, the weapon sockets; no mesh). Every character
+  plays its clips as they are (`render/actors/animationLibrary.ts`: only
+  the hips' moves are scaled to the legs), so the fighter runs with the
+  wizard's run. The wizard's own clips are carried through the
+  conversion exactly; clips whose feet never touch the ground (run, fall)
+  are lowered. Character models carry no clips
+  (`compress_glb.py --no-animations`).
 - Arm style per character (`render/actors/armPose.ts`, `ArmStyle`), on
   top of the clips: arms held away from the body (the wizard's hands no
   longer go through her skirt), a little elbow bend growing with the
@@ -41,32 +44,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `compress_glb.py --max-size`: textures at most 1024 pixels wide in
   `make models` (wizard 2048² texture: 500 kB to 359 kB).
 
-- Combat clips in the animation library, keyed by script
-  (`tooling/blender/combat_clips.py`: hand, weapon and ankle targets,
-  spine bends, two-bone IK for arms and legs, fingers curled on the grip).
-  Sword (fighter): `sword_draw` (cross draw from the left hip),
-  `sword_idle` (guard, bounce and footwork), `sword_slash` (diagonal cut
-  with a step in). Staff (wizard): `staff_draw` (from the back, over the
-  right shoulder), `staff_idle` (held by the middle, diagonal),
-  `staff_strike` (overhead, straight down on the head), `staff_cast`
-  (staff raised, other hand open). Both: `<weapon>_hit` (shock, half step
-  back, recovery) and `<weapon>_defeat` (fall on the back, stays down).
-  The weapons are not modelled yet: they will follow the right hand's
-  grip axis (forward at rest; sword by the hilt, staff by the middle).
+- Combat clips keyed by script (`tooling/blender/combat_clips.py`) and
+  solved on every frame by `pose_solver.py`: targets (hips, spine, grip
+  positions, weapon directions, ankles) interpolated between keys by a
+  monotone cubic, two-bone IK for arms and legs, anatomical hinges, the
+  hand as two bounded joint angles (forearm roll within 85 degrees of
+  neutral, wrist bend), elbow swivel chosen per frame (weapon on its
+  asked axis, arm out of the trunk, continuity), every bone keyed on
+  every frame without quaternion flips. `make clip-check` prints the
+  numbers (wrists, reach, arms in the trunk, largest step per frame),
+  `make clip-preview` renders frames or a video, weapons attached, on any
+  model.
+  Sword (fighter): `sword_draw` (lean and turn to the hilt at the left
+  hip, blade out along the sheath, swept round to the guard),
+  `sword_idle`, `sword_slash` (diagonal cut, palm turning down).
+  Staff (wizard): `staff_draw` (over the right shoulder), `staff_idle`
+  (held by the middle, diagonal), `staff_strike` (overhead, down on a
+  head), `staff_cast`. Both: `<weapon>_hit`, `<weapon>_defeat`.
+- Weapons (`src/assets/models/sword.glb`, `staff.glb`;
+  `render/actors/weapon.ts`): on sockets of the skeleton (right hand's
+  grip, sheath at the left hip, staff slung on the back, head down), taken
+  at the draw clip's grab time, eased to their place in the hand (the
+  staff slides to its middle), put back by the draw played backwards.
+  Toon shading and outline like the characters.
 - Action bar (bottom centre, `ActionBar.vue`) while a character is
   selected, with its class's actions (`CHARACTER_ACTIONS`): each clip
-  cross-fades from the current pose (`Character.play`); a move that needs
-  the weapon in hand draws it first, one-shot clips go back to the guard,
-  a defeat stays down, walking ends the guard.
-- Incantation (`*_cast` clips): clothes and hair float up and swirl
-  (`SpringBones.setLift`), a glow and three arcane wisps spiral around the
-  staff's head (`render/actors/arcaneWisps.ts`, one instanced sprite draw).
+  cross-fades from the current pose (`Character.play`) and follows its
+  rule (`humanoid.clips.json`, written with the library): a move that
+  needs the weapon in hand draws it first, one-shot clips go back to the
+  guard, a defeat stays down, Rest sheathes the weapon; the weapon stays
+  in hand while walking.
+- Incantation (a clip's `cast` period): clothes and hair float up and
+  swirl (`SpringBones.setLift`), a glow on the staff's orb and three
+  arcane wisps around it (`render/actors/arcaneWisps.ts`, one instanced
+  sprite draw).
+- `?pose=<clip>@<seconds>` freezes the character on a clip (screenshots).
 
 ### Changed
 
-- Foot IK finds VRM-style leg bones (`J_Bip_L_UpperLeg`) as well as
-  Mixamo ones; its standing stance lock only holds during the idle clip
-  (action clips place the feet themselves).
+- Foot IK: its standing stance lock only holds during the idle clip, and
+  it is off for clips that lie down (`foot_ik: false`). The arm style
+  only applies to idle, walk and run (it fades out for action clips).
 
 ## [0.3.0] - 2026-11-20
 

@@ -22,6 +22,7 @@
 import { onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from 'vue'
 import type { TimeOfDay } from '@/render/timeOfDay'
 import { Engine, type EngineHudState } from '@/render/engine'
+import type { ClipRules } from '@/render/actors/animationLibrary'
 import { config, readUrlFlags, type MapSettings } from '@/app/config'
 import { bindInputs } from '@/app/input/bindings'
 import { createDebugEdits } from '@/app/editing/debugEdits'
@@ -30,6 +31,9 @@ import type { SessionInfo } from '@/app/session'
 import fighterUrl from '@/assets/models/fighter.glb?url'
 import wizardUrl from '@/assets/models/wizard.glb?url'
 import humanoidUrl from '@/assets/animations/humanoid.glb?url'
+import clipRules from '@/assets/animations/humanoid.clips.json'
+import swordUrl from '@/assets/models/sword.glb?url'
+import staffUrl from '@/assets/models/staff.glb?url'
 
 /**
  * Character models: file, clips of the shared animation library (idle:
@@ -39,6 +43,7 @@ import humanoidUrl from '@/assets/animations/humanoid.glb?url'
 const CHARACTERS = {
   wizard: {
     url: wizardUrl,
+    weapon: { url: staffUrl, kind: 'staff' },
     clips: {
       idle: 'look_around.001',
       walk: 'walk.001',
@@ -48,6 +53,7 @@ const CHARACTERS = {
   },
   fighter: {
     url: fighterUrl,
+    weapon: { url: swordUrl, kind: 'sword' },
     clips: {
       idle: 'look_around.001',
       walk: 'walk.001',
@@ -151,9 +157,12 @@ onMounted(async () => {
     engine.start()
     const feet = await engine
       .spawnCharacter(
-        CHARACTERS[character].url,
-        humanoidUrl,
-        CHARACTERS[character].clips,
+        {
+          ...CHARACTERS[character],
+          libraryUrl: humanoidUrl,
+          rules: clipRules satisfies ClipRules,
+          ...(flags.pose ? { pose: flags.pose } : {}),
+        },
         flags.spawn ?? world.home,
       )
       .catch((e: unknown) => {
