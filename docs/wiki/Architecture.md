@@ -390,6 +390,17 @@ trees and grid. Shadow quality barely changes GPU time; `high` costs about
   clip's first frame. A hop (stepping stones) fades the IK out. Leg bones
   are found by Mixamo (`LeftUpLeg`) or VRM-style (`J_Bip_L_UpperLeg`)
   names.
+  Moves of more than `RUN_FROM_CELLS` (2) cells are run at 1.8 times the
+  walking speed (run clip when the model has one, else the walk clip
+  played faster), shorter ones walked; the run clip's playback speed
+  matches its measured stride (`RUN_CLIP_STRIDE_SPEED`).
+  Before the foot IK, `ArmPose` (`actors/armPose.ts`) adjusts the arms of
+  the clip pose with the character's `ArmStyle`: upper arms turned out
+  about the forward axis (clear of a wide outfit), extra elbow bend
+  growing with the forward swing, and follow-through: a smoothed copy of
+  the upper arm's swing angle lags behind it, and the difference turns
+  the forearm (half of it the hand) the other way. What depends on the
+  body stays out of the clips, so clips can be shared.
   Last, `SpringBones` (`actors/springBones.ts`) moves cloth and hair: the
   model's bones named `Spring_*` (added by a Blender script, see
   _Extending_) form chains simulated root to tip at a fixed 60 Hz step:

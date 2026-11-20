@@ -33,6 +33,7 @@ import {
 import { encodeOutput } from '../outputEncoding'
 import type { CutSupported } from './cutSupported'
 import { FootIk } from './footIk'
+import { ArmPose, NEUTRAL_ARMS, type ArmStyle } from './armPose'
 import { SPRING_PREFIX, SpringBones } from './springBones'
 import { createOutlineMaterial, createToonMaterial } from './toonMaterial'
 
@@ -54,6 +55,30 @@ const WALK_TIME_SCALE = 1.5
 /** Walking speed, in world units per second, matching the feet. */
 export const WALK_SPEED = CLIP_STRIDE_SPEED * (CHARACTER_HEIGHT / MODEL_HEIGHT) * WALK_TIME_SCALE
 
+/** Running speed: walking speed times this. */
+const RUN_FACTOR = 1.8
+
+/** Running speed, in world units per second. */
+export const RUN_SPEED = WALK_SPEED * RUN_FACTOR
+
+/**
+ * Ground speed of the run clip at playback speed 1, in model units per
+ * second (measured on the wizard's run clip, as for the walk).
+ */
+const RUN_CLIP_STRIDE_SPEED = 1.58
+
+/** Paths of more cells than this are run, shorter ones walked. */
+export const RUN_FROM_CELLS = 2
+
+/** How the character moves: standing, walking or running. */
+export type Gait = 'idle' | 'walk' | 'run'
+
+/** Gait for a path of `cells` moves (0: standing). */
+export function gaitFor(cells: number): Gait {
+  if (cells <= 0) return 'idle'
+  return cells > RUN_FROM_CELLS ? 'run' : 'walk'
+}
+
 /** Turning speed, in radians per second. */
 const TURN_SPEED = 10
 
@@ -69,10 +94,14 @@ const DECAL_LIFT = 0.04
 /** Radius of the selection ring (and of the body, for picking), in world units. */
 const RING_RADIUS = 0.45
 
-/** Names of the clips in the model (Tripo export). */
+/** Names of the clips in the model (Tripo export), and how it holds its arms. */
 export interface CharacterClips {
   readonly idle: string
   readonly walk: string
+  /** Run clip; without one, the walk clip is played faster. */
+  readonly run?: string
+  /** Arm spacing and swing on top of the clips (default: as the clips are). */
+  readonly arms?: ArmStyle
 }
 
 /** A point of a walk: cell centre (world x, z) and feet height (world y). */
@@ -102,6 +131,11 @@ export class Character implements CutSupported {
   private readonly mixer: AnimationMixer
   private readonly idle: AnimationAction
   private readonly walkAction: AnimationAction
+  /** Run clip's action (the walk's own action when the model has no run clip). */
+  private readonly runAction: AnimationAction
+  /** Clip playback speed while running. */
+  private readonly runTimeScale: number
+  private gait: Gait = 'idle'
   private readonly ring: Mesh
   /** Ring vertices on the ground plane (x, z pairs), around the origin. */
   private readonly ringBase: Float32Array
@@ -112,6 +146,8 @@ export class Character implements CutSupported {
   private readonly materials: Material[] = []
   /** Plants the feet on uneven ground. */
   private readonly feet: FootIk
+  /** Arm spacing and follow-through on top of the clips. */
+  private readonly arms: ArmPose
   /** Cloth and hair chains (none on models without spring bones). */
   private readonly springs: SpringBones
   /** Remaining walk, next point first. */
@@ -150,8 +186,18 @@ export class Character implements CutSupported {
     this.idle = this.mixer.clipAction(clip(names.idle))
     this.walkAction = this.mixer.clipAction(clip(names.walk))
     this.walkAction.timeScale = WALK_TIME_SCALE
-    for (const action of [this.idle, this.walkAction]) action.setLoop(LoopRepeat, Infinity)
+    const scale = CHARACTER_HEIGHT / MODEL_HEIGHT
+    if (names.run) {
+      this.runAction = this.mixer.clipAction(clip(names.run))
+      this.runTimeScale = RUN_SPEED / (RUN_CLIP_STRIDE_SPEED * scale)
+    } else {
+      this.runAction = this.walkAction
+      this.runTimeScale = WALK_TIME_SCALE * RUN_FACTOR
+    }
+    for (const action of [this.idle, this.walkAction, this.runAction])
+      action.setLoop(LoopRepeat, Infinity)
     this.idle.play()
+    this.arms = new ArmPose(this.model, names.arms ?? NEUTRAL_ARMS)
     this.feet = new FootIk(this.model, this.model)
     // Stance: the idle clip's first frame.
     this.mixer.update(0)
@@ -228,15 +274,19 @@ export class Character implements CutSupported {
     this.expectedY = p.y
     this.hop = null
     this.path = []
-    this.setWalking(false)
+    this.setGait('idle')
     this.springs.reset()
+    this.arms.reset()
   }
 
-  /** Walk through `points` (the first one is the next to reach). */
+  /**
+   * Walk through `points` (the first one is the next to reach): walked up
+   * to {@link RUN_FROM_CELLS} cells, run beyond.
+   */
   walk(points: readonly WalkPoint[]): void {
     this.path = [...points]
     // A hop in progress goes on: the new path starts where it was heading.
-    this.setWalking(this.path.length > 0)
+    this.setGait(gaitFor(this.path.length))
   }
 
   /**
@@ -278,6 +328,7 @@ export class Character implements CutSupported {
       this.placed = true
     }
     this.root.updateMatrixWorld(true)
+    this.arms.update(dt)
     this.feet.update(dt, this.root.position.y, ground, !this.hop, !this.walking)
     this.springs.update(dt)
     return moved
@@ -334,7 +385,7 @@ export class Character implements CutSupported {
     const dx = target.x - p.x
     const dz = target.z - p.z
     const distance = Math.hypot(dx, dz)
-    let step = WALK_SPEED * dt
+    let step = (this.gait === 'run' ? RUN_SPEED : WALK_SPEED) * dt
     if (distance > 1e-6) {
       this.turnTowards(Math.atan2(dx, dz), dt)
     }
@@ -346,7 +397,7 @@ export class Character implements CutSupported {
       this.hop = null
       this.path.shift()
       step -= distance
-      if (this.path.length === 0) this.setWalking(false)
+      if (this.path.length === 0) this.setGait('idle')
       return true
     }
     const k = step / distance
@@ -372,10 +423,21 @@ export class Character implements CutSupported {
     this.model.quaternion.setFromAxisAngle(UP, this.yaw)
   }
 
-  /** Cross-fade between the idle and the walk clips. */
-  private setWalking(on: boolean): void {
-    const [from, to] = on ? [this.idle, this.walkAction] : [this.walkAction, this.idle]
-    if (to.isRunning() && to.getEffectiveWeight() > 0.99) return
+  /** Action playing for a gait. */
+  private actionFor(gait: Gait): AnimationAction {
+    if (gait === 'idle') return this.idle
+    return gait === 'run' ? this.runAction : this.walkAction
+  }
+
+  /** Cross-fade to the clip of `gait` (a run keeps running to the end of its path). */
+  private setGait(gait: Gait): void {
+    if (gait === this.gait) return
+    const from = this.actionFor(this.gait)
+    const to = this.actionFor(gait)
+    this.gait = gait
+    if (gait !== 'idle') to.timeScale = gait === 'run' ? this.runTimeScale : WALK_TIME_SCALE
+    // Same action (no run clip): only the playback speed changes.
+    if (from === to) return
     to.reset().play()
     from.crossFadeTo(to, FADE, false)
   }

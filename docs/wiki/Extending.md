@@ -89,7 +89,9 @@ generators do not change.
    about 1 unit tall, or its walk is faster or slower, adjust
    `MODEL_HEIGHT` and `CLIP_STRIDE_SPEED` in `render/actors/character.ts`
    (the stride speed is how fast a planted foot slides back in the walk
-   clip, in model units per second). Add its id to `CHARACTER_IDS`
+   clip, in model units per second). A `run` clip is optional (its
+   stride is `RUN_CLIP_STRIDE_SPEED`); `arms` (`ArmStyle`) sets the arm
+   spacing and swing for the body and outfit. Add its id to `CHARACTER_IDS`
    (`app/config.ts`) and `CHARACTERS` (`GameCanvas.vue`).
 4. Cloth and hair that should swing: a Blender script
    (`tooling/blender/name.py`, run as

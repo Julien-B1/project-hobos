@@ -279,8 +279,11 @@ function setWorldQuaternion(bone: Object3D, q: Quaternion): void {
   bone.quaternion.copy(PARENT.invert().multiply(q))
 }
 
-/** Apply a world-space rotation `r` to `bone` (about its own origin). */
-function rotateWorld(bone: Object3D, r: Quaternion): void {
+/**
+ * Apply a world-space rotation `r` to `bone` (about its own origin). The
+ * bone's world matrix is not updated (call `updateMatrixWorld`).
+ */
+export function rotateWorld(bone: Object3D, r: Quaternion): void {
   const parent = bone.parent
   if (parent) parent.getWorldQuaternion(PARENT)
   else PARENT.identity()

@@ -62,6 +62,11 @@ export const DEFAULT_SPRING_PROFILE: SpringProfile = {
     ['R_UpperLeg', 'R_LowerLeg', 0.065],
     ['R_LowerLeg', 'R_Foot', 0.05],
     ['C_Spine', 'C_Neck', 0.06],
+    // Forearms and hands: the skirt moves aside for them too.
+    ['L_LowerArm', 'L_Hand', 0.03],
+    ['L_Hand', 'L_Middle3', 0.03],
+    ['R_LowerArm', 'R_Hand', 0.03],
+    ['R_Hand', 'R_Middle3', 0.03],
   ],
 }
 

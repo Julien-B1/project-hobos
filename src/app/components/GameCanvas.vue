@@ -30,10 +30,28 @@ import type { SessionInfo } from '@/app/session'
 import fighterUrl from '@/assets/models/fighter.glb?url'
 import wizardUrl from '@/assets/models/wizard.glb?url'
 
-/** Character models: file and clips (idle: looking around, and walk). */
+/**
+ * Character models: file, clips (idle: looking around, and walk) and arm
+ * style (the wizard holds her arms clear of the skirt; both swing loosely).
+ */
 const CHARACTERS = {
-  wizard: { url: wizardUrl, clips: { idle: 'look_around.001', walk: 'walk.001' } },
-  fighter: { url: fighterUrl, clips: { idle: 'look_around.001', walk: 'walk.001' } },
+  wizard: {
+    url: wizardUrl,
+    clips: {
+      idle: 'look_around.001',
+      walk: 'walk.001',
+      run: 'run.001',
+      arms: { abduction: 0.2, elbowFlex: 0.15, forwardFlex: 0.4, followThrough: 0.6, lag: 0.12 },
+    },
+  },
+  fighter: {
+    url: fighterUrl,
+    clips: {
+      idle: 'look_around.001',
+      walk: 'walk.001',
+      arms: { abduction: 0, elbowFlex: 0.1, forwardFlex: 0.3, followThrough: 0.5, lag: 0.1 },
+    },
+  },
 } as const
 
 const props = defineProps<{

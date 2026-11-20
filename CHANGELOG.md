@@ -16,6 +16,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   simulated root to tip at a fixed 60 Hz step (inertia, pull to rest,
   gravity, capsule colliders on the legs and spine).
 - Character choice in the map picker and `?character=wizard|fighter`.
+- Running: a move of more than 2 cells is run (run clip, or the walk clip
+  played faster without one) at 1.8 times the walking speed; 1 or 2 cells
+  are walked (`gaitFor`, `RUN_SPEED`).
+- Arm style per character (`render/actors/armPose.ts`, `ArmStyle`), on
+  top of the clips: arms held away from the body (the wizard's hands no
+  longer go through her skirt), a little elbow bend growing with the
+  forward swing, and forearms and hands that lag behind the upper arm's
+  swing (follow-through) instead of a stiff pendulum. The skirt also
+  moves aside for the forearms and hands (spring colliders).
 - Blender 5.2.3 LTS in the dev image (headless, pinned by SHA-256);
   `make models` runs `tooling/blender/<model>.py` first when present.
   `tooling/blender/wizard.py` adds the spring chains and their weights,
