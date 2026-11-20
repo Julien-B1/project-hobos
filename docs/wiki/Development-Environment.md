@@ -73,6 +73,14 @@ Default views: the bridges map and each of its crossings. Custom views:
 camera). Playwright is pinned in `package.json` and in the Dockerfile
 (`PLAYWRIGHT_VERSION`); keep them equal, then `make image`.
 
+## Blender
+
+The image holds Blender 5.2.3 LTS (official Linux build, pinned by SHA-256
+in `docker/Dockerfile.dev`, `BLENDER_VERSION`), run headless for scripted
+model work: `make models` runs `tooling/blender/<model>.py` when present;
+by hand, `make sh` then `blender -b --python script.py -- args`. Renders
+for a quick check work with Cycles on the CPU (no GPU in the container).
+
 ## Desktop demo
 
 `make release` packages the production build as desktop executables with

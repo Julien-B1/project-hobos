@@ -48,6 +48,25 @@ RUN npx -y "playwright@${PLAYWRIGHT_VERSION}" install --with-deps chromium \
     && chmod -R a+rwX /ms-playwright \
     && rm -rf /var/lib/apt/lists/* /home/node/.npm
 
+# Blender, headless (`blender -b --python ...`), for scripted model work:
+# extra bones for cloth and hair, weights, clip edits (`make models`).
+# Official Linux build, pinned by SHA-256 (from blender-X.Y.Z.sha256 on
+# download.blender.org). The X11/GL libraries are what bpy loads even in
+# background mode.
+ARG BLENDER_VERSION=5.2.3
+ARG BLENDER_SHA256=78486c018b4443efe5e75ab54c290ed8c15abafd249b862c2c9ce2530a918eec
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl xz-utils \
+       libx11-6 libxi6 libxxf86vm1 libxfixes3 libxrender1 libxkbcommon0 \
+       libsm6 libice6 libgl1 libegl1 \
+    && curl -fsSL -o /tmp/blender.tar.xz \
+       "https://download.blender.org/release/Blender${BLENDER_VERSION%.*}/blender-${BLENDER_VERSION}-linux-x64.tar.xz" \
+    && echo "${BLENDER_SHA256}  /tmp/blender.tar.xz" | sha256sum -c - \
+    && mkdir -p /opt/blender \
+    && tar -xJf /tmp/blender.tar.xz -C /opt/blender --strip-components=1 \
+    && ln -s /opt/blender/blender /usr/local/bin/blender \
+    && rm -rf /tmp/blender.tar.xz /var/lib/apt/lists/*
+
 WORKDIR /app
 
 EXPOSE 5173
