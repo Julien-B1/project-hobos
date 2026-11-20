@@ -20,6 +20,10 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
+      # Shown in the app's corner badge; set by `make deploy` from git.
+      args:
+        BUILD_DESCRIBE: ${BUILD_DESCRIBE:-}
+        BUILD_COMMIT: ${BUILD_COMMIT:-}
     image: kratos-hobos:latest
     container_name: kratos-hobos
     restart: unless-stopped

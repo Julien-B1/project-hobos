@@ -8,13 +8,21 @@
 import { fileURLToPath, URL } from 'node:url'
 import vue from '@vitejs/plugin-vue'
 import { defineConfig } from 'vitest/config'
+import { buildInfo } from './tooling/buildInfo.ts'
 import { compression } from './tooling/compression.ts'
 
 /** Polling fallback for file watching, enabled with VITE_USE_POLLING=true. */
 const usePolling = process.env.VITE_USE_POLLING === 'true'
 
+/** Version and commit shown in the app's corner badge (`tooling/buildInfo.ts`). */
+const build = buildInfo()
+
 export default defineConfig({
   plugins: [vue(), compression()],
+  define: {
+    __APP_VERSION__: JSON.stringify(build.version),
+    __APP_COMMIT__: JSON.stringify(build.commit),
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

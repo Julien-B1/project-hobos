@@ -28,6 +28,7 @@ import CutSlider from './components/CutSlider.vue'
 import MapPicker from './components/MapPicker.vue'
 import LoadingScreen from './components/LoadingScreen.vue'
 import ControlsHelp from './components/ControlsHelp.vue'
+import VersionBadge from './components/VersionBadge.vue'
 
 const flags = readUrlFlags()
 
@@ -120,6 +121,7 @@ onBeforeUnmount(() => {
     <Transition name="fade">
       <LoadingScreen v-if="loading" :settings="mapSettings" />
     </Transition>
+    <VersionBadge />
     <template v-if="overlays">
       <button
         type="button"

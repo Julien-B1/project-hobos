@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Version badge in the bottom-left corner (`VersionBadge.vue`): the last
+  tag, `+N` commits after it, and the commit hash (e.g.
+  `v0.3.0-demo.2+1 · 1e1c980`), always shown so bug reports name the
+  build. Read at build time (`tooling/buildInfo.ts`, Vite `define`): from
+  git, or from the `BUILD_DESCRIBE` / `BUILD_COMMIT` build arguments that
+  `make deploy` passes to the production image.
 - Server deployment behind Traefik (`deploy/`): production image built on
   the server (Node build with relative URLs, then Alpine nginx with the
   Brotli module serving the precompressed files, assets cached for a

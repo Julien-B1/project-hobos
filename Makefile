@@ -85,7 +85,8 @@ PROD := $(COMPOSE) -f deploy/compose.yaml
 
 deploy: ## Server: fetch dev (gh repo sync), rebuild and restart the production container
 	gh repo sync --branch dev
-	$(PROD) up -d --build
+	git fetch --tags --quiet || true
+	BUILD_DESCRIBE="$$(git describe --tags --long 2>/dev/null)" BUILD_COMMIT="$$(git rev-parse --short HEAD)" $(PROD) up -d --build
 
 deploy-status: ## Server: state of the production container
 	$(PROD) ps

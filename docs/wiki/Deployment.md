@@ -53,7 +53,11 @@ cd hobos
 make deploy   # gh repo sync --branch dev, then docker compose -f deploy/compose.yaml up -d --build
 ```
 
-`gh repo sync` fast-forwards only: it refuses if the clone was changed on
+`make deploy` also passes the version and commit to the build
+(`BUILD_DESCRIBE`, `BUILD_COMMIT`: the image has no `.git`), shown in the
+app's bottom-left badge: check it after a deployment. Without them (a bare
+`docker compose up --build`) the badge shows the package version and
+`unknown`. `gh repo sync` fast-forwards only: it refuses if the clone was changed on
 the server. The build takes a minute or two (dependencies are cached in a
 layer while the lockfile does not change); the old container serves until
 the new one replaces it. Browsers pick up the new version on the next

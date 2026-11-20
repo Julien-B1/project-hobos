@@ -19,6 +19,11 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY . .
+# Version and commit of the corner badge: no .git here, `make deploy`
+# passes them (see tooling/buildInfo.ts). Empty: package version, unknown.
+ARG BUILD_DESCRIBE=
+ARG BUILD_COMMIT=
+ENV BUILD_DESCRIBE=${BUILD_DESCRIBE} BUILD_COMMIT=${BUILD_COMMIT}
 RUN pnpm exec vue-tsc --build && pnpm exec vite build --base ./
 
 FROM alpine:3.22
