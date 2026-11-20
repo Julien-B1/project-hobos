@@ -1,0 +1,11 @@
+# Build context of deploy/Dockerfile (the root .dockerignore serves the dev
+# image, which copies nothing). Keep out what the build regenerates.
+node_modules
+dist
+release
+bin
+screenshots
+coverage
+tooling/.build
+assets-src
+.git

@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Server deployment behind Traefik (`deploy/`): production image built on
+  the server (Node build with relative URLs, then Alpine nginx with the
+  Brotli module serving the precompressed files, assets cached for a
+  year), Compose file with the Traefik labels for
+  `labo.taverne-des-rolistes.fr/kratos/hobos/` (prefix stripped, trailing
+  slash redirect, HTTPS redirect), `make deploy`, wiki page _Deployment_.
 - Desktop demo: `make release` packages the production build with
   Neutralino (`@neutralinojs/neu` 11.8.0, runtime 6.10.0,
   `neutralino.config.json`) into `release/hobos/`: Windows executable

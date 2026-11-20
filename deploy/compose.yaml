@@ -1,0 +1,51 @@
+# Production deployment behind Traefik:
+# https://labo.taverne-des-rolistes.fr/kratos/hobos/
+#
+# On the server, from the repository root (branch dev):
+#   git pull --ff-only && docker compose -f deploy/compose.yaml up -d --build
+# or `make deploy`. See the wiki page _Deployment_.
+#
+# Traefik routes Host + PathPrefix to this container, strips the prefix
+# (the build uses relative URLs) and redirects /kratos/hobos to
+# /kratos/hobos/ (relative URLs need the trailing slash). In labels, `$$`
+# is a literal `$` (Compose interpolation).
+name: kratos-hobos
+
+networks:
+  web:
+    external: true
+
+services:
+  hobos:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: kratos-hobos:latest
+    container_name: kratos-hobos
+    restart: unless-stopped
+    networks:
+      - web
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.docker.network=web'
+
+      - 'traefik.http.routers.kratos-hobos.rule=Host(`labo.taverne-des-rolistes.fr`) && PathPrefix(`/kratos/hobos`)'
+      - 'traefik.http.routers.kratos-hobos.entrypoints=websecure'
+      - 'traefik.http.routers.kratos-hobos.tls=true'
+      - 'traefik.http.routers.kratos-hobos.tls.certresolver=default'
+      - 'traefik.http.routers.kratos-hobos.middlewares=kratos-hobos-slash,kratos-hobos-strip'
+      - 'traefik.http.services.kratos-hobos.loadbalancer.server.port=80'
+
+      - 'traefik.http.routers.kratos-hobos_http.rule=Host(`labo.taverne-des-rolistes.fr`) && PathPrefix(`/kratos/hobos`)'
+      - 'traefik.http.routers.kratos-hobos_http.entrypoints=web'
+      - 'traefik.http.routers.kratos-hobos_http.middlewares=kratos-hobos-https'
+
+      # http -> https.
+      - 'traefik.http.middlewares.kratos-hobos-https.redirectscheme.scheme=https'
+      - 'traefik.http.middlewares.kratos-hobos-https.redirectscheme.permanent=true'
+      # /kratos/hobos[?query] -> /kratos/hobos/[?query].
+      - "traefik.http.middlewares.kratos-hobos-slash.redirectregex.regex=^(https?://[^/]+/kratos/hobos)(\\?.*)?$$"
+      - 'traefik.http.middlewares.kratos-hobos-slash.redirectregex.replacement=$${1}/$${2}'
+      - 'traefik.http.middlewares.kratos-hobos-slash.redirectregex.permanent=true'
+      # /kratos/hobos/x -> /x for the container.
+      - 'traefik.http.middlewares.kratos-hobos-strip.stripprefix.prefixes=/kratos/hobos'
