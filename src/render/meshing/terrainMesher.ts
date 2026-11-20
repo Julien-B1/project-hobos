@@ -447,7 +447,11 @@ export class TerrainMesher {
    * On even ground the face goes out as it is (smooth-shaded when `smooth`
    * normals are given). Where the relief is marked (see {@link Crag}), it is
    * first cut along the half-cell grid, its vertices are displaced, and the
-   * pieces go out as flat-shaded triangles: craggy, faceted rock.
+   * pieces go out as faceted triangles: craggy rock. How faceted depends on
+   * the local amplitude: full crags (cliffs) mix the facet normal with the
+   * face's ({@link CRAG_SOFTEN}); weak ones (a steep river bank) keep the
+   * face's shading normal, smooth on tops, so a slightly displaced bank does
+   * not show dark triangles.
    */
   private emit(
     out: MeshBuilder,
@@ -477,8 +481,12 @@ export class TerrainMesher {
       else out.polygon(vertices, outward, color, full)
       return
     }
+    // The shading normal of the undisplaced face rides along as three extra
+    // weight channels, interpolated by the cut like the others.
+    // (After the projection and slope channels, which extend the material ones.)
+    const channels = full[0]?.length ?? 0
     const pieces = splitOnGrid(
-      vertices.map((p, i) => ({ p, w: full[i] ?? [] })),
+      vertices.map((p, i) => ({ p, w: [...(full[i] ?? []), ...(smooth?.[i] ?? n)] })),
       CRAG_STEP,
     )
     for (const piece of pieces) {
@@ -497,17 +505,28 @@ export class TerrainMesher {
         // Facet normal softened towards the undisplaced face's: the crags
         // read as facets without harsh, crumpled-paper contrasts.
         const facet = normalize(cross(sub(m1, m0), sub(m2, m0)))
-        const base = dot(n, facet) < 0 ? ([-n[0], -n[1], -n[2]] as Vec3) : n
-        const fn = normalize([
-          facet[0] * (1 - CRAG_SOFTEN) + base[0] * CRAG_SOFTEN,
-          facet[1] * (1 - CRAG_SOFTEN) + base[1] * CRAG_SOFTEN,
-          facet[2] * (1 - CRAG_SOFTEN) + base[2] * CRAG_SOFTEN,
-        ])
+        const normals = tri.map((v): Vec3 => {
+          const shading = normalize([
+            v.w[channels] ?? 0,
+            v.w[channels + 1] ?? 1,
+            v.w[channels + 2] ?? 0,
+          ])
+          const base =
+            dot(shading, facet) < 0 ? ([-shading[0], -shading[1], -shading[2]] as Vec3) : shading
+          // Facet share: full crags get 1 - CRAG_SOFTEN, weak ones next to none.
+          const strength = Math.min(1, crag.amplitude(v.p[0], v.p[2]) / CRAG_AMPLITUDE)
+          const k = (1 - CRAG_SOFTEN) * strength * strength
+          return normalize([
+            facet[0] * k + base[0] * (1 - k),
+            facet[1] * k + base[1] * (1 - k),
+            facet[2] * k + base[2] * (1 - k),
+          ])
+        })
         out.rawPolygon(
           moved,
-          [fn, fn, fn],
+          normals,
           [color, color, color],
-          tri.map((v) => v.w),
+          tri.map((v) => v.w.slice(0, channels)),
         )
       }
     }

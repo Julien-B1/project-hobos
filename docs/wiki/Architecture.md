@@ -255,14 +255,19 @@ scatter, props), each layer with its own shared material
   displaced edge, so the surface is watertight (the stencil section
   needs closed shells; checked by `unmatchedEdges` in the tests).
   Whether a face is cut is decided per cell (both triangles of a top share
-  their diagonal). Pieces are flat-shaded: irregular faceted rock.
+  their diagonal). Pieces are faceted: irregular rock.
   Flat ground and gentle slopes are untouched. Each vertex also carries
   the undisplaced face's texture projection plane and upward facing (weight
   channels `PROJECTION_CHANNEL`, `UP_CHANNEL`): the terrain shader
   projects textures and applies the slope rule from them, so the small
-  facets keep one coherent texture. Facet normals are mixed half and half
-  with the undisplaced face's normal (`CRAG_SOFTEN`) and the noise is
-  broad (0.6 per unit): faceted rock without crumpled-paper contrasts. The cut section and the hover
+  facets keep one coherent texture. Each piece vertex's normal mixes the
+  facet normal with the undisplaced face's shading normal (smooth on
+  tops; carried through the cut as three extra weight channels), the facet
+  share growing with the square of the local amplitude: half and half on
+  full crags (`CRAG_SOFTEN`), next to none where the relief barely starts
+  (a steep river bank), which would otherwise show dark triangles. The
+  noise is broad (0.6 per unit): faceted rock without crumpled-paper
+  contrasts. The cut section and the hover
   highlight follow the drawn mesh (stencil capping, mesh pieces).
 - **Battle-map grid** (`render/gridOverlay.ts`): the terrain, blocks and
   water shaders darken the cell borders (integer x, z) with thin,

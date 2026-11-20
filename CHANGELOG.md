@@ -281,6 +281,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Dark triangles on steep river banks and grassy slopes: weak crags were
+  shaded with the flat normal of the undisplaced triangle. Crag pieces now
+  keep the face's smooth shading normal, mixed with the facet normal in
+  proportion to the local amplitude (`terrainMesher.ts`), so only real
+  cliffs look faceted.
 - River maps whose best crossing site was a one-row islet got no crossing
   at all: `placeCrossing` now tries the next sites by score.
 - Character feet no longer sink into the ground: foot IK keeps the toe
